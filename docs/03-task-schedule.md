@@ -10,9 +10,14 @@ The 1:30 PM go/no-go test decides whether the signal is real before anything els
 ### 11:30 AM – 12:30 PM: Foundations
 
 #### Robotics
-- [ ] Connect with the Viam Python SDK; read joint positions; open and close the gripper
+- [x] Connect with the Viam Python SDK; read joint positions; verify gripper and camera
+- [x] Build and launch real-time 6-joint visualizer with tare calibration and CSV recording (`realtime_plot.py`)
+- [x] Complete preliminary signal verification: proved $\Delta \tau = -6.20\,\text{N}\cdot\text{m}$ load reaction on Joint 3 (Recordings 1–4)
 - [ ] Tape a square for the cup. Find a side grasp that holds a lidded cup firmly without crushing it (lower gripper force/speed)
-- [ ] Start the port 30000 reader from `shake_sense.py`. Confirm ~200 samples/s and that joint positions parse to sane radians
+- [ ] Posture optimization: Reposition arm to cantilever angle ($q_2 \in [45^\circ, 60^\circ]$) to maximize torque sensitivity on both shoulder and elbow
+- [ ] On-robot data daemon: Deploy high-rate sampling (100–200 Hz via socket port 30000 on `sfhack12`)
+- [ ] Simulation: Test URDF/PyBullet/Viam mock for offline trajectory validation and collision avoidance
+- [ ] Alternative controller investigation: Evaluate velocity control and Cartesian impedance/compliance modes
 
 #### AI
 - [ ] Create Atlas collections: `runs` (raw arrays, one document per run), `signatures` (features + embedding), `items` (label, description, photo)

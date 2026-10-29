@@ -52,7 +52,7 @@ ax2.set_ylim(-24, -15)
 ax2.legend(loc="upper right", facecolor="#161b22", edgecolor="#30363d", labelcolor="#c9d1d9")
 
 plt.tight_layout()
-output_img = "/home/ari/feels/recordings_3_vs_4.png"
+output_img = "/home/ari/feels/recordings/figures/recordings_3_vs_4.png"
 plt.savefig(output_img, dpi=160)
 plt.close()
 print("Saved comparison plot to:", output_img)

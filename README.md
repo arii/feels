@@ -150,7 +150,9 @@ Even without a dedicated 6-axis F/T flange sensor, the xArm850 reports high-reso
    - **Empty / Resting State:** Joint 3 settles firmly to `-16.82 N·m`.
    - **Holding Payload:** Joint 3 deflects to **`-22.0` to `-23.02 N·m`** (a **`-6.20 N·m` shift**, equivalent to $\approx 1.4\,\text{kg}$ downward force).
    - When released, torque crisply snaps back from $-20.7 \to -16.82\,\text{N}\cdot\text{m}$.
-   - CSV datasets and comparative plots are saved in [`recordings/`](recordings/).
+   - CSV datasets, schema dictionary, and comparative figures are documented in [`recordings/README.md`](recordings/README.md).
+
+![Recordings 3 vs 4 Comparison](recordings/figures/recordings_3_vs_4.png)
 
 ---
 
@@ -217,3 +219,14 @@ When writing code that moves physical hardware, follow the rules defined in [`.c
 2. **Motion Planning:** Use `MotionClient.move()` with a valid `WorldState` rather than unconstrained raw arm motion.
 3. **Hard Z-Boundary:** Always enforce $Z \ge 15\text{ mm}$ (`MIN_SAFE_Z_MM = 15.0`) to prevent collisions with the work surface.
 4. **Two-Phase Grasping:** Always plan a pre-grasp pose $100\text{ mm}$ above the target before descending, and verify grasp using `await gripper.is_holding_something()`.
+
+---
+
+## Next Steps & Roadmap
+
+See [**`TODO.md`**](TODO.md) for full task tracking:
+1. **Simulator Integration:** Test PyBullet / URDF / MuJoCo / Viam mock components for collision-free trajectory testing.
+2. **On-Robot Data Collection:** Deploy a low-latency daemon on `sfhack12` to poll at 100–200 Hz over direct socket (port 30000).
+3. **Kinematic Posture Optimization:** Move arm to a cantilever pose ($q_2 \approx 45^\circ\text{--}60^\circ, q_3 \approx 45^\circ\text{--}90^\circ$) to maximize perpendicular moment arm and signal-to-noise ratio.
+4. **Dynamic Trajectory Sensing:** Move beyond static mass detection with sine shakes, impulse freezes, and tilt sweeps.
+5. **Controller Evaluation:** Test velocity control, Cartesian impedance/compliance mode, and motor stiffness tuning.

@@ -60,7 +60,7 @@ ax3.set_ylabel("Torque (Nm)", fontsize=11)
 ax3.legend(loc="upper right", facecolor="#161b22", edgecolor="#30363d", labelcolor="#c9d1d9")
 
 plt.tight_layout()
-output_file = "/home/ari/feels/session_comparison.png"
+output_file = "/home/ari/feels/recordings/figures/session_comparison.png"
 plt.savefig(output_file, dpi=160)
 plt.close()
 print("Saved comparison plot to:", output_file)
