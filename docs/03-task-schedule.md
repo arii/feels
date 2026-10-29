@@ -20,7 +20,8 @@ The 1:30 PM go/no-go test decides whether the signal is real before anything els
 - [ ] Alternative controller investigation: Evaluate velocity control and Cartesian impedance/compliance modes
 
 #### AI
-- [ ] Create Atlas collections: `runs` (raw arrays, one document per run), `signatures` (features + embedding), `items` (label, description, photo)
+- [x] Create Atlas collections: `runs` (raw arrays, one document per run), `signatures` (features + embedding), `items` (label, description, photo)
+- [x] Seed item catalogue: empty_cup, water_half, dish_soap_half, candy_loose, solid_weight
 - [ ] Write a fake-run generator in the contract format: water rings and decays slowly, soap decays fast, candy has sharp spikes
 - [ ] Feature extractor v1: the 10 hand-crafted features from the event guide (lift torque, shake variance, FFT peak frequency and power, 5–25 Hz rattle energy, post-stop decay rate, tilt hysteresis, grip change)
 
@@ -47,8 +48,9 @@ The 1:30 PM go/no-go test decides whether the signal is real before anything els
 - [ ] Write phase marks into each run. Start shake speed and acceleration low; raise them in steps
 
 #### AI
-- [ ] Create the Atlas vector index on `signatures.embedding` (cosine) with `label` and `session` as filter fields
-- [ ] `teach()`: insert run + signature. `identify()`: `$vectorSearch` (k = 5) then `$group` by label; confidence = mean similarity of the winning label
+- [x] Create the Atlas vector index `cup_dynamics_index` on `signatures.feature_vector` (cosine, 10-dim) with `label` and `session` filter fields — READY
+- [x] `teach()`: insert run + signature (`atlas.py`) — verified working
+- [x] `identify()`: `$vectorSearch` (k = 5) then `$group` by label; confidence = mean similarity of winning label — verified working
 
 ---
 
