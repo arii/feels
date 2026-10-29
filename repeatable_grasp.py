@@ -27,6 +27,9 @@ from viam.robot.client import RobotClient
 from viam.components.arm import Arm
 from viam.components.gripper import Gripper
 from viam.components.switch import Switch
+from viam.proto.common import Pose, PoseInFrame
+
+from vision_grasp import CupDetector, SideGraspPlanner, VisionGraspController
 
 load_dotenv()
 
@@ -236,6 +239,33 @@ async def move_to_waypoint(machine: RobotClient, arm: Arm, name: str, timeout: f
         return False
 
 
+async def move_to_cartesian_pose(machine: RobotClient, arm: Arm, pose: Pose, label: str = "target", timeout: float = 30.0) -> bool:
+    """Move arm to Cartesian pose using Motion service with direct IK fallback."""
+    print(f"\n[MOVE] Commanding arm to {label} -> (X: {pose.x:.1f}, Y: {pose.y:.1f}, Z: {pose.z:.1f})...")
+    try:
+        from viam.services.motion import MotionClient
+        motion = MotionClient.from_robot(machine, "builtin")
+        goal = PoseInFrame(reference_frame="world", pose=pose)
+        t0 = time.time()
+        await motion.move(component_name="arm", destination=goal, timeout=timeout)
+        duration = time.time() - t0
+        pos = await arm.get_end_position()
+        print(f"[✓] Arrived at {label} in {duration:.1f}s -> (X: {pos.x:.1f}, Y: {pos.y:.1f}, Z: {pos.z:.1f})")
+        return True
+    except Exception as e:
+        print(f"[MOTION] motion.move fallback to arm.move_to_position: {e}")
+        try:
+            t0 = time.time()
+            await arm.move_to_position(pose, timeout=timeout)
+            duration = time.time() - t0
+            pos = await arm.get_end_position()
+            print(f"[✓] Arrived at {label} via direct IK in {duration:.1f}s -> (X: {pos.x:.1f}, Y: {pos.y:.1f}, Z: {pos.z:.1f})")
+            return True
+        except Exception as e2:
+            print(f"[✗] Failed moving to {label}: {e2}")
+            return False
+
+
 async def open_gripper(gripper: Gripper) -> bool:
     """Open gripper jaws."""
     print("[GRIPPER] Opening gripper...")
@@ -372,13 +402,17 @@ async def run_grasp_cycle(
     recorder: Optional[TelemetryRecorder] = None,
     stable_hold: float = 3.0,
     settle_threshold: float = 0.04,
+    use_vision: bool = False,
+    z_height: Optional[float] = None,
+    z_offset: float = -20.0,
 ) -> bool:
     """
     Executes one complete pick-and-place sequence with phase-synchronized recording:
     home -> approach -> grasp (close) -> travel (hold & weigh) -> place (open) -> travel -> home
+    When `use_vision=True`, approach and grasp positions are dynamically synthesized from YOLO perception.
     """
     print("\n" + "#" * 60)
-    print(f"🚀 EXECUTING REPEATABLE GRASP CYCLE #{cycle_idx}")
+    print(f"🚀 EXECUTING REPEATABLE GRASP CYCLE #{cycle_idx} (Vision: {'ENABLED' if use_vision else 'STATIC WAYPOINTS'})")
     if recorder:
         print(f"📦 Object Under Test: '{recorder.object_label}'")
     print("#" * 60)
@@ -392,20 +426,48 @@ async def run_grasp_cycle(
         return False
     await asyncio.sleep(step_delay)
 
+    dynamic_poses = None
+    if use_vision:
+        print("\n--- PERCEPTION: DETECTING CUP VIA YOLO-3D ---")
+        detector = CupDetector(machine)
+        det = await detector.detect_cup(target_z=z_height, z_offset=z_offset)
+        if det:
+            cup_pos = det["position_world"]
+            cam_pos = det["camera_pos_world"]
+            dynamic_poses = SideGraspPlanner.plan_side_grasp(cup_pos, cam_pos, grasp_z=cup_pos[2])
+            print(f"[✓] Cup localized at: X={cup_pos[0]:.1f}, Y={cup_pos[1]:.1f}, Z={cup_pos[2]:.1f} (Conf: {det['confidence']:.2f})")
+            print(f"    Dynamic approach: X={dynamic_poses['approach'].x:.1f}, Y={dynamic_poses['approach'].y:.1f}, Z={dynamic_poses['approach'].z:.1f}")
+            print(f"    Dynamic grasp:    X={dynamic_poses['grasp'].x:.1f}, Y={dynamic_poses['grasp'].y:.1f}, Z={dynamic_poses['grasp'].z:.1f} (Anti-Tip)")
+        else:
+            print("[✗] Error: Cup not detected via YOLO perception! Aborting cycle.")
+            return False
+
     # 2. Approach: Lower/Align towards object
     if recorder:
         recorder.set_phase("APPROACH")
     print("\n--- STEP 2: APPROACH OBJECT ---")
-    if not await move_to_waypoint(machine, arm, "approach"):
-        return False
+    if use_vision and dynamic_poses:
+        if not await move_to_cartesian_pose(machine, arm, dynamic_poses["approach"], "dynamic-approach"):
+            return False
+    else:
+        if not await move_to_waypoint(machine, arm, "approach"):
+            return False
     await asyncio.sleep(step_delay)
 
-    # 3. Grasp: Move into contact position
+    # 3. Grasp: Move into contact position (with contact detection if vision enabled)
     if recorder:
         recorder.set_phase("REACH_GRASP")
     print("\n--- STEP 3: REACH GRASP POSITION ---")
-    if not await move_to_waypoint(machine, arm, "grasp"):
-        return False
+    if use_vision and dynamic_poses:
+        vision_ctrl = VisionGraspController(machine)
+        ok, contact = await vision_ctrl.guarded_advance_with_contact(
+            dynamic_poses["approach"], dynamic_poses["grasp"]
+        )
+        if not ok:
+            return False
+    else:
+        if not await move_to_waypoint(machine, arm, "grasp"):
+            return False
     await asyncio.sleep(step_delay)
 
     # 4. Actuate Gripper: Grab object
@@ -518,6 +580,25 @@ async def main():
         help="Settling delay (seconds) between trajectory steps (default: 1.0s)",
     )
     parser.add_argument(
+        "--vision",
+        "--yolo",
+        dest="use_vision",
+        action="store_true",
+        help="Use real-time YOLO-3D point cloud perception to dynamically synthesize approach and grasp poses",
+    )
+    parser.add_argument(
+        "--z-height",
+        type=float,
+        default=None,
+        help="Explicit vertical grasp altitude in mm (e.g. 35.0 to lower grip and prevent cup tipping)",
+    )
+    parser.add_argument(
+        "--z-offset",
+        type=float,
+        default=-20.0,
+        help="Vertical offset from detected centroid in mm (default: -20.0mm)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Inspect resources and planned trajectory without triggering motions",
@@ -578,6 +659,9 @@ async def main():
                     recorder=recorder,
                     stable_hold=args.stable_hold,
                     settle_threshold=args.settle_threshold,
+                    use_vision=args.use_vision,
+                    z_height=args.z_height,
+                    z_offset=args.z_offset,
                 )
                 if not success:
                     print(f"[!] Cycle #{c} aborted due to an error.")
