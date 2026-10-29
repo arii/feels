@@ -72,13 +72,15 @@ class RobotForceState:
             self.is_calibrated = True
             print(f"[TARE] Baseline recalibrated: J2={loads[1]:.4f} Nm")
 
-    def start_recording(self):
+    def start_recording(self, object_label: str = ""):
         self.is_recording = True
         self.recording_start_time = time.time()
         self.recorded_samples = []
+        clean_lbl = "".join(c for c in object_label if c.isalnum() or c in ("-", "_")).lower()
+        self.current_object_label = clean_lbl or "unlabeled"
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.current_recording_file = f"recording_{timestamp}.csv"
-        print(f"[RECORD] Started session: {self.current_recording_file}")
+        self.current_recording_file = f"recording_{timestamp}_{self.current_object_label}.csv"
+        print(f"[RECORD] Started session: {self.current_recording_file} (object: {self.current_object_label})")
 
     def stop_recording(self) -> Optional[str]:
         if not self.is_recording:
@@ -90,14 +92,14 @@ class RobotForceState:
             with open(filepath, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    "elapsed_sec", "effective_force_n", "payload_weight_g",
+                    "elapsed_sec", "object_label", "effective_force_n", "payload_weight_g",
                     "delta_j2_nm", "r_xy_m",
                     "j1_raw", "j2_raw", "j3_raw", "j4_raw", "j5_raw", "j6_raw",
                     "j1_smooth", "j2_smooth", "j3_smooth", "j4_smooth", "j5_smooth", "j6_smooth"
                 ])
                 for s in self.recorded_samples:
                     writer.writerow([
-                        s["t"], s["fz"], s["grams"],
+                        s["t"], self.current_object_label, s["fz"], s["grams"],
                         s["delta_tau_j2"], s["r_xy"],
                         s["raw"][0], s["raw"][1], s["raw"][2], s["raw"][3], s["raw"][4], s["raw"][5],
                         s["smooth"][0], s["smooth"][1], s["smooth"][2], s["smooth"][3], s["smooth"][4], s["smooth"][5]
@@ -416,6 +418,7 @@ HTML_PAGE = """<!DOCTYPE html>
       <p style="color: #8b949e; font-size: 0.8rem; margin-top: 2px;">10-Second High-Performance Rolling Window</p>
     </div>
     <div class="controls">
+      <input type="text" id="obj-label-input" placeholder="Object label (e.g. candy, water)" style="background: #21262d; border: 1px solid #30363d; color: #fff; padding: 7px 10px; border-radius: 6px; font-size: 0.85rem; width: 175px;" />
       <button class="rec-start" id="rec-btn" onclick="toggleRecording()">● Record Session</button>
       <button class="tare-btn" onclick="tare()">Tare (Zero)</button>
       <button class="active-toggle" id="filter-btn" onclick="toggleFilter()">EMA Filter: ON</button>
@@ -763,7 +766,9 @@ HTML_PAGE = """<!DOCTYPE html>
       const badge = document.getElementById('rec-badge');
 
       if (!isRecording) {
-        const res = await fetch('/record/start', { method: 'POST' });
+        const objInput = document.getElementById('obj-label-input').value.trim();
+        const url = '/record/start' + (objInput ? `?object=${encodeURIComponent(objInput)}` : '');
+        const res = await fetch(url, { method: 'POST' });
         const data = await res.json();
         isRecording = true;
         btn.innerText = '■ Stop Recording';
@@ -821,8 +826,19 @@ async def handle_tare(request):
 
 
 async def handle_record_start(request):
-    state.start_recording()
-    return web.json_response({"ok": True, "file": state.current_recording_file})
+    obj = request.query.get("object", "")
+    if not obj and request.can_read_body:
+        try:
+            data = await request.json()
+            obj = data.get("object", "")
+        except Exception:
+            pass
+    state.start_recording(object_label=obj)
+    return web.json_response({
+        "ok": True,
+        "file": state.current_recording_file,
+        "object": state.current_object_label
+    })
 
 
 async def handle_record_stop(request):
