@@ -140,3 +140,11 @@ Add this service entry to the robot configuration in the Viam app:
 - [ ] **Deploy to `sfhack12`:** Upload module to Viam registry or register as a local process module on the machine.
 - [ ] **Live Macro Test:** Execute `run_macro` on physical hardware and verify 100 Hz feature vector extraction.
 
+---
+
+## 7. Repeatable Grasping Workflow (Arm Saver Positions)
+- [x] **Discover Static Waypoints:** Identified all 5 `erh:vmodutils:arm-position-saver` switches (`home-pose`, `approach`, `grasp`, `travel`, `place`).
+- [x] **Implement Pick-and-Place Automation Script:** Developed [`repeatable_grasp.py`](repeatable_grasp.py) supporting full cycles, individual step execution, dry-run mode, and gripper actuation.
+- [x] **Verify Home Pose Navigation:** Successfully validated `home-pose` execution and gripper state verification over Viam gRPC client.
+- [ ] **Run Live Full Repeatable Grasp Cycle:** Execute physical pick-and-place with an object and verify grip/holding status.
+

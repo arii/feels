@@ -219,6 +219,70 @@ if __name__ == "__main__":
 
 ---
 
+## 8. Repeatable Grasping Workflow (Arm Saver Positions)
+
+Using the newly configured `erh:vmodutils:arm-position-saver` switches on `sfhack12`, automated pick-and-place trajectories can be reliably commanded with synchronized gripper open/close operations:
+
+### Configured Static Waypoints
+
+| Waypoint Switch | Description | X (mm) | Y (mm) | Z (mm) | Orientation |
+|---|---|---|---|---|---|
+| **`home-pose`** | Ready / staging position | 466.27 | 383.55 | 250.57 | $\theta=178.4^\circ, (0.421, -0.904, -0.072)$ |
+| **`approach`** | Pre-grasp alignment above object | 370.96 | 320.94 | 66.45 | $\theta=174.0^\circ, (0.548, -0.834, -0.059)$ |
+| **`grasp`** | Target contact / grip position | 446.58 | 239.78 | 70.42 | $\theta=175.7^\circ, (0.381, -0.922, -0.068)$ |
+| **`travel`** | High transit clearance waypoint | 562.62 | 331.21 | 196.26 | $\theta=179.5^\circ, (0.345, -0.938, 0.022)$ |
+| **`place`** | Deposit / placement target | 647.13 | 193.54 | 96.17 | $\theta=177.8^\circ, (0.715, -0.684, -0.147)$ |
+
+### Sequence Flow
+
+```
+[home-pose] (gripper open) 
+     │
+     ▼
+ [approach] (pre-grasp alignment)
+     │
+     ▼
+  [grasp]   ──► gripper.grab() (close jaws)
+     │
+     ▼
+  [travel]  (lift & translate with payload at Z=196mm)
+     │
+     ▼
+  [place]   ──► gripper.open() (deposit object at Z=96mm)
+     │
+     ▼
+  [travel]  (retract upwards to avoid collision)
+     │
+     ▼
+[home-pose] (gripper open, ready for next cycle)
+```
+
+### Usage
+
+```bash
+# Run 1 full pick-and-place cycle
+python repeatable_grasp.py
+
+# Run multiple repeated cycles
+python repeatable_grasp.py --cycles 3 --delay 1.5
+
+# Step to a specific static position
+python repeatable_grasp.py --step home-pose
+python repeatable_grasp.py --step approach
+python repeatable_grasp.py --step grasp
+python repeatable_grasp.py --step travel
+python repeatable_grasp.py --step place
+
+# Manual gripper actuation
+python repeatable_grasp.py --gripper open
+python repeatable_grasp.py --gripper grab
+
+# Inspect waypoints and status without moving (dry-run)
+python repeatable_grasp.py --dry-run
+```
+
+---
+
 ## Safety Directives
 
 When writing code that moves physical hardware, follow the rules defined in [`.cursorrules`](.cursorrules):
