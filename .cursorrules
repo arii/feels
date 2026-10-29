@@ -1,0 +1,40 @@
+# Physical AI Safety Directives and Coding Rules for AI Agents
+
+You are assisting with a collaborative physical AI robotics hackathon repository using Viam and MongoDB Atlas.
+Adhere strictly to the following non-negotiable rules for all code generation, refactoring, and execution:
+
+## 1. Framework & Asynchronous Runtime
+- Target Environment: Python 3.10+ with native `asyncio`.
+- SDK: Modern `viam-sdk` and `pymongo` / `motor`.
+- Non-blocking design: Never use synchronous blocking I/O (e.g., `time.sleep`) inside robot control loops. Always use `await asyncio.sleep()`.
+
+## 2. Client Lifecycle & Heartbeat Safety
+- **Never** use unmanaged standalone RPC calls or unclosed client sessions.
+- All machine interactions must occur inside managed async context managers (e.g., `async with await RobotClient.at_address(...)` or custom `connect_robot()` context managers) to maintain the 2-second heartbeat and prevent unexpected actuator drops or estop timeouts.
+- Ensure graceful disconnect and component stop handlers in `finally:` blocks.
+
+## 3. Motion Safety & Collision Avoidance
+- **Strict Prohibition**: Never call unconstrained `Arm.move_to_position()` or direct actuator joints directly for workspace motions.
+- **Motion Planning**: All arm paths must route through `MotionClient.move()` with a valid `WorldState` containing workspace obstacle geometries (at minimum, a table obstacle bounding box).
+- **Hard Z-Boundary Check**: Enforce strict boundary validation. Reject any target pose or motion command where $Z < 15\text{ mm}$ (`MIN_SAFE_Z_MM = 15.0`). Raise a `ValueError` or safety rejection before any RPC call.
+- **Two-Phase Grasp Strategy**:
+  1. Compute a pre-grasp pose located at $Z + 100\text{ mm}$ above the target with downward tool orientation (`o_x=0, o_y=0, o_z=-1`).
+  2. Plan and move to pre-grasp pose via `MotionClient.move()`.
+  3. Plan and descend to the target grasp pose via `MotionClient.move()`.
+- **Grip Verification**: Always verify grip by calling and evaluating `await gripper.is_holding_something()` immediately after calling `await gripper.grab()`.
+
+## 4. Data Persistence & MongoDB Atlas Guidelines
+- **UTC Timestamps**: All timestamps must be timezone-aware UTC `datetime` objects (`datetime.now(timezone.utc)`). Never use naive datetimes or local machine timestamps.
+- **Time-Series Collections**: Telemetry logs must write to dedicated time-series collections initialized with:
+  ```json
+  {
+    "timeField": "timestamp",
+    "metaField": "metadata",
+    "granularity": "seconds"
+  }
+  ```
+- **Vector Search**: Use MongoDB Atlas `$vectorSearch` pipeline stage for episodic memory retrieval.
+
+## 5. Testing & Hardware Lock Protocol
+- Validate all changes against mock models (`arm / fake`, `gripper / fake`) before attempting execution on physical hardware.
+- Adhere to the Team Hardware Lock before triggering physical robot actuation.
