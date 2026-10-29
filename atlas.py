@@ -8,6 +8,7 @@ Collections:
 """
 
 import os
+from collections import defaultdict
 from datetime import datetime, timezone
 
 import certifi
@@ -228,7 +229,6 @@ def identify(
         return {"label": None, "confidence": 0.0, "matches": [], "low_confidence": True}
 
     # Group by label: mean similarity of each label's hits
-    from collections import defaultdict
     label_scores: dict[str, list[float]] = defaultdict(list)
     for r in results:
         label_scores[r["label"]].append(r["score"])
