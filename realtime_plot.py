@@ -18,7 +18,7 @@ import math
 import json
 import csv
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Set, List, Optional, Dict, Any
 from dotenv import load_dotenv
 
@@ -76,7 +76,7 @@ class RobotForceState:
         self.is_recording = True
         self.recording_start_time = time.time()
         self.recorded_samples = []
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         self.current_recording_file = f"recording_{timestamp}.csv"
         print(f"[RECORD] Started session: {self.current_recording_file}")
 
