@@ -56,12 +56,13 @@ async def connect_robot() -> RobotClient:
 
 async def record_stream(
     arm: Arm,
+    gripper: Gripper,
     object_label: str,
     duration: float = 10.0,
     sample_interval: float = 0.15,
     phase: str = "HOLD_TRAVEL"
 ) -> List[Dict[str, Any]]:
-    """Poll 6-joint torques for `duration` seconds and collect samples."""
+    """Poll Cartesian trajectory, joint angles, 6-joint torques, and gripper status."""
     print(f"\n[STREAM] Recording '{object_label}' for {duration:.1f}s at ~{1.0/sample_interval:.0f} Hz...")
     samples = []
     t0 = time.time()
@@ -71,21 +72,48 @@ async def record_stream(
         now = time.time()
         elapsed = round(now - t0, 3)
         try:
-            res = await arm.do_command({"load": ""}, timeout=1.5)
-            loads = res.get("load", [])
-            if loads and len(loads) >= 6:
+            pos, joints, load_res, grip_status = await asyncio.gather(
+                arm.get_end_position(),
+                arm.get_joint_positions(),
+                arm.do_command({"load": ""}),
+                gripper.is_holding_something()
+            )
+            loads = load_res.get("load", [])
+            j_vals = joints.values if joints else []
+            grip_meta = grip_status.meta if grip_status else {}
+            grip_pos = grip_meta.get("position", 0.0)
+
+            if loads and len(loads) >= 6 and len(j_vals) >= 6:
                 samples.append({
                     "elapsed_sec": elapsed,
                     "phase": phase,
                     "object_label": object_label,
-                    "j1_nm": round(loads[0], 4),
-                    "j2_nm": round(loads[1], 4),
-                    "j3_nm": round(loads[2], 4),
-                    "j4_nm": round(loads[3], 4),
-                    "j5_nm": round(loads[4], 4),
-                    "j6_nm": round(loads[5], 4),
+                    # Cartesian End-Effector Trajectory
+                    "tcp_x_mm": round(pos.x, 2),
+                    "tcp_y_mm": round(pos.y, 2),
+                    "tcp_z_mm": round(pos.z, 2),
+                    "tcp_ox": round(pos.o_x, 4),
+                    "tcp_oy": round(pos.o_y, 4),
+                    "tcp_oz": round(pos.o_z, 4),
+                    "tcp_theta_deg": round(pos.theta, 2),
+                    # Joint Space Angles
+                    "q1_deg": round(j_vals[0], 2),
+                    "q2_deg": round(j_vals[1], 2),
+                    "q3_deg": round(j_vals[2], 2),
+                    "q4_deg": round(j_vals[3], 2),
+                    "q5_deg": round(j_vals[4], 2),
+                    "q6_deg": round(j_vals[5], 2),
+                    # 6-Joint Loads / Torques
+                    "tau1_nm": round(loads[0], 4),
+                    "tau2_nm": round(loads[1], 4),
+                    "tau3_nm": round(loads[2], 4),
+                    "tau4_nm": round(loads[3], 4),
+                    "tau5_nm": round(loads[4], 4),
+                    "tau6_nm": round(loads[5], 4),
+                    # Gripper
+                    "gripper_holding": grip_status.is_holding_something,
+                    "gripper_pos": round(grip_pos, 1),
                 })
-                # Progress dot
                 sys.stdout.write(".")
                 sys.stdout.flush()
         except Exception:
@@ -100,44 +128,55 @@ async def record_stream(
 
 
 def save_and_analyze(samples: List[Dict[str, Any]], object_label: str, tare_j3: float = -16.8209) -> str:
-    """Save samples to CSV and output comparative mass estimation."""
+    """Save full trajectory + torque samples to CSV and output summary."""
     clean_lbl = "".join(c for c in object_label if c.isalnum() or c in ("-", "_")).lower() or "unlabeled"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"recording_{timestamp}_{clean_lbl}.csv"
     filepath = os.path.join(RECORDINGS_DIR, filename)
 
+    headers = [
+        "elapsed_sec", "phase", "object_label",
+        "tcp_x_mm", "tcp_y_mm", "tcp_z_mm", "tcp_ox", "tcp_oy", "tcp_oz", "tcp_theta_deg",
+        "q1_deg", "q2_deg", "q3_deg", "q4_deg", "q5_deg", "q6_deg",
+        "tau1_nm", "tau2_nm", "tau3_nm", "tau4_nm", "tau5_nm", "tau6_nm",
+        "gripper_holding", "gripper_pos"
+    ]
+
     with open(filepath, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow([
-            "elapsed_sec", "phase", "object_label",
-            "j1_nm", "j2_nm", "j3_nm", "j4_nm", "j5_nm", "j6_nm"
-        ])
+        writer.writerow(headers)
         for s in samples:
             writer.writerow([
                 s["elapsed_sec"], s["phase"], s["object_label"],
-                s["j1_nm"], s["j2_nm"], s["j3_nm"], s["j4_nm"], s["j5_nm"], s["j6_nm"]
+                s["tcp_x_mm"], s["tcp_y_mm"], s["tcp_z_mm"],
+                s["tcp_ox"], s["tcp_oy"], s["tcp_oz"], s["tcp_theta_deg"],
+                s["q1_deg"], s["q2_deg"], s["q3_deg"], s["q4_deg"], s["q5_deg"], s["q6_deg"],
+                s["tau1_nm"], s["tau2_nm"], s["tau3_nm"], s["tau4_nm"], s["tau5_nm"], s["tau6_nm"],
+                s["gripper_holding"], s["gripper_pos"]
             ])
 
     # Statistics
-    j3_vals = [s["j3_nm"] for s in samples]
+    j3_vals = [s["tau3_nm"] for s in samples]
+    z_vals = [s["tcp_z_mm"] for s in samples]
     mean_j3 = sum(j3_vals) / len(j3_vals) if j3_vals else 0.0
     var_j3 = sum((x - mean_j3) ** 2 for x in j3_vals) / len(j3_vals) if len(j3_vals) > 1 else 0.0
     delta_j3 = mean_j3 - tare_j3
     
-    # Effective payload mass (assuming travel lever arm ~ 0.56m)
     lever_arm = 0.56
     mass_kg = abs(delta_j3) / (GRAVITY * lever_arm) if abs(delta_j3) > 0.05 else 0.0
 
-    print("\n" + "=" * 65)
-    print(f"📊 DATASET RECORDED: '{object_label}'")
-    print("=" * 65)
-    print(f"• File Location:      {filepath}")
-    print(f"• Samples Collected:  {len(samples)}")
-    print(f"• Baseline J3 (Tare): {tare_j3:.4f} N·m")
-    print(f"• Measured Mean J3:   {mean_j3:.4f} N·m (variance: {var_j3:.5f})")
-    print(f"• Torque Delta (Δτ3): {delta_j3:.4f} N·m")
-    print(f"• Estimated Mass:     {mass_kg * 1000.0:.1f} grams ({mass_kg:.3f} kg)")
-    print("=" * 65 + "\n")
+    print("\n" + "=" * 70)
+    print(f"📊 TRAJECTORY & TORQUE DATASET RECORDED: '{object_label}'")
+    print("=" * 70)
+    print(f"• File Location:       {filepath}")
+    print(f"• Samples Collected:   {len(samples)}")
+    if z_vals:
+        print(f"• End-Effector Z Pose: min={min(z_vals):.1f} mm, max={max(z_vals):.1f} mm")
+    print(f"• Baseline J3 (Tare):  {tare_j3:.4f} N·m")
+    print(f"• Measured Mean J3:    {mean_j3:.4f} N·m (variance: {var_j3:.5f})")
+    print(f"• Torque Delta (Δτ3):  {delta_j3:.4f} N·m")
+    print(f"• Estimated Mass:      {mass_kg * 1000.0:.1f} grams ({mass_kg:.3f} kg)")
+    print("=" * 70 + "\n")
     return filepath
 
 
@@ -187,7 +226,7 @@ async def main():
         print(f"\nReady to record object: '{object_label}' for {args.duration} seconds.")
         input("Press Enter to START recording...")
 
-        samples = await record_stream(arm, object_label=object_label, duration=args.duration)
+        samples = await record_stream(arm, gripper, object_label=object_label, duration=args.duration)
         save_and_analyze(samples, object_label=object_label, tare_j3=args.tare)
 
 

@@ -70,20 +70,48 @@ class TelemetryRecorder:
         while self._running:
             t = time.time() - self.t0
             try:
-                # Query 6-joint loads
-                res = await self.arm.do_command({"load": ""}, timeout=1.5)
-                loads = res.get("load", [])
-                if loads and len(loads) >= 6:
+                # Concurrent high-rate query: Cartesian Pose + Joint Angles + Joint Torques + Gripper
+                pos, joints, load_res, grip_status = await asyncio.gather(
+                    self.arm.get_end_position(),
+                    self.arm.get_joint_positions(),
+                    self.arm.do_command({"load": ""}),
+                    self.gripper.is_holding_something()
+                )
+                loads = load_res.get("load", [])
+                j_vals = joints.values if joints else []
+                grip_meta = grip_status.meta if grip_status else {}
+                grip_pos = grip_meta.get("position", 0.0)
+
+                if loads and len(loads) >= 6 and len(j_vals) >= 6:
                     self.samples.append({
                         "elapsed_sec": round(t, 3),
                         "phase": self.current_phase,
                         "object_label": self.object_label,
-                        "j1_nm": round(loads[0], 4),
-                        "j2_nm": round(loads[1], 4),
-                        "j3_nm": round(loads[2], 4),
-                        "j4_nm": round(loads[3], 4),
-                        "j5_nm": round(loads[4], 4),
-                        "j6_nm": round(loads[5], 4),
+                        # Cartesian Trajectory
+                        "tcp_x_mm": round(pos.x, 2),
+                        "tcp_y_mm": round(pos.y, 2),
+                        "tcp_z_mm": round(pos.z, 2),
+                        "tcp_ox": round(pos.o_x, 4),
+                        "tcp_oy": round(pos.o_y, 4),
+                        "tcp_oz": round(pos.o_z, 4),
+                        "tcp_theta_deg": round(pos.theta, 2),
+                        # Joint Angle Trajectory (deg)
+                        "q1_deg": round(j_vals[0], 2),
+                        "q2_deg": round(j_vals[1], 2),
+                        "q3_deg": round(j_vals[2], 2),
+                        "q4_deg": round(j_vals[3], 2),
+                        "q5_deg": round(j_vals[4], 2),
+                        "q6_deg": round(j_vals[5], 2),
+                        # 6-Joint Loads / Torques (Nm)
+                        "tau1_nm": round(loads[0], 4),
+                        "tau2_nm": round(loads[1], 4),
+                        "tau3_nm": round(loads[2], 4),
+                        "tau4_nm": round(loads[3], 4),
+                        "tau5_nm": round(loads[4], 4),
+                        "tau6_nm": round(loads[5], 4),
+                        # Gripper
+                        "gripper_holding": grip_status.is_holding_something,
+                        "gripper_pos": round(grip_pos, 1),
                     })
             except Exception:
                 pass
@@ -93,7 +121,7 @@ class TelemetryRecorder:
         self._running = True
         self.t0 = time.time()
         self._task = asyncio.create_task(self._poll_loop())
-        print(f"[REC] Telemetry recording started for object: '{self.object_label}'")
+        print(f"[REC] Full trajectory & torque recording started for: '{self.object_label}'")
 
     async def stop(self) -> Optional[str]:
         self._running = False
@@ -112,45 +140,56 @@ class TelemetryRecorder:
         filename = f"recording_{timestamp}_{clean_lbl}.csv"
         filepath = os.path.join(RECORDINGS_DIR, filename)
 
+        headers = [
+            "elapsed_sec", "phase", "object_label",
+            "tcp_x_mm", "tcp_y_mm", "tcp_z_mm", "tcp_ox", "tcp_oy", "tcp_oz", "tcp_theta_deg",
+            "q1_deg", "q2_deg", "q3_deg", "q4_deg", "q5_deg", "q6_deg",
+            "tau1_nm", "tau2_nm", "tau3_nm", "tau4_nm", "tau5_nm", "tau6_nm",
+            "gripper_holding", "gripper_pos"
+        ]
+
         with open(filepath, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow([
-                "elapsed_sec", "phase", "object_label",
-                "j1_nm", "j2_nm", "j3_nm", "j4_nm", "j5_nm", "j6_nm"
-            ])
+            writer.writerow(headers)
             for s in self.samples:
                 writer.writerow([
                     s["elapsed_sec"], s["phase"], s["object_label"],
-                    s["j1_nm"], s["j2_nm"], s["j3_nm"], s["j4_nm"], s["j5_nm"], s["j6_nm"]
+                    s["tcp_x_mm"], s["tcp_y_mm"], s["tcp_z_mm"],
+                    s["tcp_ox"], s["tcp_oy"], s["tcp_oz"], s["tcp_theta_deg"],
+                    s["q1_deg"], s["q2_deg"], s["q3_deg"], s["q4_deg"], s["q5_deg"], s["q6_deg"],
+                    s["tau1_nm"], s["tau2_nm"], s["tau3_nm"], s["tau4_nm"], s["tau5_nm"], s["tau6_nm"],
+                    s["gripper_holding"], s["gripper_pos"]
                 ])
 
-        print(f"\n[REC] Saved {len(self.samples)} samples to: {filepath}")
+        print(f"\n[REC] Saved {len(self.samples)} trajectory+torque samples to: {filepath}")
         self._analyze_recording(filepath)
         return filepath
 
     def _analyze_recording(self, filepath: str):
         """Compute quick summary statistics from the recorded session."""
-        init_samples = [s["j3_nm"] for s in self.samples if s["phase"] in ("INIT", "APPROACH")]
-        travel_samples = [s["j3_nm"] for s in self.samples if s["phase"] == "HOLD_TRAVEL"]
+        init_samples = [s["tau3_nm"] for s in self.samples if s["phase"] in ("INIT", "APPROACH")]
+        travel_samples = [s["tau3_nm"] for s in self.samples if s["phase"] == "HOLD_TRAVEL"]
+        z_vals = [s["tcp_z_mm"] for s in self.samples]
 
-        print("=" * 65)
-        print(f"📊 DATASET SUMMARY — '{self.object_label}'")
-        print("=" * 65)
+        print("=" * 70)
+        print(f"📊 TRAJECTORY & TORQUE DATASET SUMMARY — '{self.object_label}'")
+        print("=" * 70)
         print(f"• Total Data Points:     {len(self.samples)}")
         print(f"• File Location:         {filepath}")
+        if z_vals:
+            print(f"• Z-Trajectory Range:    {min(z_vals):.1f} mm -> {max(z_vals):.1f} mm (span: {max(z_vals)-min(z_vals):.1f} mm)")
 
         if init_samples and travel_samples:
             tare_j3 = sum(init_samples) / len(init_samples)
             loaded_j3 = sum(travel_samples) / len(travel_samples)
             delta_j3 = loaded_j3 - tare_j3
-            # In travel posture (r_xy ~ 0.56m):
             r_xy = 0.56
             mass_kg = abs(delta_j3) / (GRAVITY * r_xy) if abs(delta_j3) > 0.05 else 0.0
             print(f"• Baseline J3 (Tare):    {tare_j3:.4f} N·m")
             print(f"• Loaded J3 (Travel):    {loaded_j3:.4f} N·m")
             print(f"• Delta Torque (Δτ3):    {delta_j3:.4f} N·m")
             print(f"• Estimated Mass:        {mass_kg * 1000.0:.1f} grams ({mass_kg:.3f} kg)")
-        print("=" * 65 + "\n")
+        print("=" * 70 + "\n")
 
 
 async def connect_robot() -> RobotClient:
