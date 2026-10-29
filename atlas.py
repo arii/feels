@@ -10,9 +10,11 @@ Collections:
 import os
 from datetime import datetime, timezone
 
+import certifi
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from pymongo.errors import CollectionInvalid
+from pymongo.errors import CollectionInvalid, OperationFailure
+from pymongo.operations import SearchIndexModel
 
 load_dotenv()
 
@@ -30,7 +32,7 @@ def get_db():
                 "MONGODB_URI not set. Add it to your .env file.\n"
                 "Format: mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/"
             )
-        _client = MongoClient(MONGODB_URI)
+        _client = MongoClient(MONGODB_URI, tlsCAFile=certifi.where())
     return _client[DB_NAME]
 
 
@@ -58,13 +60,42 @@ def setup_collections():
     db.signatures.create_index([("session", 1)])
     db.signatures.create_index([("label", 1), ("session", 1)])
     db.items.create_index([("label", 1)], unique=True)
+    print("  scalar indexes created")
 
-    print("\nScalar indexes created.")
-    print("\n*** ACTION REQUIRED: Create the Vector Search index in the Atlas UI ***")
-    print("  Collection : signatures")
-    print("  Index name : cup_dynamics_index")
-    print("  Field      : feature_vector  (type: vector, dimensions: 10, similarity: cosine)")
-    print("  See: docs/05-ml-pipeline.md §3 for the full index definition")
+    # Vector Search index (requires Atlas M0+ cluster)
+    _create_vector_index(db)
+
+
+# ---------------------------------------------------------------------------
+# Vector Search index creation
+# ---------------------------------------------------------------------------
+
+def _create_vector_index(db):
+    model = SearchIndexModel(
+        definition={
+            "fields": [
+                {
+                    "type": "vector",
+                    "path": "feature_vector",
+                    "numDimensions": 10,
+                    "similarity": "cosine",
+                },
+                {"type": "filter", "path": "label"},
+                {"type": "filter", "path": "session"},
+            ]
+        },
+        name="cup_dynamics_index",
+        type="vectorSearch",
+    )
+    try:
+        db.signatures.create_search_index(model)
+        print("  vector search index creation requested — takes ~1 min to build")
+        print("  check status: Atlas UI → your cluster → Atlas Search tab")
+    except OperationFailure as e:
+        if "already exists" in str(e):
+            print("  vector search index already exists — skipping")
+        else:
+            print(f"  vector search index error: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +330,9 @@ if __name__ == "__main__":
         session="thu",
     )
 
-    print("\n--- Running identify() (needs vector index) ---")
-    print("  Skipping — vector search index must be created in Atlas UI first.")
+    print("\n--- Running identify() ---")
+    result = identify(fake_vector, top_k=5, session="thu")
+    print(f"\n  Prediction : {result['label']}")
+    print(f"  Confidence : {result['confidence']:.3f}")
+    print(f"  Low conf?  : {result['low_confidence']}")
     print("\nDone.")
