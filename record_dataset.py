@@ -226,7 +226,8 @@ async def main():
         print(f"\nReady to record object: '{object_label}' for {args.duration} seconds.")
         input("Press Enter to START recording...")
 
-        samples = await record_stream(arm, gripper, object_label=object_label, duration=args.duration)
+        phase_tag = "TRAVEL_STABLE_HOLD" if args.move_travel else "HOLD_STATIC"
+        samples = await record_stream(arm, gripper, object_label=object_label, duration=args.duration, phase=phase_tag)
         save_and_analyze(samples, object_label=object_label, tare_j3=args.tare)
 
 

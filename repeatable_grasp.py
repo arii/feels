@@ -16,6 +16,7 @@ import asyncio
 import os
 import sys
 import time
+import math
 import csv
 import argparse
 from datetime import datetime
@@ -168,7 +169,8 @@ class TelemetryRecorder:
     def _analyze_recording(self, filepath: str):
         """Compute quick summary statistics from the recorded session."""
         init_samples = [s["tau3_nm"] for s in self.samples if s["phase"] in ("INIT", "APPROACH")]
-        travel_samples = [s["tau3_nm"] for s in self.samples if s["phase"] == "HOLD_TRAVEL"]
+        stable_samples = [s["tau3_nm"] for s in self.samples if s["phase"] == "TRAVEL_STABLE_HOLD"]
+        travel_samples = stable_samples if stable_samples else [s["tau3_nm"] for s in self.samples if "TRAVEL" in s["phase"]]
         z_vals = [s["tcp_z_mm"] for s in self.samples]
 
         print("=" * 70)
@@ -182,11 +184,13 @@ class TelemetryRecorder:
         if init_samples and travel_samples:
             tare_j3 = sum(init_samples) / len(init_samples)
             loaded_j3 = sum(travel_samples) / len(travel_samples)
+            var_hold = sum((x - loaded_j3) ** 2 for x in travel_samples) / len(travel_samples) if len(travel_samples) > 1 else 0.0
+            std_hold = math.sqrt(var_hold)
             delta_j3 = loaded_j3 - tare_j3
             r_xy = 0.56
             mass_kg = abs(delta_j3) / (GRAVITY * r_xy) if abs(delta_j3) > 0.05 else 0.0
             print(f"• Baseline J3 (Tare):    {tare_j3:.4f} N·m")
-            print(f"• Loaded J3 (Travel):    {loaded_j3:.4f} N·m")
+            print(f"• Fixed Stop J3 (Stable):{loaded_j3:.4f} N·m (±{std_hold:.4f} N·m, {len(travel_samples)} points)")
             print(f"• Delta Torque (Δτ3):    {delta_j3:.4f} N·m")
             print(f"• Estimated Mass:        {mass_kg * 1000.0:.1f} grams ({mass_kg:.3f} kg)")
         print("=" * 70 + "\n")
@@ -288,6 +292,77 @@ async def inspect_resources(machine: RobotClient):
     print("=" * 70 + "\n")
 
 
+async def wait_for_stability_in_travel(
+    arm: Arm,
+    recorder: Optional[TelemetryRecorder] = None,
+    stable_duration: float = 3.0,
+    max_settle_time: float = 3.0,
+    variance_threshold: float = 0.04
+) -> Dict[str, float]:
+    """
+    Monitors the arm in the travel pose until physical dynamic oscillations
+    (fluid sloshing, rattling, mechanical vibrations) have settled, then
+    performs a fixed stop dwell during which steady-state trajectory and torques
+    are recorded.
+    """
+    if recorder:
+        recorder.set_phase("TRAVEL_SETTLING")
+    print(f"\n--- STEP 5b: TRAVEL POSE STABILIZATION (Threshold: σ < {variance_threshold} N·m) ---")
+
+    settle_t0 = time.time()
+    recent_j3 = []
+    is_stable = False
+
+    while (time.time() - settle_t0) < max_settle_time:
+        try:
+            res = await arm.do_command({"load": ""}, timeout=1.0)
+            loads = res.get("load", [])
+            if loads and len(loads) >= 6:
+                recent_j3.append(loads[2])
+                if len(recent_j3) > 5:
+                    recent_j3.pop(0)
+                if len(recent_j3) >= 4:
+                    mean_val = sum(recent_j3) / len(recent_j3)
+                    var_val = sum((x - mean_val) ** 2 for x in recent_j3) / len(recent_j3)
+                    std_val = math.sqrt(var_val)
+                    if std_val < variance_threshold:
+                        is_stable = True
+                        elapsed_settle = time.time() - settle_t0
+                        print(f"[✓] Transients settled in {elapsed_settle:.2f}s (std: {std_val:.4f} N·m)")
+                        break
+        except Exception:
+            pass
+        await asyncio.sleep(0.1)
+
+    if not is_stable:
+        print(f"[!] Settling window reached {max_settle_time:.1f}s — proceeding to fixed stop dwell.")
+
+    # Phase: Fixed stop dwell
+    if recorder:
+        recorder.set_phase("TRAVEL_STABLE_HOLD")
+    print(f"\n--- STEP 5c: 🛑 FIXED STOP DWELL IN TRAVEL POSE ({stable_duration:.1f}s) ---")
+    
+    hold_samples = []
+    hold_t0 = time.time()
+    while (time.time() - hold_t0) < stable_duration:
+        try:
+            res = await arm.do_command({"load": ""}, timeout=1.0)
+            loads = res.get("load", [])
+            if loads and len(loads) >= 6:
+                hold_samples.append(loads[2])
+        except Exception:
+            pass
+        await asyncio.sleep(0.12)
+
+    stats = {}
+    if hold_samples:
+        stats["mean_j3"] = sum(hold_samples) / len(hold_samples)
+        stats["std_j3"] = math.sqrt(sum((x - stats["mean_j3"]) ** 2 for x in hold_samples) / len(hold_samples))
+        print(f"[✓] Fixed stop complete: Mean J3={stats['mean_j3']:.4f} N·m (±{stats['std_j3']:.4f} N·m, {len(hold_samples)} samples)")
+
+    return stats
+
+
 async def run_grasp_cycle(
     machine: RobotClient,
     arm: Arm,
@@ -295,7 +370,8 @@ async def run_grasp_cycle(
     cycle_idx: int = 1,
     step_delay: float = 1.0,
     recorder: Optional[TelemetryRecorder] = None,
-    hold_time: float = 2.5,
+    stable_hold: float = 3.0,
+    settle_threshold: float = 0.04,
 ) -> bool:
     """
     Executes one complete pick-and-place sequence with phase-synchronized recording:
@@ -346,11 +422,13 @@ async def run_grasp_cycle(
     if not await move_to_waypoint(machine, arm, "travel"):
         return False
 
-    # 5b. Hold & Weigh in Travel Position
-    if recorder:
-        recorder.set_phase("HOLD_TRAVEL")
-    print(f"\n--- STEP 5b: HOLDING AT TRAVEL FOR WEIGHING ({hold_time}s) ---")
-    await asyncio.sleep(hold_time)
+    # 5b. Fixed Stop at Travel Pose (Stability Gated)
+    await wait_for_stability_in_travel(
+        arm=arm,
+        recorder=recorder,
+        stable_duration=stable_hold,
+        variance_threshold=settle_threshold
+    )
 
     # 6. Place: Descend to target placement spot
     if recorder:
@@ -404,10 +482,16 @@ async def main():
         help="Record synchronized 6-joint telemetry data during the cycle",
     )
     parser.add_argument(
-        "--hold",
+        "--stable-hold",
         type=float,
-        default=2.5,
-        help="Hold duration (seconds) in travel position for weighing (default: 2.5s)",
+        default=3.0,
+        help="Fixed stop dwell duration (seconds) once settled in travel position (default: 3.0s)",
+    )
+    parser.add_argument(
+        "--settle-threshold",
+        type=float,
+        default=0.04,
+        help="Torque standard deviation threshold in Nm to confirm stabilization (default: 0.04 Nm)",
     )
     parser.add_argument(
         "--cycles",
@@ -492,7 +576,8 @@ async def main():
                     cycle_idx=c,
                     step_delay=args.delay,
                     recorder=recorder,
-                    hold_time=args.hold
+                    stable_hold=args.stable_hold,
+                    settle_threshold=args.settle_threshold,
                 )
                 if not success:
                     print(f"[!] Cycle #{c} aborted due to an error.")
