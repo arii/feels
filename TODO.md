@@ -68,3 +68,75 @@ This document tracks immediate technical priorities and research directions for 
   - Implement a digital low-pass Butterworth or Kalman filter on the controller side before computing derivative signals.
 - [ ] **Viam Motion Planning vs. Direct Execution:**
   - Compare Viam's `MotionClient.move()` with direct trajectory interpolation to ensure real-time command delivery with minimal jitter.
+
+---
+
+## 6. Addressing Latency via On-Robot Generic Service Module
+
+### Architecture & Overview
+Remote cloud polling over WebRTC incurs $\sim 158\,\text{ms}$ RTT latency and caps sampling at $4\text{--}5\,\text{Hz}$, starving high-frequency signals (such as 5–25 Hz rattle chatter, slosh lag, and impact transients).
+
+To solve this, we deploy an **on-robot custom Viam Generic Service module** (`hackathons:control_logic:generic-service`) directly onto `viam-server` on `sfhack12`.
+
+```
+┌──────────────────────────────────────── sfhack12 (Robot Host) ────────────────────────────────────────┐
+│                                                                                                        │
+│   ┌───────────────────────────────────┐    Local IPC (<0.5ms)     ┌────────────────────────────────┐  │
+│   │        viam-server                │ ◄──────────────────────►  │  FeelsControlService (Module)  │  │
+│   │  • arm (xArm850)                  │                           │  • Model: generic-service      │  │
+│   │  • gripper (UFactory)             │                           │  • 100-200 Hz Sampling Loop    │  │
+│   │  • cam (RealSense)                │                           │  • In-Memory Ring Buffer       │  │
+│   └───────────────────────────────────┘                           │  • Onboard FFT & Features      │  │
+│                     ▲                                             └────────────────────────────────┘  │
+└─────────────────────┼─────────────────────────────────────────────────────────────────────────────────┘
+                      │
+                      │ WebRTC / gRPC (Cloud do_command)
+                      ▼
+       ┌───────────────────────────────┐
+       │   Remote UI / Agent Client    │
+       │   • Calls do_command(...)     │
+       │   • Receives 10-dim vector    │
+       └───────────────────────────────┘
+```
+
+### Module Template Implementation (`control_service.py`)
+- **Base Architecture:** Subclasses `GenericService, EasyResource` with model `hackathons:control_logic:generic-service`.
+- **Hardware Dependencies:** Resolves `arm`, `gripper`, and `camera` directly via `new(config, dependencies)`.
+- **Onboard Polling Loop:** In `new()`, starts an unblocked `asyncio.create_task` running at 50–200 Hz, storing samples in a 2000-element circular buffer.
+- **Onboard Feature Extraction:** In `do_command({"action": "compute_features"})`, runs NumPy FFT directly on the robot to compute:
+  1. Mean delta torque $\Delta \bar{\tau}$ (mass proxy)
+  2. Peak delta torque $\Delta \tau_{\text{peak}}$
+  3. Torque variance $\sigma_\tau^2$
+  4. Dominant FFT peak frequency $f_{\text{max}}$
+  5. Dominant FFT peak power $P_{\text{max}}$
+  6. Rattle band energy (5–25 Hz)
+  7. Low-frequency slosh energy (0.5–3.0 Hz)
+  8. Spectral energy ratio (rattle / slosh)
+  9. Steady-state stability percentage
+  10. Estimated payload mass (grams)
+- **Zero-Drop Motion Macro:** In `do_command({"action": "run_macro"})`, commands steady hold, sine shake, and tilt while capturing 100 Hz data synchronously in memory.
+
+### Viam App Machine Configuration JSON
+Add this service entry to the robot configuration in the Viam app:
+```json
+{
+  "name": "control-logic",
+  "model": "hackathons:control_logic:generic-service",
+  "type": "generic",
+  "attributes": {
+    "arm": "arm",
+    "gripper": "gripper",
+    "camera": "cam",
+    "sampling_rate_hz": 100.0,
+    "lever_arm_m": 0.45,
+    "tare_j3_nm": -16.821
+  }
+}
+```
+
+### Implementation Checklist
+- [x] **Scaffold Service:** Implemented complete on-robot service in [`control_service.py`](control_service.py).
+- [x] **Client Test Script:** Created [`client_control_service.py`](client_control_service.py) for testing `do_command` actions over gRPC.
+- [ ] **Deploy to `sfhack12`:** Upload module to Viam registry or register as a local process module on the machine.
+- [ ] **Live Macro Test:** Execute `run_macro` on physical hardware and verify 100 Hz feature vector extraction.
+

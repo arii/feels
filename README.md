@@ -137,6 +137,14 @@ python sensors.py
 python effective_force.py --duration 15.0
 ```
 
+### 7. Zero-Latency On-Robot Control Service (`control_service.py`)
+
+To eliminate the ~158ms WebRTC cloud latency and sample at 50–200 Hz, deploy [`control_service.py`](control_service.py) (`hackathons:control_logic:generic-service`) directly onto the robot host (`sfhack12`). Test with:
+
+```bash
+python client_control_service.py
+```
+
 ---
 
 ## Experimental Findings: Weight Detection via Joint Torques
