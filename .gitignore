@@ -71,3 +71,6 @@ desktop.ini
 
 # Viam temporary data
 .viam/
+*.jpg
+*.jpeg
+*.png

@@ -116,6 +116,42 @@ Test connection and query active components:
 python main.py
 ```
 
+### 4. Interactive Real-Time Visualizer & Weight Detection Dashboard
+
+Launch the 10-second rolling telemetry dashboard with separated 6-joint axes and 1-click session recording:
+
+```bash
+python realtime_plot.py --port 8080
+```
+Open **`http://localhost:8080`** in any browser.
+
+### 5. Inspect All Sensors and Encoders
+
+```bash
+python sensors.py
+```
+
+### 6. Force & Weight Sensitivity Analysis
+
+```bash
+python effective_force.py --duration 15.0
+```
+
+---
+
+## Experimental Findings: Weight Detection via Joint Torques
+
+Even without a dedicated 6-axis F/T flange sensor, the xArm850 reports high-resolution joint loads via `arm.do_command({"load": ""})`.
+
+1. **Posture Dynamics:**
+   - In upright postures ($q_2 \approx 86^\circ$), the upper arm acts as an axial compression column, so vertical weight creates minimal angular moment on Joint 2 (Shoulder).
+   - **Joint 3 (Elbow Pitch)** acts as the cantilever reaction pivot and absorbs the downward bending moment.
+2. **Experimental Verification (Recordings 3 vs 4):**
+   - **Empty / Resting State:** Joint 3 settles firmly to `-16.82 N·m`.
+   - **Holding Payload:** Joint 3 deflects to **`-22.0` to `-23.02 N·m`** (a **`-6.20 N·m` shift**, equivalent to $\approx 1.4\,\text{kg}$ downward force).
+   - When released, torque crisply snaps back from $-20.7 \to -16.82\,\text{N}\cdot\text{m}$.
+   - CSV datasets and comparative plots are saved in [`recordings/`](recordings/).
+
 ---
 
 ## Baseline Code Sample
