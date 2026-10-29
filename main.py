@@ -19,7 +19,12 @@ import sys
 
 from dotenv import load_dotenv
 from viam.robot.client import RobotClient
+from viam.components.arm import Arm
+from viam.components.camera import Camera
+from viam.components.gripper import Gripper
+from viam.components.switch import Switch
 from viam.services.generic import Generic as GenericService
+from viam.services.vision import VisionClient
 
 import atlas
 

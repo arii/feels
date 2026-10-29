@@ -21,11 +21,12 @@ from viam.components.camera import Camera
 from viam.components.gripper import Gripper
 from viam.module.module import Module
 from viam.proto.app.robot import ComponentConfig
-from viam.proto.common import ResourceName
+from viam.proto.common import Pose, ResourceName
 from viam.resource.base import ResourceBase
 from viam.resource.easy_resource import EasyResource
 from viam.resource.types import Model, ModelFamily
 from viam.services.generic import Generic as GenericService
+from viam.services.vision import VisionClient
 from viam.utils import struct_to_dict, ValueTypes
 
 logger = logging.getLogger("FeelsControlService")
@@ -41,11 +42,21 @@ class FeelsControlService(GenericService, EasyResource):
     gripper: Gripper
     arm: Arm
     camera: Camera
+    vision: Optional[VisionClient] = None
 
-    # Configuration attributes
+    # Telemetry configuration
     sampling_rate_hz: float = 50.0
-    lever_arm_m: float = 0.45  # Forearm moment arm L3 (meters)
-    tare_j3_nm: float = -16.821  # Default resting unloaded torque on Joint 3
+    lever_arm_m: float = 0.45
+    tare_j3_nm: float = -16.821
+
+    # Cup pose parameters (mm, robot base frame) — tune to your taped square
+    cup_x_mm: float = 300.0
+    cup_y_mm: float = 0.0
+    cup_grasp_z_mm: float = 150.0   # height at which gripper closes around cup
+    approach_z_mm: float = 310.0    # safe hover height above cup before descending
+    lift_height_mm: float = 420.0   # analysis height (shake + tilt happen here)
+    shake_amplitude_mm: float = 20.0
+    shake_freq_hz: float = 2.5
 
     # Internal state & circular buffer
     _running: bool = False
@@ -66,11 +77,14 @@ class FeelsControlService(GenericService, EasyResource):
         required_deps = []
         optional_deps = []
 
-        # Required dependencies
         for key in ("arm", "gripper", "camera"):
             if key not in attrs or not attrs[key]:
                 raise ValueError(f"Attribute '{key}' (non-empty string) is required")
             required_deps.append(attrs[key])
+
+        # vision detector (VisionClient, e.g. yolo) is optional
+        if attrs.get("vision"):
+            optional_deps.append(attrs["vision"])
 
         return required_deps, optional_deps
 
@@ -81,15 +95,35 @@ class FeelsControlService(GenericService, EasyResource):
         self = super().new(config, dependencies)
         attrs = struct_to_dict(config.attributes)
 
-        # Resolve dependencies
+        # Resolve required dependencies
         self.arm = dependencies[Arm.get_resource_name(attrs["arm"])]
         self.gripper = dependencies[Gripper.get_resource_name(attrs["gripper"])]
         self.camera = dependencies[Camera.get_resource_name(attrs["camera"])]
 
-        # Custom attributes
+        # Resolve optional vision dependency
+        vision_name = attrs.get("vision", "")
+        if vision_name:
+            try:
+                self.vision = dependencies[VisionClient.get_resource_name(vision_name)]
+            except KeyError:
+                self.vision = None
+                logger.warning(f"Vision service '{vision_name}' not found in dependencies")
+        else:
+            self.vision = None
+
+        # Telemetry config
         self.sampling_rate_hz = float(attrs.get("sampling_rate_hz", 50.0))
         self.lever_arm_m = float(attrs.get("lever_arm_m", 0.45))
         self.tare_j3_nm = float(attrs.get("tare_j3_nm", -16.821))
+
+        # Cup pose config (mm, tune to your taped square)
+        self.cup_x_mm = float(attrs.get("cup_x_mm", 300.0))
+        self.cup_y_mm = float(attrs.get("cup_y_mm", 0.0))
+        self.cup_grasp_z_mm = float(attrs.get("cup_grasp_z_mm", 150.0))
+        self.approach_z_mm = float(attrs.get("approach_z_mm", 310.0))
+        self.lift_height_mm = float(attrs.get("lift_height_mm", 420.0))
+        self.shake_amplitude_mm = float(attrs.get("shake_amplitude_mm", 20.0))
+        self.shake_freq_hz = float(attrs.get("shake_freq_hz", 2.5))
 
         # Initialize buffers
         self._telemetry_buffer = deque(maxlen=self._buffer_maxlen)
@@ -185,18 +219,23 @@ class FeelsControlService(GenericService, EasyResource):
             return await self._handle_get_recorded_data()
         elif action == "compute_features":
             return await self._handle_compute_features()
+        elif action == "detect_cup":
+            return await self._detect_cup()
+        elif action == "pick_cup":
+            lift_pose = await self._pick_cup()
+            return {"status": "picked", "lift_z_mm": lift_pose.z}
+        elif action == "place_cup":
+            return await self._place_cup(None)
         elif action == "run_macro":
             return await self._handle_run_macro(command)
         else:
             return {
                 "error": f"Unknown action: '{action}'",
                 "available_actions": [
-                    "tare",
-                    "get_telemetry",
-                    "start_recording",
-                    "stop_recording",
-                    "get_recorded_data",
+                    "tare", "get_telemetry",
+                    "start_recording", "stop_recording", "get_recorded_data",
                     "compute_features",
+                    "detect_cup", "pick_cup", "place_cup",
                     "run_macro",
                 ],
             }
@@ -352,39 +391,158 @@ class FeelsControlService(GenericService, EasyResource):
             },
         }
 
+    async def _detect_cup(self) -> dict:
+        """Check the vision detector for a cup before approaching. Skips gracefully if no vision dep."""
+        if self.vision is None:
+            logger.info("No vision service configured — skipping cup detection")
+            return {"found": True, "confidence": 1.0, "source": "skipped"}
+        try:
+            detections = await self.vision.get_detections_from_camera("cam")
+            for d in detections:
+                if d.confidence >= 0.5:
+                    logger.info(f"Cup detected: {d.class_name} @ {d.confidence:.2f}")
+                    return {"found": True, "confidence": float(d.confidence), "class_name": d.class_name}
+            logger.warning("No cup detected in frame — proceeding anyway")
+            return {"found": False, "confidence": 0.0}
+        except Exception as e:
+            logger.warning(f"Cup detection error: {e}")
+            return {"found": False, "error": str(e)}
+
+    async def _pick_cup(self) -> Pose:
+        """Open gripper → hover above cup → descend → grab → lift to analysis height."""
+        ox, oy, oz, theta = 0.0, 0.0, -1.0, 0.0  # gripper pointing straight down
+
+        await self.gripper.open()
+
+        pre_grasp = Pose(
+            x=self.cup_x_mm, y=self.cup_y_mm, z=self.approach_z_mm,
+            o_x=ox, o_y=oy, o_z=oz, theta=theta,
+        )
+        await self.arm.move_to_position(pre_grasp)
+        await asyncio.sleep(0.3)
+
+        grasp_pose = Pose(
+            x=self.cup_x_mm, y=self.cup_y_mm, z=self.cup_grasp_z_mm,
+            o_x=ox, o_y=oy, o_z=oz, theta=theta,
+        )
+        await self.arm.move_to_position(grasp_pose)
+        await asyncio.sleep(0.3)
+
+        await self.gripper.grab()
+        await asyncio.sleep(0.4)
+
+        lift_pose = Pose(
+            x=self.cup_x_mm, y=self.cup_y_mm, z=self.lift_height_mm,
+            o_x=ox, o_y=oy, o_z=oz, theta=theta,
+        )
+        await self.arm.move_to_position(lift_pose)
+        await asyncio.sleep(0.5)
+
+        logger.info(f"Cup lifted to z={self.lift_height_mm:.0f}mm")
+        return lift_pose
+
+    async def _place_cup(self, lift_pose: Optional[Pose]) -> dict:
+        """Lower cup to taped square, release, retract to approach height."""
+        ox, oy, oz, theta = 0.0, 0.0, -1.0, 0.0
+
+        approach = Pose(
+            x=self.cup_x_mm, y=self.cup_y_mm, z=self.approach_z_mm,
+            o_x=ox, o_y=oy, o_z=oz, theta=theta,
+        )
+        await self.arm.move_to_position(approach)
+        await asyncio.sleep(0.3)
+
+        place = Pose(
+            x=self.cup_x_mm, y=self.cup_y_mm, z=self.cup_grasp_z_mm,
+            o_x=ox, o_y=oy, o_z=oz, theta=theta,
+        )
+        await self.arm.move_to_position(place)
+        await asyncio.sleep(0.3)
+
+        await self.gripper.open()
+        await asyncio.sleep(0.3)
+
+        await self.arm.move_to_position(approach)
+        await asyncio.sleep(0.3)
+
+        logger.info("Cup placed back on taped square")
+        return {"status": "placed"}
+
+    async def _shake_phase(self, lift_pose: Pose, duration: float = 2.5):
+        """Sinusoidal X-axis excitation at shake_freq_hz for duration seconds."""
+        n_steps = max(8, int(duration * self.shake_freq_hz * 8))
+        step_dt = duration / n_steps
+
+        for i in range(n_steps):
+            t = (i / n_steps) * duration
+            x_offset = self.shake_amplitude_mm * math.sin(2.0 * math.pi * self.shake_freq_hz * t)
+            waypoint = Pose(
+                x=lift_pose.x + x_offset, y=lift_pose.y, z=lift_pose.z,
+                o_x=lift_pose.o_x, o_y=lift_pose.o_y, o_z=lift_pose.o_z, theta=lift_pose.theta,
+            )
+            await self.arm.move_to_position(waypoint)
+            await asyncio.sleep(step_dt)
+
+        # Return to centre
+        await self.arm.move_to_position(lift_pose)
+        await asyncio.sleep(0.2)
+
+    async def _tilt_phase(self, lift_pose: Pose, tilt_degrees: float = 25.0):
+        """Tilt cup tilt_degrees from vertical in the XZ plane, then restore level."""
+        rad = math.radians(tilt_degrees)
+        # Rotate -Z axis toward +X: (0,0,-1) → (sin θ, 0, -cos θ)
+        tilt_pose = Pose(
+            x=lift_pose.x, y=lift_pose.y, z=lift_pose.z,
+            o_x=math.sin(rad), o_y=0.0, o_z=-math.cos(rad),
+            theta=lift_pose.theta,
+        )
+        await self.arm.move_to_position(tilt_pose)
+        await asyncio.sleep(1.0)
+
+        await self.arm.move_to_position(lift_pose)
+        await asyncio.sleep(0.8)
+
     async def _handle_run_macro(self, command: Mapping[str, ValueTypes]) -> dict:
         """
-        Executes the 3-phase diagnostic motion macro directly on the robot:
-        1. Steady lift & hold (1.5 s)
-        2. Sinusoidal excitation shake (2.5 s)
-        3. Controlled tilt & restore (2.0 s)
-        High-rate telemetry is captured in memory throughout.
+        Full see-pick-shake-classify motion macro:
+        1. Detect cup via vision detector (visual confirm, optional)
+        2. Pick cup from taped square and lift to analysis height
+        3. Phase 1 — Steady hold 1.5 s  (record baseline torques)
+        4. Phase 2 — Sinusoidal shake 2.5 s  (rattle / slosh excitation)
+        5. Phase 3 — Tilt 25° and restore 2.0 s  (inertia / liquid response)
+        6. Place cup back on taped square
         """
-        duration = float(command.get("duration", 6.0))
-        logger.info(f"Starting diagnostic macro execution ({duration}s)...")
+        logger.info("Starting see-pick-shake motion macro...")
 
-        # Start recording synchronously
+        detection = await self._detect_cup()
+        if not detection.get("found"):
+            logger.warning("Cup not confirmed by vision — proceeding without visual confirm")
+
+        lift_pose = await self._pick_cup()
+
+        # Start recording only once cup is in hand and at lift height
         self._recorded_samples = []
         self._is_recording = True
 
         try:
-            # Phase 1: Steady Hold (1.5s)
+            logger.info("Phase 1: Steady hold (1.5 s)...")
             await asyncio.sleep(1.5)
 
-            # Phase 2: Active excitation / perturbation (e.g. 2.5s)
-            # Future: Joint velocity sinusoidal command on Joint 6 / Joint 5
-            await asyncio.sleep(2.5)
+            logger.info("Phase 2: Sinusoidal shake (2.5 s)...")
+            await self._shake_phase(lift_pose, duration=2.5)
 
-            # Phase 3: Tilt & settle (2.0s)
-            await asyncio.sleep(2.0)
+            logger.info("Phase 3: Tilt & restore (2.0 s)...")
+            await self._tilt_phase(lift_pose, tilt_degrees=25.0)
 
         finally:
             self._is_recording = False
 
-        # Extract features immediately onboard
+        await self._place_cup(lift_pose)
+
         features = await self._handle_compute_features()
         return {
             "status": "macro_completed",
+            "cup_detected": detection,
             "sample_count": len(self._recorded_samples),
             "features": features,
         }
