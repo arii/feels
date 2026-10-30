@@ -32,7 +32,7 @@ One fixed, highly repeatable trajectory:
 | **Empty Cup** | Zero mass offset ($\Delta \tau \approx 0$), zero swirl variance, zero rattle | `empty_cup` (Tare baseline) |
 | **Water (half-full)** | Medium mass (~180g), dynamic swirl vortex phase lag, low high-frequency chatter | `water_half` |
 | **Dish Soap (half-full)** | Medium mass (~210g), heavy viscous swirl damping, delayed response peak | `dish_soap_half` |
-| **Candy (loose fun-size)** | Medium mass (~140g), sharp impact chatter in 5–25 Hz rattle band | `candy_mixed` |
+| **Candy (loose fun-size)** | Medium mass (~140g), loose-impact torque variance (the 5–25 Hz rattle band itself is *not* observable at 4–5 Hz sampling) | `candy_mixed` |
 | **Solid Weight (rigid)** | High mass (~350g), rigid coupling, zero swirl lag, zero rattle | `solid_weight` |
 
 ---
@@ -40,29 +40,39 @@ One fixed, highly repeatable trajectory:
 ## Phase 1: Feature Extraction & Swirl Integration (Immediate Focus)
 
 - [x] Verified arm-position-saver waypoints (`home-pose`, `approach`, `grasp`, `travel`, `place`)
-- [ ] Implement `DynamicFeatureExtractor` in `feature_extractor.py`:
-  - Static mass offset ($\Delta \tau_{\text{gravity}}$)
-  - Swirl residual torque variance ($\text{Var}(\tau_{\text{swirl}})$)
-  - Dominant FFT frequency and power ($f_{\text{peak}}$, $P_{\text{peak}}$)
-  - High-frequency rattle energy ($E_{\text{rattle}}$ 5–25 Hz)
-  - Swirl phase lag ($\Delta \phi_{\text{lag}}$)
-  - L2-normalized 10D embedding vector $e \in \mathbb{S}^9$
+- [x] Implement `feature_extractor.py` (done — the real 10-D vector is
+  `mass_j2/mass_j3`, `swirl_var_j2/j3`, `swirl_ptp_j3`, `phase_lag_s`,
+  `rattle_e` (observable band only, flagged band-limited), `grip_comp`,
+  `lift_dyn_j3`, `swirl_speed` → per-feature scaled, L2-normalized embedding):
+  - Static mass offsets (gravity torque at J2/J3)
+  - Swirl residual torque variances
+  - Swirl peak-to-peak swing
+  - Swirl phase lag (xcorr lag, ±2 s window)
+  - High-frequency rattle energy (observable band only — 5–25 Hz **not** reachable at 4–5 Hz sampling)
+  - Per-feature scaled, L2-normalized 10D embedding vector $e \in \mathbb{S}^9$
 - [ ] Implement smooth horizontal swirl orbital trajectory in `repeatable_grasp.py`
 - [ ] Automatic end-of-run feature extraction and CSV logging
 
 ---
 
-## Phase 2: Web Dashboard UX & Live Detection Reporting (Immediate Focus)
+## Phase 2: Web Dashboard UX & Live Detection Reporting (Done)
 
-- [ ] Upgrade `realtime_plot.py` dashboard:
-  - **Live Telemetry:** 10s rolling Chart.js (Weight + Force Fz) and 6-joint canvas sparklines
-  - **Active Phase Display:** Live badge tracking (`IDLE` $\to$ `APPROACH` $\to$ `GRASP` $\to$ `LIFT` $\to$ `SWIRL` $\to$ `PLACE`)
-  - **Detection Reporting Card:** Prominent verdict displaying predicted label with emoji, confidence score, and top-3 k-NN matches from Atlas `$vectorSearch`
+- [x] `realtime_plot.py` dashboard:
+  - **Live Telemetry:** 6-joint canvas sparklines, 10 s rolling, fixed ±N·m axes
+    (derived weight/force KPI cards removed — tare-contaminated per audit)
+  - **Detection Reporting Card:** predicted label, confidence bar, top-3 Atlas
+    `$vectorSearch` neighbors with similarities; feature-space panel; "why"
+    physics (torque residuals + phase lag, honest observable-band spectrum)
+  - **Vector space card:** 2-D PCA of the signature library, hover tooltips,
+    neighbor rings, per-label counts
   - **Online Recording & Teaching:**
-    - "▶ Run Pick & Place Cycle" one-click button
-    - "⏹ Abort" button
-    - "Teach / Save to Atlas" one-click button to register new calibrated items
-    - CSV dataset drawer with download links
+    - "RUN SWIRL MACRO & PREDICT" / "RUN SWIRL & SAVE TO ATLAS" one-click buttons
+      with elapsed tickers
+    - "■ Stop" button for the macro subprocess
+    - Preset label chips (confound set + basics)
+    - `teach_csv.py` batch-teach from CSVs (`--require-swirl`)
+    - Manual start/stop recording with CSV download
+    - `FEELS_MOCK=1` fallback mode with MOCK badge
 
 ---
 

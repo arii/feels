@@ -12,13 +12,16 @@ The feature extraction engine transforms variable-length time-series rollouts $D
 
 ```
 Telemetry Rollout D
-  ├── Phase 1: Static Hold  ──► Δτ_gravity (Mass)
-  ├── Phase 2: Swirl Orbit  ──► Var(τ_swirl), f_peak, P_peak, E_rattle, Δφ_lag
-  └── Compliance            ──► Δg_grip, Δi_grip
+  ├── Static lift hold ──► mass_j2, mass_j3 (gravity torque offsets)
+  ├── Swirl orbit       ──► swirl_var_j2, swirl_var_j3, swirl_ptp_j3,
+  │                        phase_lag_s, rattle_e (observable band only)
+  ├── Lift transient   ──► lift_dyn_j3 (inertial cue)
+  ├── Grip             ──► grip_comp (compliance under load)
+  └── Excitation       ──► swirl_speed (normalization)
                                         ↓
                          Raw 10D Feature Vector z
                                         ↓
-                       Normalized Unit Embedding e = z / ‖z‖₂
+            Per-feature scaled, L2-normalized embedding e = Wz / ‖Wz‖₂
                                         ↓
                      MongoDB Atlas $vectorSearch Retrieval
 ```
@@ -33,38 +36,44 @@ Telemetry Rollout D
 During the smooth horizontal swirl orbit:
 - **Swirl Torque Variance:**
   $$\text{Var}(\tau_{3,\text{swirl}}) = \frac{1}{N}\sum (\tau_3(t) - \bar{\tau}_3)^2$$
-- **FFT Spectral Resonances:** Fast Fourier Transform on detrended torque:
-  $$Y(f) = \mathcal{F}\{\tau_3(t) - \bar{\tau}_3\}$$
-  - Dominant frequency $f_{\text{peak}} = \arg\max |Y(f)|^2$
-  - Dominant peak power $P_{\text{peak}} = \max |Y(f)|^2$
-- **High-Frequency Rattle Energy (5–25 Hz):** Flags loose granular candy or small objects rattling inside the cup:
-  $$E_{\text{rattle}} = \sum_{5\,\text{Hz} \le f \le 25\,\text{Hz}} |Y(f)|^2$$
-- **Swirl Phase Lag ($\Delta \phi_{\text{lag}}$):** Cross-correlation phase shift between the commanded orbital circular trajectory and the measured actuator torque response:
-  $$\Delta \phi_{\text{lag}} = \arg\max_\delta (R_{\tau, \text{cmd}}(\delta)) \cdot \frac{2\pi f_{\text{swirl}}}{f_s}$$
-  - Distinguishes lagging fluid vortex slosh (water, viscous soap) from rigid lumped mass (zero phase lag).
+- **Swirl Torque Spectrum (observable band only):** FFT on the detrended J3 residual,
+  $$Y(f) = \mathcal{F}\{r_3(t)\},$$
+  integrated over the *observable* band only:
+  $$E_{\text{rattle}} = \sum_{1.5\,\text{Hz} \le f \le f_s/2} |Y(f)|^2.$$
+  At 4–5 Hz cloud sampling the 5–25 Hz rattle band is **not** observable
+  (Nyquist ~2 Hz); the extractor flags `rattle_band_limited`. The true band
+  needs the 100 Hz on-robot module (`control_service.py`, not yet deployed).
+- **Swirl Phase Lag ($\phi_{\text{lag}}$):** lag of max |cross-correlation|
+  between TCP speed and the J3 torque residual, within ±2 s:
+  $$\phi_{\text{lag}} = \arg\max_{|\delta| \le 2} |R_{v, r_3}(\delta)|.$$
+  - Distinguishes lagging fluid vortex slosh (water, viscous soap) from rigid lumped mass (near-zero lag).
 
 ### Full 10-Dimensional Feature Vector ($z$)
 
+As implemented in `feature_extractor.py` (`FEATURE_NAMES`):
+
 | Index | Feature | Physical Meaning | Item Separation Property |
 |:-----:|---------|------------------|--------------------------|
-| 0 | $\Delta \tau_{\text{gravity}}$ | Steady-state mass offset (Nm) | Separates empty cup from loaded cups |
-| 1 | $\text{Var}(\tau_{\text{swirl}})$ | Swirl residual torque variance | High for liquids and loose items, low for rigid mass |
-| 2 | $f_{\text{peak}}$ | Dominant spectral frequency (Hz) | Natural sloshing or rattle oscillation frequency |
-| 3 | $P_{\text{peak}}$ | Dominant spectral power | Intensity of internal dynamic oscillation |
-| 4 | $E_{\text{rattle}}$ | Integrated 5–25 Hz rattle energy | **Sharp spikes for loose candy; near-zero for liquids** |
-| 5 | $\Delta \phi_{\text{lag}}$ | Orbital swirl phase lag (rad) | **Large for viscous fluids; zero for solid weights** |
-| 6 | $\tau_{\text{centripetal}}$ | Lateral centripetal torque coupling | Measures rotational fluid vortex inertia |
-| 7 | $\Delta g_{\text{grip}}$ | Gripper stroke deflection (mm) | Senses container compliance / compression |
-| 8 | $\Delta i_{\text{grip}}$ | Gripper motor load current | Grip resistance during motion |
-| 9 | $S_{\text{stability}}$ | Steady-state stability metric | Percentage of time within resting bounds |
+| 0 | `mass_j2` | Static gravity torque offset, shoulder (J2) | Payload mass estimate |
+| 1 | `mass_j3` | Static gravity torque offset, elbow (J3) | Payload mass estimate |
+| 2 | `swirl_var_j2` | Torque variance at J2 during swirl | Slosh / loose-content energy |
+| 3 | `swirl_var_j3` | Torque variance at J3 during swirl | Slosh / loose-content energy |
+| 4 | `swirl_ptp_j3` | Peak-to-peak J3 torque during swirl | Shifting-mass swing |
+| 5 | `phase_lag_s` | Lag of max \|xcorr(TCP speed, J3 residual)\| | **Large for viscous fluids; near-zero for rigid mass** |
+| 6 | `rattle_e` | High-frequency energy, *observable band only* (1.5 Hz–Nyquist) | Loose-item energy; **band-limited at 4–5 Hz sampling** |
+| 7 | `grip_comp` | Gripper position std during swirl | Squishy vs rigid contents |
+| 8 | `lift_dyn_j3` | Dynamic J3 torque during lift | Inertial mass cue |
+| 9 | `swirl_speed` | Mean TCP speed during swirl | Excitation normalization |
 
 ---
 
 ## 2. Normalized Metric Embedding ($e \in \mathbb{S}^9$)
 
-Rather than relying on learned neural network parameters, the vector is directly normalized to the unit hypersphere:
+Rather than relying on learned neural network parameters, the vector is
+per-feature scaled (90th-percentile scales in `FEATURE_SCALES`, calibrated on
+real recordings and frozen) and normalized to the unit hypersphere:
 
-$$e = \frac{z}{\|z\|_2 + \epsilon}$$
+$$e = \frac{Wz}{\|Wz\|_2}$$
 
 This ensures that MongoDB Atlas Vector Search computes exact cosine similarity without needing neural network training or backpropagation.
 
