@@ -540,6 +540,7 @@ HTML_PAGE = """<!DOCTYPE html>
     .feat-bar-wrap { background:#21262d; border-radius:3px; height:8px; overflow:hidden; }
     .feat-bar { display:block; height:100%; background:#1f6feb; }
     .why-canvas { width:100%; height:110px; background:#0d1117; border:1px solid var(--border); border-radius:6px; margin-top:4px; }
+    #vspace-tip { display:none; position:absolute; background:#161b22; border:1px solid var(--border); border-radius:4px; padding:3px 8px; font-size:0.72rem; font-family:monospace; color:#e6edf3; pointer-events:none; z-index:5; }
     .chip { background:#21262d; border:1px solid var(--border); color:#8b949e; border-radius:20px; padding:4px 12px; font-size:0.75rem; cursor:pointer; font-family:monospace; }
     .chip:hover { color:#e6edf3; border-color:#58a6ff; }
     .chip-label { color:#6e7681; font-size:0.72rem; align-self:center; }
@@ -609,9 +610,10 @@ HTML_PAGE = """<!DOCTYPE html>
   </div>
 
   <!-- Vector space (2-D PCA of the Atlas signature library) -->
-  <div style="background:#161b22; border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
+  <div style="background:#161b22; border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px; position:relative;">
     <div class="kpi-label">Vector space — 2-D PCA of the Atlas 10-D signature library</div>
     <canvas id="vspace-canvas" class="why-canvas" style="height:220px;"></canvas>
+    <div id="vspace-tip"></div>
     <div class="kpi-sub" id="vspace-note" style="margin-top:6px;"></div>
   </div>
 
@@ -632,7 +634,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
     <div class="joint-card">
       <div class="joint-header">
-        <span class="joint-name" style="color: #3fb950;">Joint 2 — Shoulder (Pitch) [Weight]</span>
+        <span class="joint-name" style="color: #3fb950;">Joint 2 — Shoulder (Pitch)</span>
         <span class="joint-val" id="val-j2" style="color: #3fb950;">-16.05</span><span class="joint-range">±25 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j2" class="sparkline"></canvas></div>
@@ -938,6 +940,32 @@ HTML_PAGE = """<!DOCTYPE html>
       return VSPACE_COLORS[h % VSPACE_COLORS.length];
     }
     let lastQueryE = null;
+    let lastMatchLabels = [];
+    let vspaceLayout = [];
+
+    document.getElementById('vspace-canvas').addEventListener('mousemove', e => {
+      const c = e.target, tip = document.getElementById('vspace-tip');
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const mx = (e.clientX - r.left) * (c.width / r.width);
+      const my = (e.clientY - r.top) * (c.height / r.height);
+      let best = null, bd = 1e18;
+      for (const p of vspaceLayout) {
+        const d = (p.px - mx) ** 2 + (p.py - my) ** 2;
+        if (d < bd) { bd = d; best = p; }
+      }
+      if (best && bd < (16 * dpr) ** 2) {
+        tip.style.display = 'block';
+        tip.style.left = (e.clientX - r.left + 14) + 'px';
+        tip.style.top = (e.clientY - r.top - 8) + 'px';
+        tip.innerText = best.label;
+      } else {
+        tip.style.display = 'none';
+      }
+    });
+    document.getElementById('vspace-canvas').addEventListener('mouseleave', () => {
+      document.getElementById('vspace-tip').style.display = 'none';
+    });
 
     async function refreshVSpace() {
       const note = document.getElementById('vspace-note');
@@ -974,9 +1002,12 @@ HTML_PAGE = """<!DOCTYPE html>
       const pad = 24 * dpr;
       const X = x => pad + ((x - minX) / (maxX - minX)) * (w - 2 * pad);
       const Y = y => h - pad - ((y - minY) / (maxY - minY)) * (h - 2 * pad);
+      vspaceLayout = [];
+      const rankColors = ['#ffd700', '#c0c0c0', '#cd7f32'];
       pts.forEach((p, i) => {
         const isQ = i === data.query_index;
         const x = X(p.x), y = Y(p.y);
+        vspaceLayout.push({px: x, py: y, label: p.label});
         ctx.fillStyle = isQ ? '#ffffff' : labelColor(p.label);
         ctx.beginPath(); ctx.arc(x, y, (isQ ? 5 : 3.5) * dpr, 0, 2 * Math.PI); ctx.fill();
         if (isQ) {
@@ -987,12 +1018,23 @@ HTML_PAGE = """<!DOCTYPE html>
           ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r);
           ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r);
           ctx.stroke();
+        } else {
+          const rank = lastMatchLabels.indexOf(p.label);
+          if (rank >= 0 && rank < 3) {
+            ctx.strokeStyle = rankColors[rank]; ctx.lineWidth = 1.5 * dpr;
+            ctx.beginPath(); ctx.arc(x, y, 7 * dpr, 0, 2 * Math.PI); ctx.stroke();
+            ctx.fillStyle = rankColors[rank]; ctx.font = `${10 * dpr}px monospace`;
+            ctx.fillText(String(rank + 1), x + 9 * dpr, y - 7 * dpr);
+          }
         }
       });
-      const labels = [...new Set(pts.filter((_, i) => i !== data.query_index).map(p => p.label))];
-      note.innerHTML = labels.map(l =>
-        `<span style="display:inline-block; margin:2px 10px 2px 0; color:#8b949e;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${labelColor(l)}; margin-right:5px;"></span>${l}</span>`
-      ).join('') + `<span style="color:#6e7681;">${data.n} signature${data.n === 1 ? '' : 's'} · 2-D PCA of cosine space · × = current query</span>`;
+      const counts = {};
+      pts.forEach((p, i) => {
+        if (i !== data.query_index) counts[p.label] = (counts[p.label] || 0) + 1;
+      });
+      note.innerHTML = Object.keys(counts).sort().map(l =>
+        `<span style="display:inline-block; margin:2px 10px 2px 0; color:#8b949e;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${labelColor(l)}; margin-right:5px;"></span>${l} ×${counts[l]}</span>`
+      ).join('') + `<span style="color:#6e7681;">${data.n} signature${data.n === 1 ? '' : 's'} · 2-D PCA of cosine space · × = current query · numbered rings = top-3 neighbors</span>`;
     }
 
     function renderDecision(data) {
@@ -1008,6 +1050,7 @@ HTML_PAGE = """<!DOCTYPE html>
       renderFeatureSpace(data);
       renderWhy(data);
       lastQueryE = (data.e && data.e.length === 10) ? data.e : null;
+      lastMatchLabels = (data.matches || []).slice(0, 3).map(m => m.label);
       refreshVSpace();
       const dq = data.diagnostics || {};
       document.getElementById('predict-status').innerText = `Done — ${data.csv}` +
