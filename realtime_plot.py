@@ -131,6 +131,35 @@ def _newest_recording(after_ts: float) -> Optional[str]:
     return max(cands, key=os.path.getmtime) if cands else None
 
 
+def _playback_csv() -> Optional[str]:
+    """Pick a recorded CSV for demo playback (no robot needed).
+
+    Prefers recordings/demo_playback.csv when the venue drops one in;
+    otherwise the newest recording with a SWIRL phase; otherwise the
+    newest recording. Returns None when recordings/ is empty.
+    """
+    demo = os.path.join(RECORDINGS_DIR, "demo_playback.csv")
+    if os.path.isfile(demo):
+        return demo
+    cands = glob.glob(os.path.join(RECORDINGS_DIR, "recording_*.csv"))
+    if not cands:
+        return None
+
+    def has_swirl(path: str) -> bool:
+        try:
+            with open(path) as fh:
+                return "SWIRL" in fh.read(200000)
+        except Exception:
+            return False
+
+    swirl = [c for c in cands if has_swirl(c)]
+    pool = swirl or cands
+    # Prefer a labeled recording (not a mystery) so the demo can reveal
+    # the true contents after the verdict.
+    labeled = [c for c in pool if "mystery" not in os.path.basename(c).lower()]
+    return max(labeled or pool, key=os.path.getmtime)
+
+
 def _sanitize_label(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_") or "item"
 
@@ -531,10 +560,34 @@ async def handle_cycle_predict(request):
     global _last_prediction
     if _cycle_lock.locked():
         return web.json_response({"ok": False, "error": "a cycle is already running"}, status=409)
+    global _cycle_status
+    # Demo mode: "live" runs the robot; "playback" replays a recorded swirl
+    # through the real extract → Atlas pipeline (the fallback when the
+    # robot misbehaves). Chosen per-request so the presenter can switch
+    # between them without restarting.
+    mode = "live"
+    if not MOCK_MODE:
+        try:
+            body = await request.json()
+            if isinstance(body, dict) and body.get("mode") == "playback":
+                mode = "playback"
+        except Exception:
+            pass
     async with _cycle_lock:
         try:
             if MOCK_MODE:
                 result = await _mock_predict()
+            elif mode == "playback":
+                csv_path = _playback_csv()
+                if not csv_path:
+                    return web.json_response(
+                        {"ok": False, "error": "no recordings available for playback"},
+                        status=409)
+                # Presentation beat: hold the "swirl" stage so the audience
+                # sees the pipeline move, then run the real pipeline below.
+                _cycle_status = "running"
+                await asyncio.sleep(4)
+                _cycle_status = "done"
             else:
                 csv_path = await _run_swirl_macro("mystery")
                 df = pd.read_csv(csv_path)
@@ -567,6 +620,7 @@ async def handle_cycle_predict(request):
                         print(f"[predict] LDA unavailable ({e}); using vector search")
                 result = {
                     "ok": True,
+                    "mode": mode,
                     "csv": os.path.basename(csv_path),
                     "decider": res.get("decider", "vector"),
                     "embedder": embedder.EMBEDDER,
@@ -814,14 +868,7 @@ GET /api/status, POST /api/vectorspace.""",
     args = parser.parse_args()
 
     await start_web_server(port=args.port)
-    if MOCK_MODE:
-        # Non-connected mode: no Viam, no Atlas. The dashboard serves the
-        # full UI from bundled recordings (predict/teach/correct/docs);
-        # live telemetry sparklines stay empty.
-        print("MOCK mode: skipping robot telemetry loop (no Viam connection).")
-        await asyncio.Event().wait()
-    else:
-        await robot_polling_loop(target_delay_ms=args.delay_ms)
+    await robot_polling_loop(target_delay_ms=args.delay_ms)
 
 
 if __name__ == "__main__":
