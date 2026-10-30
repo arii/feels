@@ -481,9 +481,12 @@ HTML_PAGE = """<!DOCTYPE html>
       align-items: center;
       justify-content: space-between;
     }
-    .feat-grid { display:grid; grid-template-columns: 1fr auto; gap:2px 10px; font-family:monospace; font-size:0.72rem; margin-top:4px; }
+    .feat-group { font-size:0.68rem; color:#8b949e; text-transform:uppercase; letter-spacing:0.04em; margin:8px 0 2px; }
+    .feat-row { display:grid; grid-template-columns:112px 1fr 54px; gap:8px; align-items:center; font-family:monospace; font-size:0.72rem; padding:1px 0; }
     .feat-name { color:#6e7681; }
     .feat-val { color:#e6edf3; text-align:right; }
+    .feat-bar-wrap { background:#21262d; border-radius:3px; height:8px; overflow:hidden; }
+    .feat-bar { display:block; height:100%; background:#1f6feb; }
   </style>
 </head>
 <body>
@@ -515,8 +518,9 @@ HTML_PAGE = """<!DOCTYPE html>
         <div class="kpi-sub" id="pred-conf-text">confidence —</div>
         <div class="kpi-label" style="margin-top:8px;">Nearest Atlas neighbors</div>
         <div id="pred-neighbors" style="font-size:0.85rem; margin-top:4px;"></div>
-        <div class="kpi-label" style="margin-top:8px;">10-D swirl signature</div>
-        <div class="feat-grid" id="pred-features"></div>
+        <div class="kpi-label" style="margin-top:8px;">10-D swirl signature — feature space</div>
+        <div id="pred-features"></div>
+        <div class="kpi-sub" id="pred-data" style="margin-top:6px;"></div>
       </div>
       <div class="kpi-sub" id="predict-status"></div>
     </div>
@@ -733,6 +737,39 @@ HTML_PAGE = """<!DOCTYPE html>
     pollStatus();
     setInterval(pollStatus, 5000);
 
+    const FEAT_GROUPS = [
+      ['Static lift — mass estimate', ['mass_j2', 'mass_j3', 'lift_dyn_j3']],
+      ['Swirl dynamics — what moves inside', ['swirl_var_j2', 'swirl_var_j3', 'swirl_ptp_j3', 'phase_lag_s', 'rattle_e']],
+      ['Grip & excitation', ['grip_comp', 'swirl_speed']],
+    ];
+
+    function renderFeatureSpace(data) {
+      const f = data.features || {};
+      const names = f.names || [], vals = f.z || [], desc = f.descriptions || {};
+      const dq = data.diagnostics || {};
+      const idx = {};
+      names.forEach((n, i) => idx[n] = i);
+      const maxAbs = Math.max(1e-9, ...vals.map(v => Math.abs(v || 0)));
+      let html = '';
+      for (const [gname, gfeats] of FEAT_GROUPS) {
+        html += `<div class="feat-group">${gname}</div>`;
+        for (const n of gfeats) {
+          const v = vals[idx[n]] ?? 0;
+          const pct = Math.round(Math.abs(v) / maxAbs * 100);
+          const note = (n === 'rattle_e' && dq.rattle_band_limited) ? ' — band-limited at this sample rate' : '';
+          const title = ((desc[n] || '') + note).replace(/"/g, '&quot;');
+          html += `<div class="feat-row" title="${title}"><span class="feat-name">${n}</span>` +
+            `<span class="feat-bar-wrap"><span class="feat-bar" style="width:${pct}%"></span></span>` +
+            `<span class="feat-val">${v.toFixed(3)}</span></div>`;
+        }
+      }
+      document.getElementById('pred-features').innerHTML = html;
+      const tf = (dq.tare_flags && dq.tare_flags.length) ? 'tare QC: ' + dq.tare_flags.join(', ') : 'tare QC: OK';
+      document.getElementById('pred-data').innerText =
+        `${dq.n_samples ?? '?'} samples @ ${dq.fs_hz ?? '?'} Hz · ${dq.n_swirl_samples ?? 0} swirl samples` +
+        ` · phase src: ${dq.phase_source ?? '?'} · ${tf}`;
+    }
+
     function renderDecision(data) {
       document.getElementById('decision-card').style.display = 'block';
       document.getElementById('pred-label').innerText = data.prediction || 'unknown';
@@ -743,10 +780,7 @@ HTML_PAGE = """<!DOCTYPE html>
         `confidence ${pct}%${data.low_confidence ? ' — LOW, consider teaching this item' : ''}` +
         (data.mock ? '  (MOCK)' : '');
       setNeighbors(document.getElementById('pred-neighbors'), data.matches || []);
-      const fn = (data.features && data.features.names) || [];
-      const fv = (data.features && data.features.z) || [];
-      document.getElementById('pred-features').innerHTML = fn.map((n, i) =>
-        `<div class="feat-name">${n}</div><div class="feat-val">${(fv[i] ?? 0).toFixed(3)}</div>`).join('');
+      renderFeatureSpace(data);
       const dq = data.diagnostics || {};
       document.getElementById('predict-status').innerText = `Done — ${data.csv}` +
         (data.mock ? '  (MOCK data, not live hardware)' : '') +
@@ -909,7 +943,8 @@ async def _mock_predict():
         "low_confidence": bool(float(conf) < 0.82),
         "matches": matches,
         "features": {"names": feature_extractor.FEATURE_NAMES,
-                     "z": [round(float(v), 4) for v in feats["z"]]},
+                     "z": [round(float(v), 4) for v in feats["z"]],
+                     "descriptions": feature_extractor.FEATURE_DESCRIPTIONS},
         "diagnostics": feats["diagnostics"],
     }
 
@@ -946,7 +981,8 @@ async def handle_cycle_predict(request):
                     "matches": [{"label": m["label"], "similarity": round(m["score"], 3)}
                                 for m in res["matches"]],
                     "features": {"names": feature_extractor.FEATURE_NAMES,
-                                 "z": [round(float(v), 4) for v in feats["z"]]},
+                                 "z": [round(float(v), 4) for v in feats["z"]],
+                                 "descriptions": feature_extractor.FEATURE_DESCRIPTIONS},
                     "diagnostics": feats["diagnostics"],
                 }
             _last_prediction = result

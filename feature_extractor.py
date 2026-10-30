@@ -47,6 +47,20 @@ FEATURE_NAMES = [
     "grip_comp", "lift_dyn_j3", "swirl_speed",
 ]
 
+# Plain-language meaning of each feature, shown in the dashboard.
+FEATURE_DESCRIPTIONS = {
+    "mass_j2": "Static gravity torque offset at shoulder (J2) — payload mass estimate",
+    "mass_j3": "Static gravity torque offset at elbow (J3) — payload mass estimate",
+    "swirl_var_j2": "Torque variance at shoulder during swirl — slosh / loose-content energy",
+    "swirl_var_j3": "Torque variance at elbow during swirl",
+    "swirl_ptp_j3": "Peak-to-peak torque swing at elbow during swirl — shifting mass",
+    "phase_lag_s": "Lag between TCP motion and torque response — viscous / fluid damping",
+    "rattle_e": "High-frequency torque energy — rattle (band-limited by 4-5 Hz sampling)",
+    "grip_comp": "Gripper compliance change under load — squishy vs rigid contents",
+    "lift_dyn_j3": "Dynamic torque at elbow during lift — inertial mass cue",
+    "swirl_speed": "Mean TCP speed during swirl — excitation normalization",
+}
+
 # Per-feature scales so the L2-normalized embedding isn't dominated by the
 # largest-magnitude raw feature (swirl_speed ~160 mm/s vs variances ~1-5).
 # Calibrated as the 90th percentile of |z| over the recordings available on
@@ -192,6 +206,7 @@ def extract_features(df):
     diagnostics = {
         "fs_hz": round(float(fs), 2),
         "nyquist_hz": round(float(nyq), 2),
+        "n_samples": int(len(df)),
         "phase_source": phase_source,
         "n_swirl_samples": int(len(sw)),
         "tare_flags": tare_flags,
