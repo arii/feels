@@ -1,6 +1,34 @@
 # Content-classification models
 
-## Main model (in use) — `cascade.joblib`
+## The system (final setup)
+
+Cup contents are inferred as a **2-D state spectrum**, not a brittle hard label:
+
+```
+              loadedness = P(loaded)   [Stage 1, mass]      empty  <------> full
+              rigidity   = P(solid)    [Stage 2, swirl]     liquid <------> solid
+```
+
+| file | role |
+|---|---|
+| `../train_classifier.py` | trains/evaluates the 2-stage cascade leak-free; `--save` writes `cascade.joblib` |
+| `../predict_content.py` | runs the cascade on one recording → empty / solid / liquid + confidence |
+| `../state_spectrum.py` | the **final representation**: 2-D spectrum bars + **class-filtered** nearest items (a solid is only compared against solids) |
+| `../openset.py` | Atlas open-set layer: **one-shot teach** a new item + **novelty detection** (no retrain) |
+
+**What works (honest, leak-free):**
+- **empty vs loaded** — reliable (~82% acc), from the mass/loadedness axis.
+- **solid vs liquid** — works **when the cup is swirled** (~75%); the rigidity axis
+  separates liquid (slosh) from solid (rigid); flagged low-confidence without a swirl.
+- **class-filtered retrieval** rescues fine matches: e.g. a screws recording reads as
+  SOLID and retrieves other solids/screws, where a raw global kNN drowned it in liquids.
+- **Atlas** adds *capability* not accuracy: one-shot learning of new items + novelty.
+  On proprioception-only embeddings it does not improve discrimination (items don't
+  cluster) — that needs a richer (vision/audio) embedding.
+
+---
+
+## Trained model artifact — `cascade.joblib`
 
 A 2-stage leak-free cascade trained by [`../train_classifier.py`](../train_classifier.py):
 
