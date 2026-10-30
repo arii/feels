@@ -91,16 +91,20 @@ FEATURE_WEIGHTS = {
 # swirl dataset, then freeze — rescaling invalidates old Atlas signatures.
 # Regenerate with:  python feature_extractor.py --calibrate
 FEATURE_SCALES = {
-    "mass_j2": 8.828,
-    "mass_j3": 2.327,
-    "swirl_var_j2": 3.813,
-    "swirl_var_j3": 1.37,
-    "swirl_ptp_j3": 10.93,
-    "phase_lag_s": 1.366,
-    "rattle_e": 165,
-    "grip_comp": 0.7478,
-    "lift_dyn_j3": 3.069,
-    "swirl_speed": 82.66,
+    # Calibrated 2026-10-29 on swirl-only train recordings (n=33, 90th pct of |z|).
+    # The previous values were fallback-protocol calibrated and collapsed every
+    # swirl embedding to ~0.97 cosine (98%-confidence artifact). Reintroduced
+    # to the feat branch after the main-branch rollback (was 84080f0).
+    "mass_j2": 8.978,
+    "mass_j3": 3.244,
+    "swirl_var_j2": 19.866,
+    "swirl_var_j3": 4.883,
+    "swirl_ptp_j3": 16.479,
+    "phase_lag_s": 1.455,
+    "rattle_e": 179.594,
+    "grip_comp": 0.632,
+    "lift_dyn_j3": 4.141,
+    "swirl_speed": 182.422,
 }
 
 
