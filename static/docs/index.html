@@ -12,26 +12,28 @@ body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkM
 .docnav a:hover, .docnav a.active { color:var(--text); }
 .docnav a.brand { margin-left:0; color:var(--text); font-weight:700; }
 main { max-width:900px; margin:0 auto; padding:48px 24px 80px; text-align:center; }
+.kicker { color:var(--muted); margin:0; font-size:0.9rem; }
 .hook { font-size:3rem; font-weight:800; margin:0.2em 0 0.1em; letter-spacing:-0.02em; }
-.sub { color:var(--muted); font-size:1.15rem; margin:0 0 1.8em; }
-#runBtn { font-size:1.2rem; font-weight:700; color:#fff; background:var(--accent); border:none; border-radius:10px; padding:14px 42px; cursor:pointer; }
+.tagline { font-size:1.25rem; font-weight:700; margin:0 0 1.6em; }
+#runBtn { font-size:1.2rem; font-weight:700; color:#fff; background:#3b82f6; border:none; border-radius:8px; padding:12px 24px; cursor:pointer; }
 #runBtn:disabled { opacity:0.45; cursor:default; }
 #runBtn:not(:disabled):hover { filter:brightness(1.12); }
-.stages { display:flex; justify-content:center; align-items:center; gap:14px; margin:2.6em 0 1em; }
-.stage { display:flex; align-items:center; gap:10px; padding:12px 22px; border:2px solid var(--border); border-radius:999px; font-weight:700; font-size:1.05rem; color:var(--muted); transition:all 0.3s; background:var(--panel); }
-.stage .dot { width:14px; height:14px; border-radius:50%; background:var(--border); transition:all 0.3s; }
-.stage.active { border-color:var(--accent); color:var(--text); }
-.stage.active .dot { background:var(--accent); box-shadow:0 0 12px var(--accent); animation:pulse 1s infinite; }
-.stage.done { border-color:var(--green); color:var(--text); }
-.stage.done .dot { background:var(--green); }
-.stage-arrow { color:var(--border); font-size:1.4rem; }
-@keyframes pulse { 50% { opacity:0.45; } }
-#verdict { min-height:3.2em; margin:0.6em 0 0; font-size:1.5rem; font-weight:800; }
+.modes { margin-top:14px; display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.mode { background:transparent; color:var(--muted); border:none; padding:8px 20px; font-size:0.9rem; font-weight:600; cursor:pointer; }
+.mode.active { background:var(--panel); color:var(--text); }
+.stageline { color:var(--muted); margin:1.6em 0 0.4em; font-size:1rem; letter-spacing:0.02em; }
+.stageline .on { color:var(--accent); font-weight:700; }
+.stageline .done { color:var(--green); }
+#verdict { min-height:2.6em; margin:0.4em 0 0; font-size:1.6rem; font-weight:800; }
+#verdict .pb { display:inline-block; font-size:0.75rem; font-weight:700; color:var(--amber); border:1px solid var(--amber); border-radius:6px; padding:2px 10px; margin-left:12px; vertical-align:middle; }
 #verdict .low { font-size:0.95rem; color:var(--amber); font-weight:600; display:block; margin-top:0.3em; }
-#vspaceWrap { margin:2em auto 0; max-width:640px; }
-#vspaceWrap h2 { font-size:1rem; color:var(--muted); font-weight:600; border:none; margin:0 0 0.6em; padding:0; }
-#vspace { background:var(--panel); border:1px solid var(--border); border-radius:12px; }
+#vspaceWrap { margin:1.6em auto 0; max-width:700px; }
+#vspaceWrap h2 { font-size:1rem; color:var(--muted); font-weight:600; border:none; margin:0 0 0.4em; padding:0; }
+#vspaceStatus { color:var(--muted); font-size:0.92rem; margin:0 0 0.8em; }
+#vspaceStatus strong { color:var(--text); }
+#vspace { background:var(--panel); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
 #vspace svg { display:block; width:100%; height:auto; }
+#liveplot { display:none; }
 details.docs { margin-top:3em; text-align:left; }
 details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
 .cards { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:1.2em; }
@@ -39,8 +41,7 @@ details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
 .card:hover { border-color:var(--accent); }
 .card h3 { margin:0 0 0.3em; color:var(--text); font-size:1rem; }
 .card p { margin:0; font-size:0.85rem; color:var(--muted); }
-@media (max-width:600px) { .cards { grid-template-columns:1fr; } .hook { font-size:2.2rem; } .stages { flex-wrap:wrap; } }
-code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em; }
+@media (max-width:600px) { .cards { grid-template-columns:1fr; } .hook { font-size:2.2rem; } }
 </style>
 </head>
 <body>
@@ -57,24 +58,173 @@ code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em;
   </span>
 </nav>
 <main>
-  <p style="color:var(--muted); margin:0;">Viam + MongoDB hackathon · live demo</p>
+  <p class="kicker">Viam + MongoDB hackathon · live demo</p>
   <h1 class="hook">Teaching a robot to feel.</h1>
-  <p class="sub">A lidded cup. One swirl. The contents, identified by touch.</p>
+  <p class="tagline">One swirl. Ten numbers. The contents, by feel.</p>
 
-  <button id="runBtn" onclick="runDemo()">▶ Run the demo</button>
-
-  <div class="stages">
-    <div class="stage" id="stProbe"><span class="dot"></span>Probe</div>
-    <span class="stage-arrow">→</span>
-    <div class="stage" id="stEncode"><span class="dot"></span>Encode</div>
-    <span class="stage-arrow">→</span>
-    <div class="stage" id="stRetrieve"><span class="dot"></span>Retrieve</div>
+  <button id="runBtn" onclick="runDemo()">&#9654; Run the demo</button><br>
+  <div class="modes">
+    <button id="modeLive" class="mode active" onclick="setMode('live')">Live robot</button>
+    <button id="modePlayback" class="mode" onclick="setMode('playback')">Playback</button>
   </div>
+
+  <p class="stageline" id="stageline"><span id="sgProbe">○ Probe</span> &nbsp;→&nbsp; <span id="sgEncode">○ Encode</span> &nbsp;→&nbsp; <span id="sgRetrieve">○ Retrieve</span></p>
   <div id="verdict"></div>
 
   <div id="vspaceWrap">
-    <h2>Signature space · <span id="vspaceNote">live from Atlas</span></h2>
-    <div id="vspace"><p style="color:var(--muted); padding:40px;">loading…</p></div>
+    <h2>Signature space · live from Atlas</h2>
+    <p id="vspaceStatus"><strong>Status: Ready.</strong> Displaying baseline library of 113 taught signatures. Waiting for live telemetry…</p>
+    <div id="vspace"><svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 780 460" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<rect width="780" height="460" fill="#0d1117" rx="8"/>
+<text x="20" y="28" font-size="15" font-weight="bold" fill="#e6edf3">Signature space — 2-D PCA of 113 recorded embeddings</text>
+<text x="20" y="48" font-size="11" fill="#8b949e">same projection as the dashboard vector-space card (realtime_plot._vspace_2d: center, SVD, U·S)</text>
+<rect x="20" y="70" width="520" height="350" rx="8" fill="#161b22" stroke="#2d333b"/>
+<line x1="266.0" y1="70" x2="266.0" y2="420" stroke="#2d333b"/>
+<line x1="20" y1="257.7" x2="540" y2="257.7" stroke="#2d333b"/>
+<circle cx="181.2" cy="287.3" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="365.4" cy="290.6" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="292.3" cy="320.1" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="394.8" cy="197.1" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="145.8" cy="125.0" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="126.0" cy="239.3" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="121.7" cy="308.2" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="302.7" cy="339.6" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="100.9" cy="245.9" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="245.4" cy="284.3" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="313.6" cy="227.4" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="115.8" cy="222.6" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="174.2" cy="287.3" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="382.1" cy="164.4" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="430.8" cy="201.3" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="244.5" cy="113.4" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="412.6" cy="193.8" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="246.0" cy="301.2" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="337.8" cy="332.2" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="326.3" cy="343.0" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="110.7" cy="255.4" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="322.1" cy="356.6" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="357.0" cy="393.2" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="225.4" cy="326.0" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="91.7" cy="243.4" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="409.6" cy="384.8" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="335.7" cy="326.4" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="251.7" cy="286.7" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="438.1" cy="367.0" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="233.1" cy="320.4" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="143.0" cy="257.5" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="235.9" cy="317.1" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="373.3" cy="183.5" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="132.9" cy="272.2" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="279.3" cy="251.7" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="350.0" cy="362.5" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="154.2" cy="252.1" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="247.8" cy="294.9" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="73.3" cy="266.5" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="251.0" cy="284.8" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="257.5" cy="272.5" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="94.8" cy="254.8" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="211.3" cy="219.3" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="257.0" cy="287.9" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="389.4" cy="249.9" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="123.9" cy="339.6" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="228.8" cy="324.5" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="234.2" cy="297.2" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="348.2" cy="322.6" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="334.3" cy="307.1" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="252.7" cy="332.9" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="135.3" cy="272.2" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="389.8" cy="359.3" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="86.9" cy="249.7" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="129.4" cy="295.5" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="405.7" cy="257.3" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="252.5" cy="275.9" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="225.1" cy="315.3" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="333.5" cy="99.5" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="306.5" cy="283.5" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="156.4" cy="318.3" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="342.0" cy="228.7" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="210.6" cy="269.2" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="366.3" cy="152.9" r="4.5" fill="#8b949e" opacity="0.9"><title>water_half</title></circle>
+<circle cx="54.5" cy="195.1" r="4.5" fill="#8b949e" opacity="0.9"><title>water_half</title></circle>
+<circle cx="305.0" cy="322.4" r="4.5" fill="#58a6ff" opacity="0.9"><title>water_075pct</title></circle>
+<circle cx="152.6" cy="338.0" r="4.5" fill="#58a6ff" opacity="0.9"><title>water_075pct</title></circle>
+<circle cx="303.8" cy="133.2" r="4.5" fill="#58a6ff" opacity="0.9"><title>water_075pct</title></circle>
+<circle cx="228.0" cy="220.2" r="4.5" fill="#58a6ff" opacity="0.9"><title>water_075pct</title></circle>
+<circle cx="404.2" cy="173.0" r="4.5" fill="#58a6ff" opacity="0.9"><title>water_075pct</title></circle>
+<circle cx="146.7" cy="263.1" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="154.6" cy="239.6" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="243.1" cy="292.4" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="420.5" cy="231.5" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="165.9" cy="247.9" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="156.0" cy="131.2" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="197.6" cy="250.1" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="309.8" cy="223.1" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="254.9" cy="262.9" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="251.3" cy="279.2" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="231.2" cy="315.5" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="143.9" cy="259.2" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="380.7" cy="234.3" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="181.3" cy="331.9" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="173.7" cy="305.1" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="332.2" cy="96.8" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="248.1" cy="180.1" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="269.2" cy="196.7" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="289.8" cy="156.3" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="332.9" cy="264.4" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="204.1" cy="255.9" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="299.5" cy="334.1" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="466.9" cy="335.0" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="505.5" cy="226.8" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="334.4" cy="196.2" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="215.8" cy="248.9" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="294.8" cy="199.2" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="211.4" cy="144.4" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="443.9" cy="232.7" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="456.3" cy="209.9" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="272.0" cy="206.6" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="424.0" cy="345.6" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="57.2" cy="138.5" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="167.6" cy="305.4" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="429.5" cy="311.3" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="300.3" cy="200.9" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="289.8" cy="188.0" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="406.8" cy="278.3" r="4.5" fill="#8b949e" opacity="0.9"><title>mystery</title></circle>
+<circle cx="455.1" cy="146.3" r="4.5" fill="#8b949e" opacity="0.9"><title>water_25pct</title></circle>
+<circle cx="244.5" cy="288.3" r="4.5" fill="#8b949e" opacity="0.9"><title>mystery</title></circle>
+<circle cx="280.0" cy="226.9" r="4.5" fill="#8b949e" opacity="0.9"><title>candy_mixed</title></circle>
+<circle cx="309.1" cy="191.5" r="4.5" fill="#58a6ff" opacity="0.9"><title>water_075pct</title></circle>
+<circle cx="308.6" cy="148.4" r="4.5" fill="#8b949e" opacity="0.9"><title>mystery</title></circle>
+<text x="530" y="410" text-anchor="end" font-size="10" fill="#8b949e">PC1 →</text>
+<text x="30" y="88" font-size="10" fill="#8b949e">↑ PC2</text>
+<text x="560" y="70" font-size="12" font-weight="bold" fill="#e6edf3">labels (n=113)</text>
+<circle cx="566" cy="88" r="5" fill="#8b949e"/>
+<text x="580" y="92" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">empty_cup ×17</text>
+<circle cx="566" cy="110" r="5" fill="#a5d6ff"/>
+<text x="580" y="114" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_025pct ×17</text>
+<circle cx="566" cy="132" r="5" fill="#f0883e"/>
+<text x="580" y="136" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">solid_020g ×15</text>
+<circle cx="566" cy="154" r="5" fill="#d29922"/>
+<text x="580" y="158" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">solid_050g ×15</text>
+<circle cx="566" cy="176" r="5" fill="#79c0ff"/>
+<text x="580" y="180" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_050pct ×10</text>
+<circle cx="566" cy="198" r="5" fill="#1f6feb"/>
+<text x="580" y="202" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_100pct ×10</text>
+<circle cx="566" cy="220" r="5" fill="#3fb950"/>
+<text x="580" y="224" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">solid_100g ×9</text>
+<circle cx="566" cy="242" r="5" fill="#a371f7"/>
+<text x="580" y="246" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">screws_100g ×7</text>
+<circle cx="566" cy="264" r="5" fill="#58a6ff"/>
+<text x="580" y="268" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_075pct ×6</text>
+<circle cx="566" cy="286" r="5" fill="#8b949e"/>
+<text x="580" y="290" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">mystery ×3</text>
+<circle cx="566" cy="308" r="5" fill="#8b949e"/>
+<text x="580" y="312" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_half ×2</text>
+<circle cx="566" cy="330" r="5" fill="#8b949e"/>
+<text x="580" y="334" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_25pct ×1</text>
+<circle cx="566" cy="352" r="5" fill="#8b949e"/>
+<text x="580" y="356" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">candy_mixed ×1</text>
+<text x="560" y="384" font-size="10" fill="#8b949e">1 files failed extraction</text>
+</svg><div id="liveplot"></div></div>
   </div>
 
   <details class="docs">
@@ -82,7 +232,7 @@ code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em;
     <div class="cards">
       <a class="card" href="/docs/problem"><h3>The formal problem</h3><p>Hidden contents, partial observations, and why neither vision nor a scale can solve it.</p></a>
       <a class="card" href="/docs/approach"><h3>Our approach</h3><p>One fixed macro, ten explicit physical features, and non-parametric vector retrieval.</p></a>
-      <a class="card" href="/docs/force"><h3>Force without a force sensor</h3><p>How joint torques stand in for a $5k F/T sensor — and what we honestly don't claim.</p></a>
+      <a class="card" href="/docs/force"><h3>Force without a force sensor</h3><p>How joint torques stand in for a $5k F/T sensor — and what we honestly don&apos;t claim.</p></a>
       <a class="card" href="/docs/relevance"><h3>Why it matters</h3><p>Sealed containers, cheap sensing, and a pipeline any torque-sensing arm can reuse.</p></a>
       <a class="card" href="/docs/figures"><h3>Figures</h3><p>System diagram, the swirl macro, real torque traces and feature vectors.</p></a>
       <a class="card" href="/docs/recording"><h3>How to record</h3><p>The data-collection protocol: what good data looks like, and what gets rejected.</p></a>
@@ -90,91 +240,62 @@ code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em;
   </details>
 </main>
 <script>
+let demoMode = "live";
 const COLORS = ["#58a6ff","#3fb950","#f0883e","#d29922","#a371f7","#f778ba","#79c0ff","#ffa657"];
 function colorFor(label) {
   let h = 0;
   for (const c of label) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return COLORS[h % COLORS.length];
 }
-function setStage(id, cls) {
+function setMode(m) {
+  demoMode = m;
+  document.getElementById("modeLive").classList.toggle("active", m === "live");
+  document.getElementById("modePlayback").classList.toggle("active", m === "playback");
+}
+function stage(id, cls, glyph) {
   const el = document.getElementById(id);
-  el.classList.remove("active", "done");
-  if (cls) el.classList.add(cls);
+  el.className = cls || "";
+  const names = {sgProbe: "Probe", sgEncode: "Encode", sgRetrieve: "Retrieve"};
+  el.textContent = (glyph || "○") + " " + names[id];
 }
 function resetStages() {
-  ["stProbe","stEncode","stRetrieve"].forEach(id => setStage(id));
+  ["sgProbe","sgEncode","sgRetrieve"].forEach(id => stage(id));
   document.getElementById("verdict").innerHTML = "";
 }
-async function loadVspace(query) {
-  const box = document.getElementById("vspace");
-  try {
-    const r = await fetch("/api/vectorspace", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(query ? {query} : {})
-    });
-    const d = await r.json();
-    if (!d.ok || !d.points || !d.points.length) {
-      document.getElementById("vspaceNote").textContent = "library unavailable offline";
-      box.innerHTML = '<p style="color:var(--muted); padding:40px;">No signature library reachable — teach items in the dashboard first.</p>';
-      return;
-    }
-    const W = 620, H = 380, P = 34;
-    const xs = d.points.map(p => p.x), ys = d.points.map(p => p.y);
-    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-    const sx = x => P + (W - 2*P) * (x - x0) / Math.max(1e-9, x1 - x0);
-    const sy = y => H - P - (H - 2*P) * (y - y0) / Math.max(1e-9, y1 - y0);
-    let s = `<svg viewBox="0 0 ${W} ${H}">`;
-    d.points.forEach((p, i) => {
-      const isQ = i === d.query_index;
-      const c = isQ ? "#ffffff" : colorFor(p.label);
-      const rad = isQ ? 9 : 5;
-      s += `<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="${rad}" fill="${c}" ${isQ ? 'stroke="#58a6ff" stroke-width="3"' : 'opacity="0.85"'}/>`;
-      if (isQ) s += `<text x="${sx(p.x).toFixed(1)}" y="${(sy(p.y)-14).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="bold" fill="#fff">this cup</text>`;
-    });
-    // legend: one dot per label
-    const labels = [...new Set(d.points.map(p => p.label))].filter(l => l !== "QUERY").slice(0, 8);
-    labels.forEach((l, i) => {
-      const lx = P + i * 150;
-      if (lx > W - P - 120) return;
-      s += `<circle cx="${lx}" cy="${H-10}" r="5" fill="${colorFor(l)}"/><text x="${lx+10}" y="${H-6}" font-size="11" fill="#8b949e">${l}</text>`;
-    });
-    s += "</svg>";
-    box.innerHTML = s;
-    document.getElementById("vspaceNote").textContent = d.n + " taught signatures";
-  } catch (e) {
-    document.getElementById("vspaceNote").textContent = "library unavailable offline";
-    box.innerHTML = '<p style="color:var(--muted); padding:40px;">No signature library reachable — teach items in the dashboard first.</p>';
-  }
-}
-let pollTimer = null;
+function setStatus(html) { document.getElementById("vspaceStatus").innerHTML = html; }
 async function runDemo() {
   const btn = document.getElementById("runBtn");
   btn.disabled = true;
   resetStages();
-  setStage("stProbe", "active");
+  stage("sgProbe", "on", "●");
+  setStatus("<strong>Status: Running (" + demoMode + ").</strong> Swirling…");
   let pred = null;
   try {
-    const r = await fetch("/api/cycle/predict", {method: "POST"});
+    const r = await fetch("/api/cycle/predict", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({mode: demoMode})
+    });
     pred = await r.json();
   } catch (e) {
-    document.getElementById("verdict").innerHTML = '<span class="low">demo request failed — is the dashboard running?</span>';
+    setStatus("<strong>Status: Error.</strong> Dashboard unreachable — is it running?");
     btn.disabled = false;
     resetStages();
     return;
   }
-  // poll until the cycle finishes, then walk Encode → Retrieve
-  pollTimer = setInterval(async () => {
+  const poll = setInterval(async () => {
     try {
       const s = await (await fetch("/api/status")).json();
       if (!s.cycle_busy) {
-        clearInterval(pollTimer);
-        setStage("stProbe", "done");
-        setStage("stEncode", "active");
+        clearInterval(poll);
+        stage("sgProbe", "done", "●");
+        stage("sgEncode", "on", "●");
+        setStatus("<strong>Status: Encoding.</strong> Torque trace → 10-D signature…");
         setTimeout(() => {
-          setStage("stEncode", "done");
-          setStage("stRetrieve", "done");
+          stage("sgEncode", "done", "●");
+          stage("sgRetrieve", "done", "●");
+          setStatus("<strong>Status: Done.</strong> Retrieved nearest signatures from Atlas.");
           showVerdict(pred);
-          if (pred && pred.ok && pred.e) loadVspace(pred.e);
+          if (pred && pred.ok && pred.e) loadLivePlot(pred.e);
           btn.disabled = false;
         }, 700);
       }
@@ -184,17 +305,47 @@ async function runDemo() {
 function showVerdict(pred) {
   const v = document.getElementById("verdict");
   if (!pred || !pred.ok) {
-    v.innerHTML = '<span class="low">prediction failed: ' + ((pred && pred.error) || "unknown") + '</span>';
+    v.innerHTML = '<span class="low">prediction failed: ' + ((pred && pred.error) || "unknown") + "</span>";
     return;
   }
   const cat = (pred.category || pred.prediction || "unknown").toUpperCase();
   let html = cat;
+  if (pred.mode === "playback") html += '<span class="pb">PLAYBACK</span>';
   if (pred.low_confidence || pred.category_low_confidence) {
     html += '<span class="low">low confidence — teach this item to improve it</span>';
   }
   v.innerHTML = html;
 }
-loadVspace(null);
+async function loadLivePlot(query) {
+  try {
+    const r = await fetch("/api/vectorspace", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({query})
+    });
+    const d = await r.json();
+    if (!d.ok || !d.points || !d.points.length) return; // keep baseline
+    const W = 620, H = 380, P = 34;
+    const xs = d.points.map(p => p.x), ys = d.points.map(p => p.y);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const sx = x => P + (W - 2*P) * (x - x0) / Math.max(1e-9, x1 - x0);
+    const sy = y => H - P - (H - 2*P) * (y - y0) / Math.max(1e-9, y1 - y0);
+    let s = '<svg viewBox="0 0 ' + W + " " + H + '">';
+    d.points.forEach((p, i) => {
+      const isQ = i === d.query_index;
+      const c = isQ ? "#ffffff" : colorFor(p.label);
+      s += '<circle cx="' + sx(p.x).toFixed(1) + '" cy="' + sy(p.y).toFixed(1) + '" r="' + (isQ ? 9 : 5) + '" fill="' + c + '"' + (isQ ? ' stroke="#58a6ff" stroke-width="3"' : ' opacity="0.85"') + "/>";
+      if (isQ) s += '<text x="' + sx(p.x).toFixed(1) + '" y="' + (sy(p.y)-14).toFixed(1) + '" text-anchor="middle" font-size="12" font-weight="bold" fill="#fff">this cup</text>';
+    });
+    s += "</svg>";
+    const lp = document.getElementById("liveplot");
+    lp.innerHTML = s;
+    lp.style.display = "block";
+    // hide the baseline svg (first child), show live
+    const base = document.querySelector("#vspace > svg");
+    if (base) base.style.display = "none";
+    setStatus("<strong>Status: Live.</strong> " + d.n + " taught signatures · white dot = this cup.");
+  } catch (e) { /* keep baseline */ }
+}
 </script>
 </body>
 </html>
