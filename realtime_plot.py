@@ -960,7 +960,7 @@ async def handle_stream(request):
     return response
 
 
-_DOC_PAGES = {"index", "problem", "approach", "prediction", "force", "api"}
+_DOC_PAGES = {"index", "problem", "approach", "prediction", "force", "api", "api_atlas", "api_feature_extractor", "api_embedder", "api_teach_csv"}
 
 
 async def handle_docs(request):

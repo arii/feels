@@ -37,6 +37,10 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
 </nav>
 <main>
   <h1>How the System Predicts</h1>
+  <p>The direction is less hand-coding: the system is moving from hand-engineered
+  features toward learned embeddings. The 10-D hand features below are the current
+  live path; the unsupervised alternatives were baked off against them and are
+  documented here with their measured numbers.</p>
 
   <p>The extractor reads the joint-torque time series and computes the 10-D signature
   described in <a href="/docs/approach" style="color:#58a6ff;">Approach</a> &mdash; ten physical
@@ -61,7 +65,8 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   immediately. This is the live decider. On the held-out set: 52% category,
   43% material. The binary empty/nonempty number (86%) is a majority-class
   artifact — the classifier predicts nonempty for everything.</p>
-  <p><strong>Learned embeddings, evaluated offline.</strong> Two unsupervised
+  <h2>Learned Embeddings</h2>
+  <p> Two unsupervised
   alternatives were baked off against the hand features: PCA-10 on raw
   torque-delta trajectories (43% material, matching hand features) and
   Chronos foundation-model embeddings (56% on swirl-only data, the best
