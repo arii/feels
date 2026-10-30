@@ -49,8 +49,8 @@ FEATURE_NAMES = [
 
 # Plain-language meaning of each feature, shown in the dashboard.
 FEATURE_DESCRIPTIONS = {
-    "mass_j2": "Static gravity torque offset at shoulder (J2) — payload mass estimate",
-    "mass_j3": "Static gravity torque offset at elbow (J3) — payload mass estimate",
+    "mass_j2": "Static gravity torque offset at shoulder (J2) — payload mass estimate [excluded from matching: tare noise exceeds payload signal]",
+    "mass_j3": "Static gravity torque offset at elbow (J3) — payload mass estimate [excluded from matching: tare noise exceeds payload signal]",
     "swirl_var_j2": "Torque variance at shoulder during swirl — slosh / loose-content energy",
     "swirl_var_j3": "Torque variance at elbow during swirl",
     "swirl_ptp_j3": "Peak-to-peak torque swing at elbow during swirl — shifting mass",
@@ -58,11 +58,34 @@ FEATURE_DESCRIPTIONS = {
     "rattle_e": "High-frequency torque energy — rattle (band-limited by 4-5 Hz sampling)",
     "grip_comp": "Gripper compliance change under load — squishy vs rigid contents",
     "lift_dyn_j3": "Dynamic torque at elbow during lift — inertial mass cue",
-    "swirl_speed": "Mean TCP speed during swirl — excitation normalization",
+    "swirl_speed": "Mean TCP speed during swirl — excitation normalization [excluded from matching: measures the fixed macro's drive, not contents]",
 }
 
 # Per-feature scales so the L2-normalized embedding isn't dominated by the
 # largest-magnitude raw feature (swirl_speed ~160 mm/s vs variances ~1-5).
+# Calibrated on swirl-protocol data ONLY (--calibrate --require-swirl);
+# mixing protocols confounds motion with contents.
+#
+# Per-feature weights: 0.0 excludes a feature from the embedding (it stays in
+# z for display/diagnostics). mass_j2/mass_j3 are proven dead — the audit
+# found static hold torques identical across contents to 3 decimals, i.e.
+# payload signal (~1 N-m) is below tare noise (~10 N-m). swirl_speed is a
+# nuisance by construction: it measures how hard the fixed macro drives,
+# which is ~constant across contents, so it only compresses cosine
+# similarities toward 1. The embedding is effectively 7-D (index stays 10-D
+# with zeros in the excluded dims — no migration needed).
+FEATURE_WEIGHTS = {
+    "mass_j2": 0.0,
+    "mass_j3": 0.0,
+    "swirl_var_j2": 1.0,
+    "swirl_var_j3": 1.0,
+    "swirl_ptp_j3": 1.0,
+    "phase_lag_s": 1.0,
+    "rattle_e": 1.0,
+    "grip_comp": 1.0,
+    "lift_dyn_j3": 1.0,
+    "swirl_speed": 0.0,
+}
 # Calibrated as the 90th percentile of |z| over the recordings available on
 # 2026-10-29 (n=8, only one true SWIRL recording). RECALIBRATE on the P0
 # swirl dataset, then freeze — rescaling invalidates old Atlas signatures.
@@ -205,9 +228,11 @@ def extract_features(df):
     ], dtype=float)
     z = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
     scales = np.array([FEATURE_SCALES[n] for n in FEATURE_NAMES], dtype=float)
+    weights = np.array([FEATURE_WEIGHTS[n] for n in FEATURE_NAMES], dtype=float)
     zs = z / np.where(scales > 0, scales, 1.0)   # balanced, unit-ish features
-    norm = np.linalg.norm(zs)
-    e = (zs / norm).tolist() if norm > 1e-12 else [0.0] * len(zs)
+    zw = zs * weights                            # drop dead/nuisance dims
+    norm = np.linalg.norm(zw)
+    e = (zw / norm).tolist() if norm > 1e-12 else [0.0] * len(zw)
 
     diagnostics = {
         "fs_hz": round(float(fs), 2),

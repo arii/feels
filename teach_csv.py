@@ -78,6 +78,7 @@ def teach_file(db, csv_path, session, label_override=None, dry_run=False,
         properties={"csv": name, "source": "teach_csv.py",
                     "tare_flags": dq["tare_flags"],
                     "phase_source": dq["phase_source"],
+                    "z": [round(float(v), 4) for v in feats["z"]],
                     "n_samples": dq["n_samples"], "fs_hz": dq["fs_hz"]})
     return ("taught", name, f"'{label}' sig_id={saved['sig_id']}")
 

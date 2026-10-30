@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>feels docs — approach</title>
+<style>
+:root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
+body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
+.docnav { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); position:sticky; top:0; flex-wrap:wrap; gap:8px; }
+.docnav a { color:var(--muted); text-decoration:none; margin-left:18px; font-size:0.9rem; }
+.docnav a:hover, .docnav a.active { color:var(--text); }
+.docnav a.brand { margin-left:0; color:var(--text); font-weight:700; }
+main { max-width:780px; margin:0 auto; padding:36px 24px 80px; }
+h1 { font-size:2rem; margin-bottom:0.3em; }
+h2 { font-size:1.3rem; margin-top:2em; border-bottom:1px solid var(--border); padding-bottom:0.3em; }
+p, li { color:#c9d1d9; }
+code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em; }
+pre { background:#161b22; border:1px solid var(--border); border-radius:8px; padding:16px; overflow-x:auto; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:0.88rem; }
+th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; vertical-align:top; }
+th { background:#161b22; color:var(--muted); font-weight:600; }
+.honest { background:rgba(210,153,34,0.08); border:1px solid #9e6a03; border-radius:8px; padding:12px 16px; margin:1.5em 0; }
+.honest strong { color:#d29922; }
+</style>
+</head>
+<body>
+<nav class="docnav">
+  <a class="brand" href="/docs">feels · docs</a>
+  <span>
+    <a href="/docs/problem">Problem</a>
+    <a class="active" href="/docs/approach">Approach</a>
+    <a href="/docs/force">Force without a sensor</a>
+    <a href="/docs/relevance">Why it matters</a>
+    <a href="/">← Dashboard</a>
+  </span>
+</nav>
+<main>
+  <h1>Approach</h1>
+
+  <h2>1. One fixed macro</h2>
+  <p>Pick up → swirl → place. A single smooth horizontal orbit at travel height —
+  no fragile multi-part choreography, no vision, no per-item tuning. The macro is
+  deterministic, so every recording is comparable. (It's locked in for the
+  hackathon: <code>repeatable_grasp.py --swirl-smooth</code>.)</p>
+
+  <h2>2. Ten explicit physical features</h2>
+  <p>The torque time series becomes a 10-D vector <code>z</code>. No learned
+  encoder — each feature has a physical meaning, shown with plain-language
+  explanations in the dashboard:</p>
+  <table>
+    <tr><th>Group</th><th>Features</th><th>What they capture</th></tr>
+    <tr><td>Static lift</td><td><code>mass_j2</code>, <code>mass_j3</code>*, <code>lift_dyn_j3</code></td><td>Inertial cue during lift (the static offsets are displayed but excluded from matching — tare noise exceeds the payload signal)</td></tr>
+    <tr><td>Swirl dynamics</td><td><code>swirl_var_j2/j3</code>, <code>swirl_ptp_j3</code>, <code>phase_lag_s</code>, <code>rattle_e</code></td><td>Slosh energy, shifting-mass swing, viscous lag of torque behind motion, high-frequency energy</td></tr>
+    <tr><td>Grip &amp; excitation</td><td><code>grip_comp</code>, <code>swirl_speed</code>*</td><td>Compliance under load (swirl speed is displayed but excluded from matching — it measures the fixed macro's drive, not the contents)</td></tr>
+  </table>
+  <p style="font-size:0.85rem; color:#8b949e;">* Kept in the 10-D vector for display; zero-weighted in the embedding. The matcher effectively works in 7-D.</p>
+
+  <h2>3. Scale, normalize, retrieve</h2>
+  <pre>e = Wz / ‖Wz‖₂          # per-feature scales W, then L2 normalization
+ĉ = vector search        # MongoDB Atlas $vectorSearch, cosine, top-k</pre>
+  <p>Per-feature scaling stops the largest-magnitude raw feature (swirl speed,
+  ~160 mm/s) from drowning the small ones (variances ~1–5). Retrieval averages
+  similarity per label over the top-k hits; below 0.82 the UI flags
+  low confidence instead of guessing.</p>
+
+  <h2>4. Teach without training</h2>
+  <p>A new item is learned by storing one embedding — <code>atlas.teach(label,
+  e)</code>. The next query searches it immediately. There is no model to
+  retrain and no deployment step, which is the whole point of the non-parametric
+  design.</p>
+
+  <h2>5. Keep the protocol fixed</h2>
+  <p>We measured this: the same cup scores ~0.4 cosine similarity across
+  swirl/non-swirl protocols, while <em>different</em> items within one protocol
+  reach ~0.9. The embedding encodes the motion as much as the contents — so the
+  library admits swirl-protocol recordings only, and the dashboard always records
+  with the swirl macro.</p>
+
+  <div class="honest"><strong>What we don't do.</strong> No deep learning, no
+  learned encoder, no FFT peak-picking (there isn't enough bandwidth for it at
+  4–5 Hz). The dashboard labels the rattle band honestly: observable-band energy
+  only, with the 5–25 Hz band marked as requiring 100 Hz on-robot sampling.</div>
+</main>
+</body>
+</html>
