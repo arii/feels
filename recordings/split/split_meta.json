@@ -1,0 +1,8 @@
+{
+  "test_size": 0.2,
+  "seed": 42,
+  "by": "label_motion",
+  "n_train": 85,
+  "n_test": 21,
+  "n_total": 106
+}
