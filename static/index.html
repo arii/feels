@@ -215,12 +215,12 @@
           <option value="4">4&times;</option>
         </select>
       </div>
-      <div id="run-banner" style="display:none; align-items:center; gap:10px; background:#1a2f1a; border:1px solid #3fb950; border-radius:8px; padding:10px 14px; margin:8px 0; font-size:0.9rem;">
-        <span id="run-dot" style="width:12px; height:12px; border-radius:50%; background:#3fb950; animation:pulse 1.2s ease-in-out infinite;"></span>
-        <span id="run-text" style="color:#e6edf3; font-weight:600;">Running…</span>
-        <span id="run-elapsed" style="color:#8b949e; font-family:monospace;"></span>
+      <div id="run-banner" style="display:none; align-items:center; gap:14px; background:#0d2818; border:2px solid #3fb950; border-radius:12px; padding:16px 20px; margin:12px 0; font-size:1.3rem; box-shadow:0 0 20px rgba(63,185,80,0.3);">
+        <span id="run-dot" style="width:20px; height:20px; border-radius:50%; background:#3fb950; animation:pulse 1s ease-in-out infinite; flex-shrink:0;"></span>
+        <span id="run-text" style="color:#e6edf3; font-weight:700;">Running…</span>
+        <span id="run-elapsed" style="color:#3fb950; font-family:monospace; font-weight:600;"></span>
       </div>
-      <style>@keyframes pulse { 0%,100% { opacity:1; transform:scale(1);} 50% { opacity:0.4; transform:scale(0.85);} }</style>
+      <style>@keyframes pulse { 0%,100% { opacity:1; transform:scale(1);} 50% { opacity:0.3; transform:scale(0.75);} }</style>
       <div id="stage-strip" style="display:flex; gap:4px; margin:8px 0; align-items:center; font-size:0.85rem; color:#6e7681;"></div>
       <div style="background:#21262d; border-radius:6px; height:8px; margin:6px 0; overflow:hidden; display:none;" id="sim-progress-wrap">
         <div id="sim-progress" style="height:100%; width:0%; background:#58a6ff; transition:width 0.3s;"></div>
