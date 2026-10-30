@@ -1077,9 +1077,22 @@ _DOC_PAGES = {"index", "problem", "approach", "prediction", "force", "api", "abo
 async def handle_docs(request):
     """Serve the built-in docs pages (the presentation). /docs and /docs/{page}."""
     page = request.match_info.get("page", "index")
+    # Strip .html suffix if present (e.g. /problem.html -> problem)
+    if page.endswith(".html"):
+        page = page[:-5]
     if page not in _DOC_PAGES:
         raise web.HTTPNotFound()
     return web.FileResponse(os.path.join(HERE, "docs", f"{page}.html"))
+
+
+async def handle_docs_legacy(request):
+    """Redirect /<page>.html to /docs/<page> for old bookmarks."""
+    page = request.match_info.get("page", "")
+    if page.endswith(".html"):
+        page = page[:-5]
+    if page in _DOC_PAGES:
+        raise web.HTTPFound(f"/docs/{page}")
+    raise web.HTTPNotFound()
 
 
 async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
@@ -1087,6 +1100,7 @@ async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_get("/", handle_index)
     app.router.add_get("/docs", handle_docs)
     app.router.add_get("/docs/{page}", handle_docs)
+    app.router.add_get("/{page}.html", handle_docs_legacy)
     app.router.add_get("/stream", handle_stream)
     app.router.add_post("/tare", handle_tare)
     app.router.add_post("/record/start", handle_record_start)
