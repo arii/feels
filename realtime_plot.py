@@ -47,6 +47,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 _cycle_lock = asyncio.Lock()
 _cycle_proc: Optional[subprocess.Popen] = None
 _cycle_status: str = "idle"   # idle | running | done | error | aborted
+_last_prediction: Optional[dict] = None   # last successful Mode-1 result (survives refresh)
 
 # MOCK MODE: FEELS_MOCK=1 serves the 2-mode UI from recorded data instead of
 # the physical robot + Atlas. The mock predict runs the real feature
@@ -720,6 +721,22 @@ HTML_PAGE = """<!DOCTYPE html>
     pollStatus();
     setInterval(pollStatus, 5000);
 
+    function renderDecision(data) {
+      document.getElementById('decision-card').style.display = 'block';
+      document.getElementById('pred-label').innerText = data.prediction || 'unknown';
+      const pct = Math.round((data.confidence || 0) * 100);
+      document.getElementById('pred-conf-bar').style.width = pct + '%';
+      document.getElementById('pred-conf-bar').style.background = data.low_confidence ? '#d29922' : '#3fb950';
+      document.getElementById('pred-conf-text').innerText =
+        `confidence ${pct}%${data.low_confidence ? ' — LOW, consider teaching this item' : ''}` +
+        (data.mock ? '  (MOCK)' : '');
+      setNeighbors(document.getElementById('pred-neighbors'), data.matches || []);
+      const dq = data.diagnostics || {};
+      document.getElementById('predict-status').innerText = `Done — ${data.csv}` +
+        (data.mock ? '  (MOCK data, not live hardware)' : '') +
+        (dq.tare_flags && dq.tare_flags.length ? `  ⚠ tare flags: ${dq.tare_flags.join(',')}` : '');
+    }
+
     async function pollStatus() {
       try {
         const res = await fetch('/api/status');
@@ -728,6 +745,7 @@ HTML_PAGE = """<!DOCTYPE html>
         b.innerText = s.atlas_configured ? 'ATLAS: SYNCED' : 'ATLAS: NO URI';
         b.style.background = s.atlas_configured ? '#238636' : '#da3633';
         document.getElementById('mock-badge').style.display = s.mock ? 'inline-block' : 'none';
+        if (s.last_prediction && s.last_prediction.ok) renderDecision(s.last_prediction);
         const busy = s.cycle_busy;
         for (const id of ['predict-btn', 'teach-btn']) {
           const btn = document.getElementById(id);
@@ -755,18 +773,7 @@ HTML_PAGE = """<!DOCTYPE html>
         const res = await fetch('/api/cycle/predict', { method: 'POST' });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'prediction failed');
-        document.getElementById('decision-card').style.display = 'block';
-        document.getElementById('pred-label').innerText = data.prediction || 'unknown';
-        const pct = Math.round((data.confidence || 0) * 100);
-        document.getElementById('pred-conf-bar').style.width = pct + '%';
-        document.getElementById('pred-conf-bar').style.background = data.low_confidence ? '#d29922' : '#3fb950';
-        document.getElementById('pred-conf-text').innerText =
-          `confidence ${pct}%${data.low_confidence ? ' — LOW, consider teaching this item' : ''}`;
-        setNeighbors(document.getElementById('pred-neighbors'), data.matches || []);
-        const dq = data.diagnostics || {};
-        status.innerText = `Done — ${data.csv}` +
-          (data.mock ? '  (MOCK data, not live hardware)' : '') +
-          (dq.tare_flags && dq.tare_flags.length ? `  ⚠ tare flags: ${dq.tare_flags.join(',')}` : '');
+        renderDecision(data);
       } catch (e) {
         status.innerText = 'Error: ' + e.message;
       } finally {
@@ -899,26 +906,30 @@ async def _mock_teach(label: str):
 
 async def handle_cycle_predict(request):
     """Mode 1: run the swirl macro on a mystery cup → features → Atlas $vectorSearch."""
+    global _last_prediction
     if _cycle_lock.locked():
         return web.json_response({"ok": False, "error": "a cycle is already running"}, status=409)
     async with _cycle_lock:
         try:
             if MOCK_MODE:
-                return web.json_response(await _mock_predict())
-            csv_path = await _run_swirl_macro("mystery")
-            feats = feature_extractor.extract_features(pd.read_csv(csv_path))
-            a = _atlas()
-            res = a.identify(feats["e"], top_k=3)
-            return web.json_response({
-                "ok": True,
-                "csv": os.path.basename(csv_path),
-                "prediction": res["label"],
-                "confidence": round(res["confidence"], 3),
-                "low_confidence": res["low_confidence"],
-                "matches": [{"label": m["label"], "similarity": round(m["score"], 3)}
-                            for m in res["matches"]],
-                "diagnostics": feats["diagnostics"],
-            })
+                result = await _mock_predict()
+            else:
+                csv_path = await _run_swirl_macro("mystery")
+                feats = feature_extractor.extract_features(pd.read_csv(csv_path))
+                a = _atlas()
+                res = a.identify(feats["e"], top_k=3)
+                result = {
+                    "ok": True,
+                    "csv": os.path.basename(csv_path),
+                    "prediction": res["label"],
+                    "confidence": round(res["confidence"], 3),
+                    "low_confidence": res["low_confidence"],
+                    "matches": [{"label": m["label"], "similarity": round(m["score"], 3)}
+                                for m in res["matches"]],
+                    "diagnostics": feats["diagnostics"],
+                }
+            _last_prediction = result
+            return web.json_response(result)
         except Exception as e:
             return web.json_response({"ok": False, "error": str(e)[:500]}, status=500)
 
@@ -977,6 +988,7 @@ async def handle_api_status(request):
         "viam_address": VIAM_MACHINE_ADDRESS,
         "atlas_configured": bool(os.getenv("MONGODB_URI")),
         "mock": MOCK_MODE,
+        "last_prediction": _last_prediction,
     })
 
 
