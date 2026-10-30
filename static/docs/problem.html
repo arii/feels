@@ -57,10 +57,6 @@ pre { background:#161b22; border:1px solid var(--border); border-radius:8px; pad
     neighbor in the taught library for instant classification.</li>
   </ol>
 
-  <h2>The lid is the whole problem</h2>
-  <p>From outside, every class looks identical — a camera sees a cup. The contents
-  only reveal themselves in motion, which is what the system measures.</p>
-
   <h2>The confound set</h2>
   <p>Four contents — <code>solid_150g</code>, <code>water_150g</code>,
   <code>candy_150g</code>, <code>soap_150g</code> — with mass fixed at 150 g.
@@ -71,17 +67,16 @@ pre { background:#161b22; border:1px solid var(--border); border-radius:8px; pad
   <h2>What makes it hard</h2>
   <ul>
     <li><strong>Coarse sensing:</strong> 4–5 Hz torque telemetry. The true 5–25 Hz
-      rattle band is above Nyquist — the system uses what the channel carries.</li>
-    <li><strong>Tare drift:</strong> joint-torque baselines wander with pose and
+      rattle band is above Nyquist — we use what the channel carries.</li>
+    <li><strong>Baseline drift:</strong> joint-torque baselines wander with pose and
       temperature; static offsets are unreliable, so the signal must come from
       motion.</li>
     <li><strong>Hidden by design:</strong> the contents stay sealed, so the only
       supervision is the label the operator teaches.</li>
+    <li><strong>Static hold torques</strong> carry no payload signal at our pose
+      (verified identical across contents). Everything discriminative comes from
+      the swirl dynamics.</li>
   </ul>
-
-  <div class="honest"><strong>Honest limits.</strong> Static hold torques carry no
-  payload signal at this pose (verified identical across contents).
-  Everything discriminative comes from the swirl dynamics.</div>
 </main>
 </body>
 </html>

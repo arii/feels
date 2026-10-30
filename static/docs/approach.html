@@ -54,7 +54,7 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
     <tr><td>Swirl dynamics</td><td><code>swirl_var_j2</code>, <code>swirl_var_j3</code>, <code>swirl_ptp_j3</code>, <code>phase_lag_s</code>, <code>rattle_e</code></td><td>Slosh energy; shifting-mass swing; TCP&ndash;torque phase lag = viscous damping; rattle energy (observable band only &mdash; the 5&ndash;25&nbsp;Hz band needs 100&nbsp;Hz on-robot sampling)</td></tr>
     <tr><td>Grip &amp; excitation</td><td><code>grip_comp</code>, <code>swirl_speed</code>*</td><td>Gripper compliance under load, squishy vs rigid; TCP swirl speed for excitation normalization</td></tr>
   </table>
-  <p style="font-size:0.85rem; color:#8b949e;">* Kept in the 10-D vector for display; zero-weighted in the embedding &mdash; the static offsets sit below tare noise, and swirl speed measures the fixed macro's drive rather than the contents. The matcher effectively works in 7-D.</p>
+  <p style="font-size:0.85rem; color:#8b949e;">* Kept in the 10-D vector for display; zero-weighted in the embedding &mdash; the static offsets sit below baseline noise, and swirl speed measures the fixed macro's drive rather than the contents. The matcher effectively works in 7-D.</p>
 
   <h2>3. Scale, normalize, retrieve</h2>
   <pre>e = Wz / ‖Wz‖₂          # per-feature scales W, then L2 normalization
