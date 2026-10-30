@@ -24,7 +24,6 @@ Usage:
 import argparse
 import glob
 import os
-import sys
 
 import numpy as np
 import pandas as pd
@@ -206,7 +205,16 @@ def run_qc(recs):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="k-NN cup-content classifier (offline).")
+    ap = argparse.ArgumentParser(
+        description="k-NN cup-content classifier (offline).",
+        epilog="""examples:
+  python predict_mystery.py recordings/mystery_01.csv   # classify one recording
+  python predict_mystery.py --eval                      # leave-one-recording-out accuracy
+  python predict_mystery.py --qc                        # tare-baseline quality per recording
+
+Runs entirely offline on CSVs — no robot, no Atlas. See BASELINE_FINDINGS.md
+for what the QC flags mean.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("csv", nargs="?", help="CSV to classify (default: all 'mystery' recordings)")
     ap.add_argument("--eval", action="store_true", help="LORO accuracy on the reference set")
     ap.add_argument("--qc", action="store_true", help="tare-baseline quality diagnostics per recording")

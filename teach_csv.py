@@ -28,6 +28,19 @@ MOTION_TYPE = "swirl_macro"
 
 
 def resolve_label(csv_path, df, override=None):
+    """Determine the teach label for a CSV.
+
+    Precedence: explicit override, then the object_label column, then the
+    recording_YYYYMMDD_HHMMSS_<label>.csv filename.
+
+    Args:
+        csv_path: path to the recording CSV.
+        df: the recording DataFrame.
+        override: forced label, or None.
+
+    Returns:
+        Label string, or None when none can be determined.
+    """
     if override:
         return override
     if "object_label" in df.columns:
@@ -44,6 +57,22 @@ def resolve_label(csv_path, df, override=None):
 
 def teach_file(db, csv_path, session, label_override=None, dry_run=False,
                force=False, include_mystery=False, require_swirl=False):
+    """Extract features from one CSV and teach it to Atlas.
+
+    Args:
+        db: MongoDB database handle.
+        csv_path: path to the recording CSV.
+        session: session tag, e.g. "thu".
+        label_override: forced label, or None.
+        dry_run: report what would be taught without writing.
+        force: re-teach files already in Atlas.
+        include_mystery: also teach mystery-labeled files.
+        require_swirl: skip recordings without a true SWIRL phase.
+
+    Returns:
+        Tuple (status, filename, detail) where status is one of
+        "taught", "dry", "skip", "error".
+    """
     name = os.path.basename(csv_path)
     try:
         df = pd.read_csv(csv_path)
@@ -78,11 +107,13 @@ def teach_file(db, csv_path, session, label_override=None, dry_run=False,
         properties={"csv": name, "source": "teach_csv.py",
                     "tare_flags": dq["tare_flags"],
                     "phase_source": dq["phase_source"],
+                    "z": [round(float(v), 4) for v in feats["z"]],
                     "n_samples": dq["n_samples"], "fs_hz": dq["fs_hz"]})
     return ("taught", name, f"'{label}' sig_id={saved['sig_id']}")
 
 
 def list_library():
+    """Print signature counts per label in the Atlas library."""
     db = atlas.get_db()
     rows = list(db.signatures.aggregate([
         {"$group": {"_id": "$label", "n": {"$sum": 1},
@@ -99,7 +130,20 @@ def list_library():
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Batch-teach recording CSVs into Atlas.")
+    """CLI entry: batch-teach recordings to Atlas."""
+    ap = argparse.ArgumentParser(
+        description="Batch-teach recording CSVs into Atlas.",
+        epilog="""examples:
+  python teach_csv.py recordings/ --require-swirl --dry-run   # preview
+  python teach_csv.py recordings/ --require-swirl --session fri
+  python teach_csv.py --list                                  # library contents
+  python teach_csv.py foo.csv --label water_075pct --force    # re-teach one file
+
+Label resolution: --label > object_label column > filename.
+Mystery/unlabeled and non-grasp CSVs are skipped; already-taught files are
+skipped unless --force. Needs MONGODB_URI in .env, and the Atlas IP
+allowlist must include this machine.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("paths", nargs="*", help="CSV files, globs, or dirs (default: recordings/)")
     ap.add_argument("--session", default="thu", help="session tag (default: thu)")
     ap.add_argument("--label", default=None, help="force one label for all files")

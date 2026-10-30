@@ -2,7 +2,7 @@
 
 > [!IMPORTANT]
 > **On-Site Deep Learning Training Archived:**
-> We do NOT train CNNs, Transformers, or PyTorch neural networks on-site. Training deep networks under limited time and sample constraints risks severe overfitting and instability. Instead, we compute deterministic, hand-crafted physical features from the pick-up, swirl, and hold telemetry and map them to a normalized unit embedding $e \in \mathbb{S}^9$ for non-parametric MongoDB Atlas Vector Search (`$vectorSearch`).
+> We do NOT train CNNs, Transformers, or PyTorch neural networks on-site. Training deep networks under limited time and sample constraints risks severe overfitting and instability. Instead, we compute deterministic, hand-crafted physical features from the pick-up, swirl, place, and back-off telemetry and map them to a normalized unit embedding $e \in \mathbb{S}^9$ for non-parametric MongoDB Atlas Vector Search (`$vectorSearch`).
 
 ---
 
@@ -26,11 +26,13 @@ Telemetry Rollout D
                      MongoDB Atlas $vectorSearch Retrieval
 ```
 
-### Phase 1: Static Hold (Gravitational Mass Proxy)
-- Measures steady-state load torque difference on Joint 3:
-  $$\Delta \tau_{\text{gravity}} = \bar{\tau}_{3,\text{hold}} - \tau_{\text{tare}}$$
-- Directly estimates net payload mass:
-  $$\hat{m} = \frac{|\Delta \tau_{\text{gravity}}|}{g \cdot L_3}$$
+### Phase 1: Static Hold (NOT discriminative — audit finding)
+Static hold torques were verified identical across contents to 3 decimals
+($\tau_2 = 43.566$, $\tau_3 = -13.269$ N·m): at this pose the payload does not
+move the static joint torques above the tare-noise floor. The `mass_j2` /
+`mass_j3` features are kept in the vector but carry no payload signal until
+the tare is stability-gated. Everything discriminative comes from the swirl
+*dynamics* below. See `BASELINE_FINDINGS.md`.
 
 ### Phase 2: Horizontal Orbital Swirl (Slosh, Chatter, and Viscosity)
 During the smooth horizontal swirl orbit:
@@ -106,10 +108,14 @@ Atlas operates as our metric retrieval engine. Queries are executed using the na
 ```
 
 ### Classification Verdict
-The nearest neighbors are grouped by label, and the prediction is determined by:
-1. **Predicted Label:** Class with the highest mean cosine similarity score among the top-k matches.
-2. **Confidence Percentage:** Mean similarity score $\times 100\%$.
-3. **Low-Confidence Flag:** Triggered if top confidence is below $0.80$, alerting the operator to check cup placement.
+Atlas `$vectorSearch` retrieves the neighborhood; the call is made by a
+shrinkage-LDA head (`atlas.predict_lda`) fit in milliseconds on the whole
+labeled library at predict time — no training step, so teaching takes effect
+immediately. Measured accuracy on 21 held-out cups: category (liquid / solid /
+empty) 52%, material 43%, empty/nonempty 86%. The LDA's own probabilities are
+uncalibrated, so the dashboard shows the *measured* accuracy instead of a
+per-prediction score, plus close-call flagging on thin margins. Falls back to
+pure vector-search retrieval if the library can't support the LDA fit.
 
 ---
 
@@ -117,7 +123,7 @@ The nearest neighbors are grouped by label, and the prediction is determined by:
 
 When registering a new or updated item:
 1. Operator places the item on the taped square and inputs its label (e.g. `dish_soap_half`).
-2. Robot executes the single pick-up, swirl, and place routine.
+2. Robot executes the single pick-up, swirl, place, and back-off routine.
 3. `feature_extractor.py` computes $e$.
 4. A single call to `atlas.teach(label, e, raw_samples)` inserts the new signature into the `signatures` collection.
 5. The item is **immediately indexable and queryable** by subsequent runs without retraining or downtime.

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="560" viewBox="0 0 780 560" font-family="-apple-system,'Segoe UI',sans-serif">
+<rect width="780" height="560" fill="#0d1117" rx="8"/>
+<text x="20" y="28" font-size="15" font-weight="bold" fill="#e6edf3">System data flow — the dashboard</text>
+<text x="20" y="56" font-size="11" fill="#8b949e">MODE 1 — PREDICT</text>
+<rect x="20" y="70" width="170" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="105.0" y="92" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">dashboard Mode 1</text>
+<text x="105.0" y="112" text-anchor="middle" font-size="11" fill="#8b949e">Run the demo button</text>
+<text x="105.0" y="128" text-anchor="middle" font-size="11" fill="#8b949e">/api/cycle/predict</text>
+<rect x="220" y="70" width="170" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="305.0" y="92" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">swirl macro</text>
+<text x="305.0" y="112" text-anchor="middle" font-size="11" fill="#8b949e">pick → swirl → place</text>
+<text x="305.0" y="128" text-anchor="middle" font-size="11" fill="#8b949e">fresh recordings/*.csv</text>
+<rect x="420" y="70" width="160" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="500.0" y="92" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">feature_extractor</text>
+<text x="500.0" y="112" text-anchor="middle" font-size="11" fill="#8b949e">extract_features(df)</text>
+<text x="500.0" y="128" text-anchor="middle" font-size="11" fill="#8b949e">→ z (10-D), e (unit)</text>
+<defs><marker id="ah_58a6ff" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker></defs>
+<path d="M190,103 L220,103" fill="none" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<path d="M390,103 L420,103" fill="none" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<rect x="110" y="180" width="200" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="210.0" y="202" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">atlas.predict_lda(z)</text>
+<text x="210.0" y="222" text-anchor="middle" font-size="11" fill="#8b949e">shrinkage LDA, refit/predict</text>
+<text x="210.0" y="238" text-anchor="middle" font-size="11" fill="#8b949e">fallback: atlas.identify(e)</text>
+<rect x="430" y="180" width="200" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="530.0" y="202" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">Atlas $vectorSearch</text>
+<text x="530.0" y="222" text-anchor="middle" font-size="11" fill="#8b949e">neighbors for the plot</text>
+<text x="530.0" y="238" text-anchor="middle" font-size="11" fill="#8b949e">cup_dynamics_index</text>
+<path d="M500,136 L500,180" fill="none" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<path d="M500,136 V180 H210" fill="none" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<rect x="270" y="280" width="240" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="390.0" y="302" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">decision card</text>
+<text x="390.0" y="322" text-anchor="middle" font-size="11" fill="#8b949e">Predicted category</text>
+<text x="390.0" y="338" text-anchor="middle" font-size="11" fill="#8b949e">material · closest taught item</text>
+<path d="M210,246 V280 H330" fill="none" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<path d="M530,246 V280 H450" fill="none" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<line x1="20" y1="392" x2="760" y2="392" stroke="#2d333b"/>
+<text x="20" y="386" font-size="11" fill="#8b949e">MODE 2 — TEACH</text>
+<rect x="20" y="406" width="200" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="120.0" y="428" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">dashboard Mode 2</text>
+<text x="120.0" y="448" text-anchor="middle" font-size="11" fill="#8b949e">name + amount dropdowns</text>
+<text x="120.0" y="464" text-anchor="middle" font-size="11" fill="#8b949e">→ composed label</text>
+<rect x="250" y="406" width="200" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="350.0" y="428" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">swirl macro + teach</text>
+<text x="350.0" y="448" text-anchor="middle" font-size="11" fill="#8b949e">recordings/*.csv</text>
+<text x="350.0" y="464" text-anchor="middle" font-size="11" fill="#8b949e">auto-annotated</text>
+<rect x="480" y="406" width="220" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="590.0" y="428" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">atlas.teach(...)</text>
+<text x="590.0" y="448" text-anchor="middle" font-size="11" fill="#8b949e">e + properties.z</text>
+<text x="590.0" y="464" text-anchor="middle" font-size="11" fill="#8b949e">→ signatures collection</text>
+<path d="M220,439 L250,439" fill="none" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<path d="M450,439 L480,439" fill="none" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<path d="M590,406 V246 H590" fill="none" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#ah_58a6ff)"/>
+<text x="590.0" y="320.0" text-anchor="middle" font-size="10" fill="#8b949e" font-family="ui-monospace,Menlo,Consolas,monospace">queries</text>
+<text x="20" y="552" font-size="10" fill="#8b949e">CLI equivalent: repeatable_grasp.py --object &lt;label&gt; --record --swirl-smooth</text>
+</svg>

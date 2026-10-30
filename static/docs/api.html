@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>feels docs — API reference</title>
+<style>
+:root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
+body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
+.docnav { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); position:sticky; top:0; flex-wrap:wrap; gap:8px; }
+.docnav a { color:var(--muted); text-decoration:none; margin-left:18px; font-size:0.9rem; }
+.docnav a:hover, .docnav a.active { color:var(--text); }
+.docnav a.brand { margin-left:0; color:var(--text); font-weight:700; }
+main { max-width:900px; margin:0 auto; padding:36px 24px 80px; }
+h1 { font-size:2rem; margin-bottom:0.3em; }
+h2 { font-size:1.3rem; margin-top:2.2em; border-bottom:1px solid var(--border); padding-bottom:0.3em; }
+h3 { font-size:1.05rem; margin:1.4em 0 0.4em; }
+p, li, td { color:#c9d1d9; font-size:0.92rem; }
+code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em; }
+pre { background:#161b22; border:1px solid var(--border); border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:0.85rem; }
+pre.doc { color:var(--muted); }
+.fn { margin-bottom:1.2em; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:0.9rem; }
+th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; vertical-align:top; }
+th { background:#161b22; color:var(--muted); font-weight:600; }
+</style>
+</head>
+<body>
+<nav class="docnav">
+  <a class="brand" href="/docs">feels · docs</a>
+  <span>
+    <a href="/docs/problem">Problem</a>
+    <a href="/docs/approach">Approach</a>
+    <a href="/docs/prediction">Prediction</a>
+    <a href="/docs/force">Extracting Force</a>
+    <a class="active" href="/docs/api">API</a>
+    <a href="/">← Dashboard</a>
+  </span>
+</nav>
+<main>
+  <h1>API reference</h1>
+  <p>Repository: <a href="https://github.com/arii/feels" style="color:#58a6ff;">github.com/arii/feels</a>
+  &middot; <a href="https://github.com/arii/feels/issues" style="color:#58a6ff;">report a bug</a></p>
+
+  <h2>Bringup</h2>
+  <p>Prerequisites: Python 3.12, a virtualenv, and <code>.env</code> with
+  <code>MONGODB_URI</code> (Atlas IP allowlist must include your machine) and
+  the <code>VIAM_*</code> robot credentials. <code>bash setup.sh</code>
+  creates the venv, installs <code>requirements.txt</code>, and copies
+  <code>.env.example</code> to <code>.env</code>.</p>
+  <p>Mock bringup (no hardware): <code>FEELS_MOCK=1 python realtime_plot.py
+  --port 8080</code>, then open <code>http://localhost:8080</code>. The
+  dashboard serves the full UI on bundled recordings; a purple
+  <strong>MOCK</strong> badge marks the mode.</p>
+  <p>Live bringup: <code>python realtime_plot.py --port 8080</code>. Verify
+  with <code>curl localhost:8080/api/status</code> — <code>atlas_configured</code>
+  reports Atlas reachability and <code>cycle</code> reports the macro state.
+  Teach one item in Mode 2, then run Mode 1 on a mystery cup.</p>
+  <h2>Python modules</h2>
+  <p>Generated with <a href="https://pdoc.dev" style="color:#58a6ff;">pdoc</a>
+  from the docstrings. Each page has inline source and a GitHub link.</p>
+  <ul>
+    <li><a href="/docs/api_atlas" style="color:#58a6ff;"><code>atlas.py</code></a> &mdash; vector memory: teach, identify, predict_lda</li>
+    <li><a href="/docs/api_feature_extractor" style="color:#58a6ff;"><code>feature_extractor.py</code></a> &mdash; 10-D signatures from torque telemetry</li>
+    <li><a href="/docs/api_embedder" style="color:#58a6ff;"><code>embedder.py</code></a> &mdash; hand / pca / chronos embedding backends</li>
+    <li><a href="/docs/api_teach_csv" style="color:#58a6ff;"><code>teach_csv.py</code></a> &mdash; batch teaching CLI</li>
+  </ul>
+
+<h2>HTTP API — realtime_plot.py</h2><table><tr><th>Method</th><th>Path</th><th>Handler</th><th>What it does</th></tr>
+<tr><td><code>GET</code></td><td><code>/</code></td><td><code>handle_index</code></td><td></td></tr>
+<tr><td><code>GET</code></td><td><code>/docs</code></td><td><code>handle_docs</code></td><td>Serve the built-in docs pages (the presentation). /docs and /docs/{page}.</td></tr>
+<tr><td><code>GET</code></td><td><code>/docs/{page}</code></td><td><code>handle_docs</code></td><td>Serve the built-in docs pages (the presentation). /docs and /docs/{page}.</td></tr>
+<tr><td><code>GET</code></td><td><code>/stream</code></td><td><code>handle_stream</code></td><td></td></tr>
+<tr><td><code>POST</code></td><td><code>/tare</code></td><td><code>handle_tare</code></td><td></td></tr>
+<tr><td><code>POST</code></td><td><code>/record/start</code></td><td><code>handle_record_start</code></td><td></td></tr>
+<tr><td><code>POST</code></td><td><code>/record/stop</code></td><td><code>handle_record_stop</code></td><td></td></tr>
+<tr><td><code>GET</code></td><td><code>/record/download</code></td><td><code>handle_record_download</code></td><td></td></tr>
+<tr><td><code>POST</code></td><td><code>/api/cycle/predict</code></td><td><code>handle_cycle_predict</code></td><td>Mode 1: run the swirl macro on a mystery cup → features → Atlas $vectorSearch.</td></tr>
+<tr><td><code>POST</code></td><td><code>/api/cycle/teach</code></td><td><code>handle_cycle_teach</code></td><td>Mode 2: run the swirl macro on a labeled item → save signature to Atlas.</td></tr>
+<tr><td><code>POST</code></td><td><code>/api/cycle/abort</code></td><td><code>handle_cycle_abort</code></td><td>Stop the running macro subprocess (physical e-stop remains at the venue).</td></tr>
+<tr><td><code>POST</code></td><td><code>/api/cycle/correct</code></td><td><code>handle_cycle_correct</code></td><td>Teach the true label for the most recent prediction&#x27;s recording.</td></tr>
+<tr><td><code>GET</code></td><td><code>/api/status</code></td><td><code>handle_api_status</code></td><td></td></tr>
+<tr><td><code>POST</code></td><td><code>/api/vectorspace</code></td><td><code>handle_vspace</code></td><td>2-D PCA of the Atlas signature library, optionally with the query</td></tr>
+</table>
+<h2>teach_csv.py — CLI</h2><pre>python teach_csv.py [paths] [flags]</pre><table>
+<tr><th>Flag</th><th>What it does</th></tr>
+<tr><td><code>paths</code></td><td>CSV files</td></tr>
+<tr><td><code>--session</code></td><td>session tag (default: thu</td></tr>
+<tr><td><code>--label</code></td><td>force one label for all files&quot;</td></tr>
+<tr><td><code>--dry-run</code></td><td>show what would be taught&quot;</td></tr>
+<tr><td><code>--force</code></td><td>re-teach files already in Atlas&quot;</td></tr>
+<tr><td><code>--include-mystery</code></td><td></td></tr>
+<tr><td><code>--require-swirl</code></td><td></td></tr>
+<tr><td><code>--list</code></td><td>show signature counts per label&quot;</td></tr>
+</table>
+</main>
+</body>
+</html>

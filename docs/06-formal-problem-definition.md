@@ -55,16 +55,31 @@ where I_t represents visual verification frames from the camera to monitor exter
 
 ## 4. Action Space (A)
 
-To ensure real-time determinism, the action space is formalized as a composite multi-phase excitation trajectory a_composite = [a_lift ∘ a_sine ∘ a_tilt] executed in Cartesian space:
+To ensure real-time determinism, the action space is a single fixed composite
+trajectory — pick → swirl → place → back-off — executed open-loop from
+calibrated waypoints:
 
-### a_lift — Static Gravitational Excitation, t ∈ [0, T_1]
-Constant vertical hold at fixed height z_hold to isolate static gravity loading G(q, m).
+### a_grasp — Approach, grasp, lift to travel, t ∈ [0, T_1]
+Descend to the taped square, close the parallel-jaw gripper, lift vertically
+to the travel altitude.
 
-### a_sine — Harmonic Kinematic Excitation, t ∈ (T_1, T_2)
-1D periodic horizontal oscillation x(t) = x_0 + A·sin(2πf_0·t)·ê_x designed to trigger fluid slosh phase lag and dry solid inertial rattling.
+### a_swirl — Horizontal orbital excitation, t ∈ (T_1, T_2)
+Smooth circular swirl (r ≈ 20–30 mm) in the XY plane at fixed Z about the
+travel pose, designed to trigger fluid slosh phase lag and dry-solid inertial
+rattling without spillage.
 
-### a_tilt — Quasi-Static Angular Sweep, t ∈ (T_2, T_3)
-Bounded angular tilt θ_pitch(t) ∈ [−θ_max, +θ_max] about the end-effector roll/pitch axis to measure center-of-mass migration and torsional hysteresis.
+### a_place — Place and release, t ∈ (T_2, T_3]
+Descend to the target square, open the gripper.
+
+### a_backoff — Retreat clear, t ∈ (T_3, T_4]
+Back off from the placed cup, retract to travel altitude, return home.
+
+Telemetry is phase-tagged throughout
+(`INIT`, `APPROACH`, `REACH_GRASP`, `GRIPPER_CLOSE`, `LIFT_TO_TRAVEL`,
+`SWIRL`, `DESCEND_PLACE`, `GRIPPER_OPEN`, `BACK_OFF`, `RETRACT_TRAVEL`,
+`RETURN_HOME`). The discriminative signal lives in the `SWIRL` window; the
+embedding encodes the excitation motion as much as the contents, so the
+protocol must stay fixed between library and query.
 
 ---
 

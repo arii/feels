@@ -32,6 +32,7 @@ from viam.components.arm import Arm
 
 import pandas as pd
 import feature_extractor
+import embedder
 
 load_dotenv()
 
@@ -57,6 +58,19 @@ GIT_SHA = _git_sha()
 _cycle_lock = asyncio.Lock()
 _cycle_proc: Optional[subprocess.Popen] = None
 _cycle_status: str = "idle"   # idle | running | done | error | aborted
+_sim_state = None  # {"csv": str, "stage": str, "phase": str, "progress": float, "speed": float} while simulating
+
+# Macro phases (recordings' `phase` column) → the demo's canonical stages.
+_PHASE_TO_STAGE = {
+    "INIT": "home", "APPROACH": "approach",
+    "REACH_GRASP": "grasp", "GRIPPER_CLOSE": "grasp",
+    "LIFT_TO_TRAVEL": "travel", "TRAVEL_SETTLING": "travel",
+    "TRAVEL_STABLE_HOLD": "travel",
+    "SWIRL": "swirl",
+    "DESCEND_PLACE": "place", "GRIPPER_OPEN": "place",
+    "BACK_OFF": "place",
+}
+_SIM_STAGES = ["home", "approach", "grasp", "travel", "swirl", "place", "predict"]
 _last_prediction: Optional[dict] = None   # last successful Mode-1 result (survives refresh)
 
 # MOCK MODE: FEELS_MOCK=1 serves the 2-mode UI from recorded data instead of
@@ -93,29 +107,65 @@ def _vspace_2d(items):
             for (l, _), p in zip(items, coords)]
 
 
+VSPACE_CACHE = os.path.join(HERE, "hidden_files", "vspace_cache.json")
+
+
+def _vspace_cache_save(items):
+    """Persist the signature library locally after a successful Atlas sync."""
+    try:
+        os.makedirs(os.path.dirname(VSPACE_CACHE), exist_ok=True)
+        with open(VSPACE_CACHE, "w") as f:
+            json.dump([{"label": l, "v": v} for l, v in items], f)
+    except Exception:
+        pass
+
+
+def _vspace_cache_load():
+    """Load the cached signature library; [] when no cache exists."""
+    try:
+        with open(VSPACE_CACHE) as f:
+            return [(d["label"], d["v"]) for d in json.load(f)]
+    except Exception:
+        return []
+
+
 async def handle_vspace(request):
     """2-D PCA of the Atlas signature library, optionally with the query
-    vector projected in the same basis (POST {"query": [10 floats]})."""
+    vector projected in the same basis (POST {"query": [10 floats]}).
+    Falls back to the local cache when Atlas is unreachable — the venue
+    wifi dropping must not blank the plot."""
     try:
         data = await request.json()
     except Exception:
         data = {}
     query = data.get("query")
+    cached = False
     try:
         a = _atlas()
         docs = list(a.get_db().signatures.find({}, {"label": 1, "feature_vector": 1}))
         items = [(d.get("label", "?"), d["feature_vector"])
                  for d in docs if d.get("feature_vector")]
+        if items:
+            _vspace_cache_save(items)
+    except Exception:
+        items = _vspace_cache_load()
+        cached = True
+    try:
+        if items:
+            top_dim = max(set(len(v) for _, v in items),
+                          key=lambda d: sum(1 for _, v in items if len(v) == d))
+            items = [(l, v) for l, v in items if len(v) == top_dim]
         qidx = -1
-        if isinstance(query, list) and len(query) == 10:
+        if isinstance(query, list) and items and len(query) == len(items[0][1]):
             items.append(("QUERY", [float(v) for v in query]))
             qidx = len(items) - 1
         return web.json_response({
             "ok": True, "points": _vspace_2d(items),
             "query_index": qidx, "n": len(items) - (1 if qidx >= 0 else 0),
+            "cached": cached,
         })
-    except Exception as e:
-        return web.json_response({"ok": False, "error": str(e)[:300]}, status=500)
+    except Exception:
+        return web.json_response({"ok": False, "error": "vector space unavailable"}, status=500)
 
 
 def _newest_recording(after_ts: float) -> Optional[str]:
@@ -124,8 +174,56 @@ def _newest_recording(after_ts: float) -> Optional[str]:
     return max(cands, key=os.path.getmtime) if cands else None
 
 
+def _playback_csv() -> Optional[str]:
+    """Pick a recorded CSV for demo playback (no robot needed).
+
+    Prefers recordings/demo_playback.csv when the venue drops one in;
+    otherwise the newest recording with a SWIRL phase; otherwise the
+    newest recording. Returns None when recordings/ is empty.
+    """
+    demo = os.path.join(RECORDINGS_DIR, "demo_playback.csv")
+    if os.path.isfile(demo):
+        return demo
+    cands = glob.glob(os.path.join(RECORDINGS_DIR, "recording_*.csv"))
+    if not cands:
+        return None
+
+    def has_swirl(path: str) -> bool:
+        try:
+            with open(path) as fh:
+                return "SWIRL" in fh.read(200000)
+        except Exception:
+            return False
+
+    swirl = [c for c in cands if has_swirl(c)]
+    pool = swirl or cands
+    # Prefer a labeled recording (not a mystery) so the demo can reveal
+    # the true contents after the verdict.
+    labeled = [c for c in pool if "mystery" not in os.path.basename(c).lower()]
+    return max(labeled or pool, key=os.path.getmtime)
+
+
 def _sanitize_label(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_") or "item"
+
+
+def _macro_cmd(object_label: str) -> list:
+    """Build the data-collection macro command for a labeled run.
+
+    Default: the locked-in repeatable_grasp.py swirl macro. Another robot
+    builder swaps it without touching code via FEELS_MACRO_CMD, a shell-style
+    template with {label}, {cycles}, {here} placeholders, e.g.:
+        FEELS_MACRO_CMD='python my_arm_macro.py --label {label} --record'
+    The macro must append one recording_*.csv to recordings/ (see
+    ARCHITECTURE.md for the CSV schema contract).
+    """
+    tpl = os.getenv("FEELS_MACRO_CMD")
+    if tpl:
+        import shlex
+        return [a.format(label=object_label, cycles=1, here=HERE)
+                for a in shlex.split(tpl)]
+    return [sys.executable, os.path.join(HERE, "repeatable_grasp.py"),
+            "--object", object_label, "--record", "--cycles", "1", "--swirl-smooth"]
 
 
 async def _run_swirl_macro(object_label: str) -> str:
@@ -136,8 +234,7 @@ async def _run_swirl_macro(object_label: str) -> str:
     """
     global _cycle_proc, _cycle_status
     _cycle_status = "running"
-    cmd = [sys.executable, os.path.join(HERE, "repeatable_grasp.py"),
-           "--object", object_label, "--record", "--cycles", "1", "--swirl-smooth"]
+    cmd = _macro_cmd(object_label)
     started = time.time()
     try:
         _cycle_proc = subprocess.Popen(
@@ -363,798 +460,18 @@ async def robot_polling_loop(target_delay_ms: int = 200):
 # Web Server Routes (Ultra-lightweight HTML Dashboard + SSE Stream + CSV API)
 # ==============================================================================
 
-HTML_PAGE = """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Viam xArm850 — 10s Rolling Real-Time Visualizer</title>
-  <style>
-    :root {
-      --bg: #0d1117;
-      --card-bg: #161b22;
-      --border: #30363d;
-      --text: #c9d1d9;
-      --text-bright: #ffffff;
-      --accent: #58a6ff;
-      --red: #ff7b72;
-      --green: #3fb950;
-      --yellow: #d29922;
-      --purple: #bc8cff;
-      --orange: #f0883e;
-      --cyan: #39c5cf;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      padding: 20px;
-    }
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-      padding-bottom: 14px;
-      border-bottom: 1px solid var(--border);
-    }
-    h1 { font-size: 1.35rem; color: var(--text-bright); display: flex; align-items: center; gap: 10px; }
-    .badge {
-      font-size: 0.75rem;
-      background: #238636;
-      color: #fff;
-      padding: 3px 8px;
-      border-radius: 12px;
-      font-weight: bold;
-    }
-    .badge.disconnected { background: #da3633; }
-    .badge-rec {
-      font-size: 0.75rem;
-      background: var(--red);
-      color: #fff;
-      padding: 3px 8px;
-      border-radius: 12px;
-      font-weight: bold;
-      animation: pulse 1.5s infinite;
-      display: none;
-    }
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.3; }
-      100% { opacity: 1; }
-    }
-    .grid-kpi {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 12px;
-      margin-bottom: 18px;
-    }
-    .kpi-card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 12px 16px;
-    }
-    .kpi-label { font-size: 0.75rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
-    .kpi-val { font-size: 1.8rem; font-weight: 700; color: var(--text-bright); margin-top: 4px; font-variant-numeric: tabular-nums; }
-    .kpi-sub { font-size: 0.75rem; color: #8b949e; margin-top: 2px; }
-    .highlight-red { color: var(--red); }
-    .highlight-blue { color: var(--accent); }
-    .highlight-green { color: var(--green); }
-    .controls {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    button {
-      background: #21262d;
-      border: 1px solid var(--border);
-      color: var(--text-bright);
-      padding: 6px 14px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 0.85rem;
-      transition: all 0.15s ease;
-    }
-    button:hover { background: #30363d; border-color: #8b949e; }
-    button.tare-btn { background: #1f6feb; border-color: #388bfd; }
-    button.tare-btn:hover { background: #388bfd; }
-    button.rec-start { background: #da3633; border-color: #f85149; }
-    button.rec-start:hover { background: #f85149; }
-    button.rec-stop { background: #6e7681; border-color: #8b949e; }
-    button.active-toggle { background: #238636; border-color: #3fb950; }
-    .chart-container {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 16px;
-      margin-bottom: 20px;
-    }
-    .chart-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-      font-weight: 600;
-      font-size: 0.95rem;
-      color: var(--text-bright);
-    }
-    .section-title {
-      font-size: 1.05rem;
-      color: var(--text-bright);
-      margin: 20px 0 12px 0;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .grid-joints {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-    .joint-card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 12px 14px;
-    }
-    .joint-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-bottom: 6px;
-    }
-    .joint-name { font-size: 0.85rem; font-weight: 600; color: var(--text-bright); }
-    .joint-range { font-size: 0.65rem; color: #6e7681; margin-left: 6px; }
-    .joint-val { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .canvas-wrap {
-      position: relative;
-      width: 100%;
-      height: 90px;
-      background: #0d1117;
-      border-radius: 4px;
-      border: 1px solid #21262d;
-    }
-    canvas.sparkline {
-      display: block;
-      width: 100%;
-      height: 100%;
-    }
-    .download-banner {
-      display: none;
-      background: rgba(35, 134, 54, 0.15);
-      border: 1px solid #238636;
-      border-radius: 6px;
-      padding: 10px 14px;
-      margin-bottom: 16px;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .feat-group { font-size:0.68rem; color:#8b949e; text-transform:uppercase; letter-spacing:0.04em; margin:8px 0 2px; }
-    .feat-row { display:grid; grid-template-columns:112px 1fr 54px; gap:8px; align-items:center; font-family:monospace; font-size:0.72rem; padding:1px 0; }
-    .feat-name { color:#6e7681; }
-    .feat-val { color:#e6edf3; text-align:right; }
-    .feat-bar-wrap { background:#21262d; border-radius:3px; height:8px; overflow:hidden; }
-    .feat-bar { display:block; height:100%; background:#1f6feb; }
-    .why-canvas { width:100%; height:110px; background:#0d1117; border:1px solid var(--border); border-radius:6px; margin-top:4px; }
-    #vspace-tip { display:none; position:absolute; background:#161b22; border:1px solid var(--border); border-radius:4px; padding:3px 8px; font-size:0.72rem; font-family:monospace; color:#e6edf3; pointer-events:none; z-index:5; }
-    .chip { background:#21262d; border:1px solid var(--border); color:#8b949e; border-radius:20px; padding:4px 12px; font-size:0.75rem; cursor:pointer; font-family:monospace; }
-    .chip:hover { color:#e6edf3; border-color:#58a6ff; }
-    .chip-label { color:#6e7681; font-size:0.72rem; align-self:center; }
-  </style>
-</head>
-<body>
-  <header>
-    <div>
-      <h1>
-        PHYSICAL AI CUP INSPECTOR
-        <span class="badge" id="status-badge">CONNECTING...</span>
-        <span class="badge" id="atlas-badge" style="background:#6e7681;">ATLAS: ...</span>
-        <span class="badge" id="mock-badge" style="background:#8957e5; display:none;">MOCK</span>
-      </h1>
-      <p style="color: #8b949e; font-size: 0.8rem; margin-top: 2px;">Pick up &rarr; swirl &rarr; place &mdash; identify what's inside the lidded cup</p>
-    </div>
-    <div class="controls">
-      <button class="rec-stop" id="abort-btn" onclick="abortCycle()" title="Stop the running macro">■ Stop</button>
-    </div>
-  </header>
+# Dashboard frontend lives in static/index.html (extracted for modularity —
+# edit the HTML/JS/CSS there without touching this server).
+def _load_index_html():
+    p = os.path.join(HERE, "static", "index.html")
+    try:
+        with open(p, encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return "<h1>dashboard missing: static/index.html not found</h1>"
 
-  <div class="grid-kpi" style="grid-template-columns: 1fr 1fr;">
-    <div class="kpi-card">
-      <div class="kpi-label">Mode 1 &mdash; Identify mystery object</div>
-      <button class="tare-btn" id="predict-btn" onclick="runPredict()" style="font-size:1rem; padding:10px 20px; margin:8px 0;">RUN SWIRL MACRO &amp; PREDICT</button>
-      <div id="decision-card" style="display:none; margin-top:8px; border-top:1px solid var(--border); padding-top:8px;">
-        <div class="kpi-label">Predicted class</div>
-        <div class="kpi-val" id="pred-label" style="font-size:1.5rem;">—</div>
-        <div style="background:#21262d; border-radius:6px; height:14px; margin:6px 0; overflow:hidden;">
-          <div id="pred-conf-bar" style="height:100%; width:0%; background:#3fb950;"></div>
-        </div>
-        <div class="kpi-sub" id="pred-conf-text">confidence —</div>
-        <div class="kpi-label" style="margin-top:8px;">Nearest Atlas neighbors</div>
-        <div id="pred-neighbors" style="font-size:0.85rem; margin-top:4px;"></div>
-        <div class="kpi-label" style="margin-top:8px;">10-D swirl signature — feature space</div>
-        <div id="pred-features"></div>
-        <div class="kpi-sub" id="pred-data" style="margin-top:6px;"></div>
-        <div class="kpi-label" style="margin-top:8px;">Why — torque residuals from this run</div>
-        <canvas id="ts-canvas" class="why-canvas"></canvas>
-        <div class="kpi-sub" id="ts-lag"></div>
-        <div class="kpi-label" style="margin-top:8px;">Power spectrum</div>
-        <canvas id="psd-canvas" class="why-canvas"></canvas>
-        <div class="kpi-sub" id="psd-note"></div>
-      </div>
-      <div class="kpi-sub" id="predict-status"></div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Mode 2 &mdash; Teach new item (online dataset builder)</div>
-      <div style="display:flex; gap:8px; margin:8px 0;">
-        <input type="text" id="teach-label-input" placeholder="Item name, e.g. Loose Pens" style="flex:1; background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem;" />
-        <button class="rec-start" id="teach-btn" onclick="teachItem()" style="font-size:0.9rem; padding:10px 16px;">RUN SWIRL &amp; SAVE TO ATLAS</button>
-      </div>
-      <div style="display:flex; flex-wrap:wrap; gap:6px; margin:8px 0;">
-        <span class="chip-label">confound set:</span>
-        <button class="chip" onclick="setTeachLabel('solid_150g')">solid_150g</button>
-        <button class="chip" onclick="setTeachLabel('water_150g')">water_150g</button>
-        <button class="chip" onclick="setTeachLabel('candy_150g')">candy_150g</button>
-        <button class="chip" onclick="setTeachLabel('soap_150g')">soap_150g</button>
-        <span class="chip-label" style="margin-left:8px;">basics:</span>
-        <button class="chip" onclick="setTeachLabel('empty_cup')">empty_cup</button>
-        <button class="chip" onclick="setTeachLabel('water_half')">water_half</button>
-        <button class="chip" onclick="setTeachLabel('candy_mixed')">candy_mixed</button>
-        <button class="chip" onclick="setTeachLabel('dish_soap_half')">dish_soap_half</button>
-      </div>
-      <div class="kpi-sub" id="teach-status">Signature saved → vector indexed in MongoDB, instantly queryable.</div>
-    </div>
-  </div>
 
-  <!-- Vector space (2-D PCA of the Atlas signature library) -->
-  <div style="background:#161b22; border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px; position:relative;">
-    <div class="kpi-label">Vector space — 2-D PCA of the Atlas 10-D signature library</div>
-    <canvas id="vspace-canvas" class="why-canvas" style="height:220px;"></canvas>
-    <div id="vspace-tip"></div>
-    <div class="kpi-sub" id="vspace-note" style="margin-top:6px;"></div>
-  </div>
-
-  <!-- Live joint torques (native canvas sparklines) -->
-  <div class="section-title">
-    <span>Live Joint Torques (10s Rolling Windows)</span>
-    <span style="font-size: 0.8rem; color: #8b949e;">Ultra-fast native canvas (&lt;0.1ms render)</span>
-  </div>
-
-  <div class="grid-joints">
-    <div class="joint-card">
-      <div class="joint-header">
-        <span class="joint-name" style="color: #39c5cf;">Joint 1 — Base (Yaw)</span>
-        <span class="joint-val" id="val-j1" style="color: #39c5cf;">0.000</span><span class="joint-range">±5 N·m</span>
-      </div>
-      <div class="canvas-wrap"><canvas id="c-j1" class="sparkline"></canvas></div>
-    </div>
-
-    <div class="joint-card">
-      <div class="joint-header">
-        <span class="joint-name" style="color: #3fb950;">Joint 2 — Shoulder (Pitch)</span>
-        <span class="joint-val" id="val-j2" style="color: #3fb950;">-16.05</span><span class="joint-range">±25 N·m</span>
-      </div>
-      <div class="canvas-wrap"><canvas id="c-j2" class="sparkline"></canvas></div>
-    </div>
-
-    <div class="joint-card">
-      <div class="joint-header">
-        <span class="joint-name" style="color: #d29922;">Joint 3 — Elbow (Pitch)</span>
-        <span class="joint-val" id="val-j3" style="color: #d29922;">-16.82</span><span class="joint-range">±20 N·m</span>
-      </div>
-      <div class="canvas-wrap"><canvas id="c-j3" class="sparkline"></canvas></div>
-    </div>
-
-    <div class="joint-card">
-      <div class="joint-header">
-        <span class="joint-name" style="color: #f0883e;">Joint 4 — Forearm (Roll)</span>
-        <span class="joint-val" id="val-j4" style="color: #f0883e;">0.778</span><span class="joint-range">±5 N·m</span>
-      </div>
-      <div class="canvas-wrap"><canvas id="c-j4" class="sparkline"></canvas></div>
-    </div>
-
-    <div class="joint-card">
-      <div class="joint-header">
-        <span class="joint-name" style="color: #bc8cff;">Joint 5 — Wrist (Pitch)</span>
-        <span class="joint-val" id="val-j5" style="color: #bc8cff;">0.373</span><span class="joint-range">±5 N·m</span>
-      </div>
-      <div class="canvas-wrap"><canvas id="c-j5" class="sparkline"></canvas></div>
-    </div>
-
-    <div class="joint-card">
-      <div class="joint-header">
-        <span class="joint-name" style="color: #58a6ff;">Joint 6 — Flange (Roll)</span>
-        <span class="joint-val" id="val-j6" style="color: #58a6ff;">0.001</span><span class="joint-range">±5 N·m</span>
-      </div>
-      <div class="canvas-wrap"><canvas id="c-j6" class="sparkline"></canvas></div>
-    </div>
-  </div>
-
-  <script>
-    // Strict 10-second rolling window (~45-50 points at 4.5Hz)
-    const MAX_POINTS = 45;
-    let useFilter = true;
-    let viewModeDelta = true;  // Default to delta view so all joints center on 0
-    let isRecording = false;
-    let lastRecordedFile = null;
-
-    // Rolling data buffers
-    const history = {
-      t: [],
-      grams: [],
-      fz: [],
-      joints: [[], [], [], [], [], []]
-    };
-
-    // (force/weight chart removed — derived mass was tare-contaminated; see BASELINE_FINDINGS.md)
-
-    // Native High-Performance Sparkline Renderer (<0.1ms per canvas)
-    const sparkCanvases = [
-      document.getElementById('c-j1'),
-      document.getElementById('c-j2'),
-      document.getElementById('c-j3'),
-      document.getElementById('c-j4'),
-      document.getElementById('c-j5'),
-      document.getElementById('c-j6')
-    ];
-    const jointColors = ['#39c5cf', '#3fb950', '#d29922', '#f0883e', '#bc8cff', '#58a6ff'];
-    // Fixed y-axis half-ranges (N·m) per joint for the delta view: the axis never
-    // gets narrower than ±this around 0, so a still joint draws a flat line
-    // instead of stretching sensor noise full-height. Expands if data exceeds it.
-    const SPARK_HALF_RANGES = [5, 25, 20, 5, 5, 5];
-
-    function resizeCanvases() {
-      sparkCanvases.forEach(c => {
-        c.width = c.clientWidth * window.devicePixelRatio;
-        c.height = c.clientHeight * window.devicePixelRatio;
-      });
-    }
-    window.addEventListener('resize', resizeCanvases);
-    resizeCanvases();
-
-    function renderSparkline(canvas, data, color, halfRange) {
-      if (!data || data.length < 2) return;
-      const ctx = canvas.getContext('2d');
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
-
-      let min = Math.min(...data);
-      let max = Math.max(...data);
-      // Fixed axis: at least ±halfRange around 0. A constant signal then draws
-      // as a flat line at its true offset instead of filling the canvas.
-      min = Math.min(min, -halfRange);
-      max = Math.max(max, halfRange);
-      const padding = 6;
-      const range = max - min;
-
-      // Draw zero line if visible in range
-      if (min <= 0 && max >= 0) {
-        const zeroY = h - padding - ((0 - min) / range) * (h - 2 * padding);
-        ctx.strokeStyle = '#2d333b';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, zeroY);
-        ctx.lineTo(w, zeroY);
-        ctx.stroke();
-      }
-
-      // Draw sparkline polyline
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2 * window.devicePixelRatio;
-      ctx.beginPath();
-
-      const step = w / (data.length - 1);
-      data.forEach((val, i) => {
-        const x = i * step;
-        const y = h - padding - ((val - min) / range) * (h - 2 * padding);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-    }
-
-    // High performance render loop via requestAnimationFrame
-    let needsRender = false;
-    function animLoop() {
-      if (needsRender) {
-        // Render 6 native sparklines
-        for (let i = 0; i < 6; i++) {
-          renderSparkline(sparkCanvases[i], history.joints[i], jointColors[i], SPARK_HALF_RANGES[i]);
-        }
-        needsRender = false;
-      }
-      requestAnimationFrame(animLoop);
-    }
-    requestAnimationFrame(animLoop);
-
-    // Resilient SSE Connection
-    function connectSSE() {
-      const badge = document.getElementById('status-badge');
-      const eventSource = new EventSource('/stream');
-
-      eventSource.onopen = () => {
-        badge.innerText = 'LIVE 10s';
-        badge.className = 'badge';
-      };
-
-      eventSource.onmessage = (event) => {
-        const d = JSON.parse(event.data);
-
-        // Manage rolling 10-second buffer
-        history.t.push(`${d.t}s`);
-
-        const activeVals = viewModeDelta ? d.deltas : (useFilter ? d.smooth : d.raw);
-        for (let i = 0; i < 6; i++) {
-          history.joints[i].push(activeVals[i]);
-          const unit = viewModeDelta ? 'Δ' : 'Nm';
-          const jSign = activeVals[i] >= 0 ? '+' : '';
-          document.getElementById(`val-j${i+1}`).innerText = `${jSign}${activeVals[i].toFixed(3)} ${unit}`;
-        }
-
-        // Drop oldest data to strictly preserve ONLY 10 seconds
-        if (history.t.length > MAX_POINTS) {
-          history.t.shift();
-          history.grams.shift();
-          history.fz.shift();
-          for (let i = 0; i < 6; i++) {
-            history.joints[i].shift();
-          }
-        }
-
-        needsRender = true;
-      };
-
-      eventSource.onerror = () => {
-        badge.innerText = 'RECONNECTING...';
-        badge.className = 'badge disconnected';
-        eventSource.close();
-        setTimeout(connectSSE, 1500);
-      };
-    }
-
-    connectSSE();
-    pollStatus();
-    setInterval(pollStatus, 5000);
-
-    const FEAT_GROUPS = [
-      ['Static lift — mass estimate', ['mass_j2', 'mass_j3', 'lift_dyn_j3']],
-      ['Swirl dynamics — what moves inside', ['swirl_var_j2', 'swirl_var_j3', 'swirl_ptp_j3', 'phase_lag_s', 'rattle_e']],
-      ['Grip & excitation', ['grip_comp', 'swirl_speed']],
-    ];
-
-    function renderFeatureSpace(data) {
-      const f = data.features || {};
-      const names = f.names || [], vals = f.z || [], desc = f.descriptions || {};
-      const dq = data.diagnostics || {};
-      const idx = {};
-      names.forEach((n, i) => idx[n] = i);
-      const maxAbs = Math.max(1e-9, ...vals.map(v => Math.abs(v || 0)));
-      let html = '';
-      for (const [gname, gfeats] of FEAT_GROUPS) {
-        html += `<div class="feat-group">${gname}</div>`;
-        for (const n of gfeats) {
-          const v = vals[idx[n]] ?? 0;
-          const pct = Math.round(Math.abs(v) / maxAbs * 100);
-          const note = (n === 'rattle_e' && dq.rattle_band_limited) ? ' — band-limited at this sample rate' : '';
-          const title = ((desc[n] || '') + note).replace(/"/g, '&quot;');
-          html += `<div class="feat-row" title="${title}"><span class="feat-name">${n}</span>` +
-            `<span class="feat-bar-wrap"><span class="feat-bar" style="width:${pct}%"></span></span>` +
-            `<span class="feat-val">${v.toFixed(3)}</span></div>`;
-        }
-      }
-      document.getElementById('pred-features').innerHTML = html;
-      const tf = (dq.tare_flags && dq.tare_flags.length) ? 'tare QC: ' + dq.tare_flags.join(', ') : 'tare QC: OK';
-      document.getElementById('pred-data').innerText =
-        `${dq.n_samples ?? '?'} samples @ ${dq.fs_hz ?? '?'} Hz · ${dq.n_swirl_samples ?? 0} swirl samples` +
-        ` · phase src: ${dq.phase_source ?? '?'} · ${tf}`;
-    }
-
-    function sizeCanvas(c) {
-      const dpr = window.devicePixelRatio || 1;
-      c.width = Math.max(1, c.clientWidth * dpr);
-      c.height = Math.max(1, c.clientHeight * dpr);
-      return { ctx: c.getContext('2d'), w: c.width, h: c.height, dpr };
-    }
-
-    function renderWhy(data) {
-      const ts = data.timeseries;
-      const tsc = document.getElementById('ts-canvas');
-      const psc = document.getElementById('psd-canvas');
-      const lagEl = document.getElementById('ts-lag');
-      const noteEl = document.getElementById('psd-note');
-      if (!ts || !ts.t || ts.t.length < 4) {
-        tsc.style.display = 'none'; psc.style.display = 'none';
-        lagEl.innerText = ''; noteEl.innerText = '';
-        return;
-      }
-      tsc.style.display = 'block'; psc.style.display = 'block';
-
-      // --- torque residuals (J2 green, J3 amber), symmetric axis ---
-      let { ctx, w, h, dpr } = sizeCanvas(tsc);
-      const pad = 8 * dpr;
-      const tEnd = Math.max(1e-9, ts.t[ts.t.length - 1]);
-      let mx = Math.max(1e-6, ...ts.r2.concat(ts.r3).map(v => Math.abs(v))) * 1.1;
-      const X = i => pad + (ts.t[i] / tEnd) * (w - 2 * pad);
-      const Y = v => h / 2 - (v / mx) * (h / 2 - pad);
-      ctx.clearRect(0, 0, w, h);
-      ctx.strokeStyle = '#2d333b'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
-      for (const [vals, color] of [[ts.r2, '#3fb950'], [ts.r3, '#d29922']]) {
-        ctx.strokeStyle = color; ctx.lineWidth = 1.6 * dpr;
-        ctx.beginPath();
-        vals.forEach((v, i) => { i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)); });
-        ctx.stroke();
-      }
-      ctx.font = `${10 * dpr}px monospace`;
-      ctx.fillStyle = '#3fb950'; ctx.fillText('J2', pad + 3, pad + 10 * dpr);
-      ctx.fillStyle = '#d29922'; ctx.fillText('J3', pad + 3, pad + 22 * dpr);
-      const lagMs = Math.round((ts.phase_lag_s || 0) * 1000);
-      lagEl.innerText = `detrended torque residuals during swirl — phase lag ${lagMs} ms (torque vs TCP motion)`;
-
-      // --- power spectrum of r3, 0..Nyquist only; the 5-25 Hz rattle band
-      //     is NOT observable at 4-5 Hz sampling, so we label that honestly ---
-      const N = ts.r3.length, fs = ts.fs_hz, fmax = fs / 2;
-      const spec = [];
-      for (let k = 0; k <= Math.floor(N / 2); k++) {
-        let re = 0, im = 0;
-        for (let n = 0; n < N; n++) {
-          const a = 2 * Math.PI * k * n / N;
-          re += ts.r3[n] * Math.cos(a); im -= ts.r3[n] * Math.sin(a);
-        }
-        spec.push({ f: k * fs / N, m: Math.hypot(re, im) });
-      }
-      ({ ctx, w, h, dpr } = sizeCanvas(psc));
-      const pad2 = 8 * dpr;
-      const mmax = Math.max(1e-9, ...spec.map(s => s.m));
-      const BX = f => pad2 + (f / fmax) * (w - 2 * pad2);
-      const BY = m => h - pad2 - (m / mmax) * (h - 2 * pad2);
-      ctx.clearRect(0, 0, w, h);
-      ctx.strokeStyle = '#2d333b'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(pad2, h - pad2); ctx.lineTo(w - pad2, h - pad2); ctx.stroke();
-      ctx.fillStyle = '#1f6feb';
-      const bw = Math.max(1, (w - 2 * pad2) / spec.length * 0.7);
-      let peak = spec[0];
-      for (const s of spec) {
-        if (s.m > peak.m) peak = s;
-        ctx.fillRect(BX(s.f) - bw / 2, BY(s.m), bw, h - pad2 - BY(s.m));
-      }
-      ctx.fillStyle = '#f0883e';
-      ctx.beginPath(); ctx.arc(BX(peak.f), BY(peak.m), 3 * dpr, 0, 2 * Math.PI); ctx.fill();
-      ctx.fillStyle = '#8b949e'; ctx.font = `${10 * dpr}px monospace`;
-      ctx.fillText(`peak ${peak.f.toFixed(2)} Hz`, Math.min(BX(peak.f) + 6 * dpr, w - 92 * dpr), Math.max(BY(peak.m) - 6 * dpr, 10 * dpr));
-      ctx.fillText('0', pad2, h - 2);
-      const nx = `${fmax.toFixed(1)} Hz Nyquist`;
-      ctx.fillText(nx, w - pad2 - ctx.measureText(nx).width, h - 2);
-      noteEl.innerText =
-        `observable 0–${fmax.toFixed(1)} Hz at ${fs.toFixed(1)} Hz sampling · 5–25 Hz rattle band needs 100 Hz on-robot sampling`;
-    }
-
-    const VSPACE_COLORS = ['#3fb950', '#d29922', '#39c5cf', '#f0883e', '#bc8cff', '#58a6ff', '#ff7b72', '#a371f7'];
-    function labelColor(label) {
-      let h = 0;
-      for (const ch of String(label)) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
-      return VSPACE_COLORS[h % VSPACE_COLORS.length];
-    }
-    let lastQueryE = null;
-    let lastMatchLabels = [];
-    let vspaceLayout = [];
-
-    document.getElementById('vspace-canvas').addEventListener('mousemove', e => {
-      const c = e.target, tip = document.getElementById('vspace-tip');
-      const r = c.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      const mx = (e.clientX - r.left) * (c.width / r.width);
-      const my = (e.clientY - r.top) * (c.height / r.height);
-      let best = null, bd = 1e18;
-      for (const p of vspaceLayout) {
-        const d = (p.px - mx) ** 2 + (p.py - my) ** 2;
-        if (d < bd) { bd = d; best = p; }
-      }
-      if (best && bd < (16 * dpr) ** 2) {
-        tip.style.display = 'block';
-        tip.style.left = (e.clientX - r.left + 14) + 'px';
-        tip.style.top = (e.clientY - r.top - 8) + 'px';
-        tip.innerText = best.label;
-      } else {
-        tip.style.display = 'none';
-      }
-    });
-    document.getElementById('vspace-canvas').addEventListener('mouseleave', () => {
-      document.getElementById('vspace-tip').style.display = 'none';
-    });
-
-    async function refreshVSpace() {
-      const note = document.getElementById('vspace-note');
-      try {
-        const res = await fetch('/api/vectorspace', {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(lastQueryE ? {query: lastQueryE} : {}),
-        });
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || 'vectorspace failed');
-        renderVSpace(data);
-      } catch (e) {
-        note.innerText = 'vector space unavailable: ' + e.message;
-      }
-    }
-
-    function renderVSpace(data) {
-      const c = document.getElementById('vspace-canvas');
-      const note = document.getElementById('vspace-note');
-      const { ctx, w, h, dpr } = sizeCanvas(c);
-      ctx.clearRect(0, 0, w, h);
-      const pts = data.points || [];
-      if (!pts.length) {
-        note.innerText = 'no signatures in Atlas yet — teach an item in Mode 2';
-        return;
-      }
-      let minX = 1e18, maxX = -1e18, minY = 1e18, maxY = -1e18;
-      pts.forEach(p => {
-        minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
-        minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
-      });
-      if (maxX - minX < 1e-9) { minX -= 0.5; maxX += 0.5; }
-      if (maxY - minY < 1e-9) { minY -= 0.5; maxY += 0.5; }
-      const pad = 24 * dpr;
-      const X = x => pad + ((x - minX) / (maxX - minX)) * (w - 2 * pad);
-      const Y = y => h - pad - ((y - minY) / (maxY - minY)) * (h - 2 * pad);
-      vspaceLayout = [];
-      const rankColors = ['#ffd700', '#c0c0c0', '#cd7f32'];
-      pts.forEach((p, i) => {
-        const isQ = i === data.query_index;
-        const x = X(p.x), y = Y(p.y);
-        vspaceLayout.push({px: x, py: y, label: p.label});
-        ctx.fillStyle = isQ ? '#ffffff' : labelColor(p.label);
-        ctx.beginPath(); ctx.arc(x, y, (isQ ? 5 : 3.5) * dpr, 0, 2 * Math.PI); ctx.fill();
-        if (isQ) {
-          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5 * dpr;
-          ctx.beginPath(); ctx.arc(x, y, 9 * dpr, 0, 2 * Math.PI); ctx.stroke();
-          const r = 4 * dpr;
-          ctx.beginPath();
-          ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r);
-          ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r);
-          ctx.stroke();
-        } else {
-          const rank = lastMatchLabels.indexOf(p.label);
-          if (rank >= 0 && rank < 3) {
-            ctx.strokeStyle = rankColors[rank]; ctx.lineWidth = 1.5 * dpr;
-            ctx.beginPath(); ctx.arc(x, y, 7 * dpr, 0, 2 * Math.PI); ctx.stroke();
-            ctx.fillStyle = rankColors[rank]; ctx.font = `${10 * dpr}px monospace`;
-            ctx.fillText(String(rank + 1), x + 9 * dpr, y - 7 * dpr);
-          }
-        }
-      });
-      const counts = {};
-      pts.forEach((p, i) => {
-        if (i !== data.query_index) counts[p.label] = (counts[p.label] || 0) + 1;
-      });
-      note.innerHTML = Object.keys(counts).sort().map(l =>
-        `<span style="display:inline-block; margin:2px 10px 2px 0; color:#8b949e;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${labelColor(l)}; margin-right:5px;"></span>${l} ×${counts[l]}</span>`
-      ).join('') + `<span style="color:#6e7681;">${data.n} signature${data.n === 1 ? '' : 's'} · 2-D PCA of cosine space · × = current query · numbered rings = top-3 neighbors</span>`;
-    }
-
-    function renderDecision(data) {
-      document.getElementById('decision-card').style.display = 'block';
-      document.getElementById('pred-label').innerText = data.prediction || 'unknown';
-      const pct = Math.round((data.confidence || 0) * 100);
-      document.getElementById('pred-conf-bar').style.width = pct + '%';
-      document.getElementById('pred-conf-bar').style.background = data.low_confidence ? '#d29922' : '#3fb950';
-      document.getElementById('pred-conf-text').innerText =
-        `confidence ${pct}%${data.low_confidence ? ' — LOW, consider teaching this item' : ''}` +
-        (data.mock ? '  (MOCK)' : '');
-      setNeighbors(document.getElementById('pred-neighbors'), data.matches || []);
-      renderFeatureSpace(data);
-      renderWhy(data);
-      lastQueryE = (data.e && data.e.length === 10) ? data.e : null;
-      lastMatchLabels = (data.matches || []).slice(0, 3).map(m => m.label);
-      refreshVSpace();
-      const dq = data.diagnostics || {};
-      document.getElementById('predict-status').innerText = `Done — ${data.csv}` +
-        (data.mock ? '  (MOCK data, not live hardware)' : '') +
-        (dq.tare_flags && dq.tare_flags.length ? `  ⚠ tare flags: ${dq.tare_flags.join(',')}` : '');
-    }
-
-    async function pollStatus() {
-      try {
-        const res = await fetch('/api/status');
-        const s = await res.json();
-        const b = document.getElementById('atlas-badge');
-        b.innerText = s.atlas_configured ? 'ATLAS: SYNCED' : 'ATLAS: NO URI';
-        b.style.background = s.atlas_configured ? '#238636' : '#da3633';
-        document.getElementById('mock-badge').style.display = s.mock ? 'inline-block' : 'none';
-        document.getElementById('build-info').innerText = 'build ' + (s.git_sha || 'unknown');
-        refreshVSpace();
-        if (s.last_prediction && s.last_prediction.ok) renderDecision(s.last_prediction);
-        const busy = s.cycle_busy;
-        for (const id of ['predict-btn', 'teach-btn']) {
-          const btn = document.getElementById(id);
-          if (btn) btn.disabled = busy;
-        }
-        if (busy) {
-          document.getElementById('predict-status').innerText = 'Swirl macro running on the robot…';
-        }
-      } catch (e) { /* dashboard stays usable offline */ }
-    }
-
-    function setNeighbors(el, matches) {
-      el.innerHTML = matches.map((m, i) =>
-        `<div>${i + 1}. ${m.label} — ${(m.similarity * 100).toFixed(1)}% similarity</div>`
-      ).join('');
-    }
-
-    async function runPredict() {
-      const btn = document.getElementById('predict-btn');
-      const status = document.getElementById('predict-status');
-      btn.disabled = true;
-      document.getElementById('decision-card').style.display = 'none';
-      const t0 = Date.now();
-      const tick = () => { status.innerText = `Running pick-up → swirl → place… ${Math.round((Date.now() - t0) / 1000)}s elapsed`; };
-      tick();
-      const timer = setInterval(tick, 1000);
-      try {
-        const res = await fetch('/api/cycle/predict', { method: 'POST' });
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || 'prediction failed');
-        renderDecision(data);
-      } catch (e) {
-        status.innerText = 'Error: ' + e.message;
-      } finally {
-        clearInterval(timer);
-        btn.disabled = false;
-      }
-    }
-
-    function setTeachLabel(name) {
-      document.getElementById('teach-label-input').value = name;
-    }
-
-    async function teachItem() {
-      const input = document.getElementById('teach-label-input');
-      const btn = document.getElementById('teach-btn');
-      const status = document.getElementById('teach-status');
-      const name = input.value.trim();
-      if (!name) { status.innerText = 'Enter an item name first.'; return; }
-      btn.disabled = true;
-      const t0 = Date.now();
-      const tick = () => { status.innerText = `Teaching "${name}" — running swirl macro… ${Math.round((Date.now() - t0) / 1000)}s elapsed`; };
-      tick();
-      const timer = setInterval(tick, 1000);
-      try {
-        const res = await fetch('/api/cycle/teach', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ item_name: name }),
-        });
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || 'teach failed');
-        status.innerText = data.mock
-          ? `✓ (MOCK) "${data.label}" recorded — not saved to Atlas.`
-          : `✓ Signature saved! "${data.label}" indexed in MongoDB (sig ${String(data.sig_id).slice(-6)}).`;
-        input.value = '';
-        refreshVSpace();
-      } catch (e) {
-        status.innerText = 'Error: ' + e.message;
-      } finally {
-        clearInterval(timer);
-        btn.disabled = false;
-      }
-    }
-
-    async function abortCycle() {
-      const res = await fetch('/api/cycle/abort', { method: 'POST' });
-      const data = await res.json();
-      document.getElementById('predict-status').innerText =
-        data.aborted ? 'Cycle aborted.' : 'No cycle running.';
-    }
-  </script>
-  <div id="build-info" style="text-align:center; color:#6e7681; font-size:0.7rem; padding:12px;">build …</div>
-</body>
-</html>
-"""
+HTML_PAGE = _load_index_html()
 
 
 async def handle_index(request):
@@ -1221,6 +538,25 @@ async def _mock_predict():
         sim = float(np.dot(e_q, e_r))  # both L2-normalized → cosine similarity
         matches.append({"label": row["label"], "similarity": round(max(0.0, sim), 3)})
     matches.sort(key=lambda m: m["similarity"], reverse=True)
+    margin = (matches[0]["similarity"] - matches[1]["similarity"]) if len(matches) > 1 else 1.0
+    ambiguous = margin < 0.02
+    import atlas as _a
+    _mat = {}
+    for m in matches:
+        _mat.setdefault(_a.material_of(m["label"]), []).append(m["similarity"])
+    _mat_ranked = sorted(((k, sum(v) / len(v)) for k, v in _mat.items()),
+                         key=lambda t: t[1], reverse=True)
+    _best_mat, _best_mat_conf = _mat_ranked[0]
+    _mat_margin = _best_mat_conf - _mat_ranked[1][1] if len(_mat_ranked) > 1 else 1.0
+    _mat_ambiguous = _mat_margin < 0.02
+    _cat = {}
+    for m in matches:
+        _cat.setdefault(_a.category_of(m["label"]), []).append(m["similarity"])
+    _cat_ranked = sorted(((k, sum(v) / len(v)) for k, v in _cat.items()),
+                         key=lambda t: t[1], reverse=True)
+    _best_cat, _best_cat_conf = _cat_ranked[0]
+    _cat_margin = _best_cat_conf - _cat_ranked[1][1] if len(_cat_ranked) > 1 else 1.0
+    _cat_ambiguous = _cat_margin < 0.02
     feats = feature_extractor.extract_features(df)
     ts = feature_extractor.swirl_window_series(df)
     return {
@@ -1228,7 +564,21 @@ async def _mock_predict():
         "csv": os.path.basename(name),
         "prediction": str(pred),
         "confidence": float(round(float(conf), 3)),
-        "low_confidence": bool(float(conf) < 0.82),
+        "low_confidence": bool(float(conf) < 0.82) or ambiguous,
+        "ambiguous": ambiguous,
+        "margin": round(margin, 4),
+        "material": _best_mat,
+        "material_confidence": round(_best_mat_conf, 3),
+        "material_low_confidence": bool(_best_mat_conf < 0.82) or _mat_ambiguous,
+        "material_ambiguous": _mat_ambiguous,
+        "material_margin": round(_mat_margin, 4),
+        "material_matches": [{"material": k, "score": round(s, 4)} for k, s in _mat_ranked],
+        "category": _best_cat,
+        "category_confidence": round(_best_cat_conf, 3),
+        "category_low_confidence": bool(_best_cat_conf < 0.82) or _cat_ambiguous,
+        "category_ambiguous": _cat_ambiguous,
+        "category_margin": round(_cat_margin, 4),
+        "category_matches": [{"category": k, "score": round(s, 4)} for k, s in _cat_ranked],
         "matches": matches,
         "features": {"names": feature_extractor.FEATURE_NAMES,
                      "z": [round(float(v), 4) for v in feats["z"]],
@@ -1248,28 +598,246 @@ async def _mock_teach(label: str):
             "note": "mock mode — not saved to Atlas"}
 
 
+async def handle_simulate_candidates(request):
+    """List recordings suitable for simulated replay (have a SWIRL phase)."""
+    import pandas as pd
+    out = []
+    for path in sorted(glob.glob(os.path.join(RECORDINGS_DIR, "recording_*.csv"))):
+        try:
+            df = pd.read_csv(path, usecols=["phase", "object_label", "elapsed_sec"])
+        except Exception:
+            continue
+        if "SWIRL" not in set(df["phase"]):
+            continue
+        out.append({
+            "csv": os.path.basename(path),
+            "label": str(df["object_label"].iloc[0]),
+            "seconds": round(float(df["elapsed_sec"].max()), 1),
+            "rows": len(df),
+        })
+    out.sort(key=lambda r: r["csv"], reverse=True)
+    return web.json_response({"ok": True, "candidates": out})
+
+
+async def _simulate_run(csv_path: str, speed: float = 1.0):
+    """Simulated demo mode: replay a recording through the SSE stream at
+    native cadence (scaled by `speed`), then run the REAL extract → Atlas
+    pipeline on it. No robot needed; the dashboard animates like a live run.
+    Returns the full prediction payload with mode="simulate" and the true
+    label (from the recording) for the demo reveal.
+    """
+    global _cycle_status, _sim_state
+    import pandas as pd
+    df = pd.read_csv(csv_path)
+    label = str(df["object_label"].iloc[0]) if "object_label" in df.columns else "unknown"
+    taus = df[[f"tau{i}_nm" for i in range(1, 7)]].to_numpy(dtype=float)
+    base = taus[0]
+    qs = df[[f"q{i}_deg" for i in range(1, 7)]].to_numpy(dtype=float) if "q1_deg" in df.columns else None
+    tcps = df[["tcp_x_mm", "tcp_y_mm", "tcp_z_mm"]].to_numpy(dtype=float) if "tcp_x_mm" in df.columns else None
+    times = df["elapsed_sec"].to_numpy(dtype=float) if "elapsed_sec" in df.columns else None
+    phases = df["phase"].tolist() if "phase" in df.columns else ["SWIRL"] * len(df)
+
+    _cycle_status = "running"
+    total = float(times[-1] - times[0]) if times is not None else len(df) * 0.3
+    for i in range(len(df)):
+        if _cycle_status == "aborted":
+            _sim_state = None
+            return {"ok": False, "error": "simulation aborted"}
+        tau = [round(float(v), 3) for v in taus[i]]
+        sample = {
+            "t": round(float(times[i]), 2) if times is not None else round(i * 0.3, 2),
+            "raw": tau,
+            "smooth": tau,
+            "deltas": [round(float(taus[i][j] - base[j]), 4) for j in range(6)],
+            "phase": phases[i],
+            "stage": _PHASE_TO_STAGE.get(phases[i], "travel"),
+            "simulated": True,
+            "connected": True,
+        }
+        if qs is not None:
+            sample["q_deg"] = [round(float(v), 2) for v in qs[i]]
+        if tcps is not None:
+            sample["tcp_mm"] = [round(float(v), 1) for v in tcps[i]]
+        for q in list(state.subscribers):
+            try:
+                q.put_nowait(sample)
+            except asyncio.QueueFull:
+                pass
+        _sim_state = {"csv": os.path.basename(csv_path), "label": label,
+                      "stage": sample["stage"], "phase": phases[i],
+                      "progress": min(1.0, (float(times[i]) - float(times[0])) / total) if total > 0 else 0,
+                      "speed": speed}
+        if i + 1 < len(df) and times is not None:
+            dt = (float(times[i + 1]) - float(times[i])) / max(speed, 0.1)
+            if dt > 0:
+                await asyncio.sleep(min(dt, 1.0))
+    # Replay done — run the real pipeline on the replayed recording.
+    _sim_state = {"csv": os.path.basename(csv_path), "label": label,
+                  "stage": "predict", "phase": "PREDICT",
+                  "progress": 1.0, "speed": speed}
+    try:
+        feats = feature_extractor.extract_features(df)
+        ts = feature_extractor.swirl_window_series(df)
+        try:
+            a = _atlas()
+            q = embedder.embed(df)
+            res = a.identify(q, top_k=7)
+            if embedder.EMBEDDER == "hand":
+                try:
+                    res = a.predict_lda(feats["z"])
+                except Exception as e:
+                    print(f"[simulate] LDA unavailable ({e}); using vector search")
+        except Exception as e:
+            print(f"[simulate] Atlas unreachable ({type(e).__name__}); local k-NN fallback")
+            import predict_mystery as pm
+            import atlas as _a
+            recs = pm.load_real_recordings()
+            ref, scaler = pm.build_reference(recs)
+            pred, conf, qvec, neigh, ndist = pm.predict(df, ref, scaler, k=3)
+            res = {"label": pred, "prediction": pred, "decider": "local-knn",
+                   "confidence": float(conf), "low_confidence": False, "ambiguous": False,
+                   "margin": 1.0,
+                   "material": _a.material_of(pred), "material_confidence": float(conf),
+                   "material_low_confidence": False, "material_ambiguous": False,
+                   "material_margin": 1.0, "material_matches": [],
+                   "category": _a.category_of(pred), "category_confidence": float(conf),
+                   "category_low_confidence": False, "category_ambiguous": False,
+                   "category_margin": 1.0,
+                   "neighbors": [{"label": r["label"]} for _, r in neigh.iterrows()],
+                   "matches": [{"label": r["label"], "score": 0.5} for _, r in neigh.iterrows()]}
+    except Exception:
+        _sim_state = None
+        _cycle_status = "error"
+        raise
+    _sim_state = None
+    _cycle_status = "done"
+    return {
+        "ok": True,
+        "mode": "simulate",
+        "simulated": True,
+        "true_label": label,
+        "csv": os.path.basename(csv_path),
+        "decider": res.get("decider", "vector"),
+        "embedder": embedder.EMBEDDER,
+        "prediction": res["label"],
+        "confidence": round(res["confidence"], 3),
+        "low_confidence": res["low_confidence"],
+        "ambiguous": res.get("ambiguous", False),
+        "margin": res.get("margin", 1.0),
+        "material": res["material"],
+        "material_confidence": round(res["material_confidence"], 3),
+        "material_low_confidence": res["material_low_confidence"],
+        "material_ambiguous": res.get("material_ambiguous", False),
+        "material_margin": res.get("material_margin", 1.0),
+        "material_matches": res.get("material_matches", []),
+        "category": res["category"],
+        "category_confidence": round(res["category_confidence"], 3),
+        "category_low_confidence": res["category_low_confidence"],
+        "category_ambiguous": res.get("category_ambiguous", False),
+        "category_margin": res.get("category_margin", 1.0),
+        "category_matches": res.get("category_matches", []),
+        "matches": [{"label": m["label"], "similarity": round(m["score"], 3)}
+                    for m in res["matches"]],
+        "features": {"names": feature_extractor.FEATURE_NAMES,
+                     "z": [round(float(v), 4) for v in feats["z"]],
+                     "descriptions": feature_extractor.FEATURE_DESCRIPTIONS},
+        "e": [float(v) for v in feats["e"]],
+        "timeseries": ts,
+        "diagnostics": feats["diagnostics"],
+    }
+
+
 async def handle_cycle_predict(request):
     """Mode 1: run the swirl macro on a mystery cup → features → Atlas $vectorSearch."""
     global _last_prediction
     if _cycle_lock.locked():
         return web.json_response({"ok": False, "error": "a cycle is already running"}, status=409)
+    global _cycle_status
+    # Demo mode: "live" runs the robot; "simulate" replays a recorded
+    # swirl through the SSE stream AND the real extract → Atlas pipeline
+    # (the no-robot fallback). Chosen per-request so the presenter can
+    # switch between them without restarting.
+    mode = "live"
+    sim_csv = None
+    sim_speed = 1.0
+    if not MOCK_MODE:
+        try:
+            body = await request.json()
+            if isinstance(body, dict) and body.get("mode") in ("simulate", "playback"):
+                mode = "simulate"
+                sim_speed = float(body.get("speed", 1.0) or 1.0)
+                req_csv = body.get("csv")
+                if req_csv:
+                    cand = os.path.join(RECORDINGS_DIR, os.path.basename(req_csv))
+                    sim_csv = cand if os.path.isfile(cand) else None
+        except Exception:
+            pass
     async with _cycle_lock:
         try:
             if MOCK_MODE:
                 result = await _mock_predict()
+            elif mode == "simulate":
+                csv_path = sim_csv or _playback_csv()
+                if not csv_path:
+                    return web.json_response(
+                        {"ok": False, "error": "no recordings available for simulation"},
+                        status=409)
+                result = await _simulate_run(csv_path, speed=sim_speed)
+                if not result.get("ok"):
+                    return web.json_response(result, status=409)
             else:
                 csv_path = await _run_swirl_macro("mystery")
                 df = pd.read_csv(csv_path)
                 feats = feature_extractor.extract_features(df)
                 ts = feature_extractor.swirl_window_series(df)
                 a = _atlas()
-                res = a.identify(feats["e"], top_k=3)
+                q = embedder.embed(df)
+                if embedder.EMBEDDER != "hand":
+                    # The vector space changed with the embedder; querying a
+                    # library built in another space returns silent garbage.
+                    # Fail loudly instead.
+                    tags = set(a.get_db().signatures.distinct("properties.embedder") or [])
+                    tags.discard(None)
+                    if tags and embedder.EMBEDDER not in tags:
+                        return web.json_response({"ok": False, "error": (
+                            f"Atlas library built with embedder(s) {sorted(tags)}; "
+                            f"FEELS_EMBEDDER={embedder.EMBEDDER}. Rebuild with: "
+                            f"FEELS_EMBEDDER={embedder.EMBEDDER} "
+                            f"python teach_csv.py --force --require-swirl recordings/"
+                        )}, status=409)
+                res = a.identify(q, top_k=7)
+                # Supervised head decides (measured ~2x the retrieval accuracy
+                # on the same features); vector search stays as the fallback
+                # and still powers the vector-space plot. LDA trains on the
+                # 10-D hand features, so it only applies when EMBEDDER=hand.
+                if embedder.EMBEDDER == "hand":
+                    try:
+                        res = a.predict_lda(feats["z"])
+                    except Exception as e:
+                        print(f"[predict] LDA unavailable ({e}); using vector search")
                 result = {
                     "ok": True,
+                    "mode": mode,
                     "csv": os.path.basename(csv_path),
+                    "decider": res.get("decider", "vector"),
+                    "embedder": embedder.EMBEDDER,
                     "prediction": res["label"],
                     "confidence": round(res["confidence"], 3),
                     "low_confidence": res["low_confidence"],
+                    "ambiguous": res.get("ambiguous", False),
+                    "margin": res.get("margin", 1.0),
+                    "material": res["material"],
+                    "material_confidence": round(res["material_confidence"], 3),
+                    "material_low_confidence": res["material_low_confidence"],
+                    "material_ambiguous": res.get("material_ambiguous", False),
+                    "material_margin": res.get("material_margin", 1.0),
+                    "material_matches": res.get("material_matches", []),
+                    "category": res["category"],
+                    "category_confidence": round(res["category_confidence"], 3),
+                    "category_low_confidence": res["category_low_confidence"],
+                    "category_ambiguous": res.get("category_ambiguous", False),
+                    "category_margin": res.get("category_margin", 1.0),
+                    "category_matches": res.get("category_matches", []),
                     "matches": [{"label": m["label"], "similarity": round(m["score"], 3)}
                                 for m in res["matches"]],
                     "features": {"names": feature_extractor.FEATURE_NAMES,
@@ -1301,15 +869,78 @@ async def handle_cycle_teach(request):
             if MOCK_MODE:
                 return web.json_response(await _mock_teach(label))
             csv_path = await _run_swirl_macro(label)
-            feats = feature_extractor.extract_features(pd.read_csv(csv_path))
+            df = pd.read_csv(csv_path)
+            feats = feature_extractor.extract_features(df)
             a = _atlas()
             saved = a.teach(
-                label, feats["e"], motion_type="swirl_macro", session="thu",
-                properties={"tare_flags": feats["diagnostics"]["tare_flags"],
+                label, embedder.embed(df), motion_type="swirl_macro", session="thu",
+                properties={"embedder": embedder.EMBEDDER,
+                            "tare_flags": feats["diagnostics"]["tare_flags"],
                             "phase_source": feats["diagnostics"]["phase_source"],
-                            "csv": os.path.basename(csv_path)})
+                            "csv": os.path.basename(csv_path),
+                            "z": [round(float(v), 4) for v in feats["z"]]})
             return web.json_response({
                 "ok": True, "label": label, "csv": os.path.basename(csv_path),
+                "sig_id": saved.get("sig_id"),
+                "diagnostics": feats["diagnostics"],
+            })
+        except Exception as e:
+            return web.json_response({"ok": False, "error": str(e)[:500]}, status=500)
+
+
+async def _mock_correct(label: str):
+    """Mock correction: pretend to save the true label (nothing touches Atlas)."""
+    import uuid
+    await asyncio.sleep(MOCK_DELAY_SEC)
+    return {"ok": True, "mock": True, "label": label, "was": None,
+            "csv": None, "sig_id": f"mock-{uuid.uuid4().hex[:8]}",
+            "note": "mock mode — not saved to Atlas"}
+
+
+async def handle_cycle_correct(request):
+    """Teach the true label for the most recent prediction's recording.
+
+    A wrong prediction is the most valuable teaching signal: instead of
+    re-running the macro, reuse the just-recorded mystery CSV and store it
+    under the true label. Recorded as a correction (correction_of) so
+    confusions can be audited later.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    label = _sanitize_label(str(data.get("true_label", "")))
+    if not label or label == "item":
+        return web.json_response({"ok": False, "error": "provide true_label"}, status=400)
+    if _cycle_lock.locked():
+        return web.json_response({"ok": False, "error": "a cycle is already running"}, status=409)
+    async with _cycle_lock:
+        try:
+            if MOCK_MODE:
+                return web.json_response(await _mock_correct(label))
+            last = _last_prediction or {}
+            csv_name = last.get("csv")
+            if not csv_name:
+                return web.json_response(
+                    {"ok": False, "error": "no prediction yet — run Mode 1 first"}, status=400)
+            csv_path = os.path.join(RECORDINGS_DIR, os.path.basename(csv_name))
+            if not os.path.isfile(csv_path):
+                return web.json_response(
+                    {"ok": False, "error": f"recording not found: {csv_name}"}, status=404)
+            df = pd.read_csv(csv_path)
+            feats = feature_extractor.extract_features(df)
+            a = _atlas()
+            saved = a.teach(
+                label, embedder.embed(df), motion_type="swirl_macro", session="thu",
+                properties={"embedder": embedder.EMBEDDER,
+                            "tare_flags": feats["diagnostics"]["tare_flags"],
+                            "phase_source": feats["diagnostics"]["phase_source"],
+                            "csv": os.path.basename(csv_path),
+                            "z": [round(float(v), 4) for v in feats["z"]],
+                            "correction_of": last.get("prediction")})
+            return web.json_response({
+                "ok": True, "label": label, "was": last.get("prediction"),
+                "csv": os.path.basename(csv_path),
                 "sig_id": saved.get("sig_id"),
                 "diagnostics": feats["diagnostics"],
             })
@@ -1327,6 +958,9 @@ async def handle_cycle_abort(request):
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             proc.kill()
+    if _cycle_lock.locked():
+        # A cycle is running (live macro or simulated replay) — the
+        # simulate loop watches _cycle_status and bails on "aborted".
         _cycle_status = "aborted"
         return web.json_response({"ok": True, "aborted": True})
     return web.json_response({"ok": True, "aborted": False, "note": "no cycle running"})
@@ -1339,6 +973,8 @@ async def handle_api_status(request):
         "viam_address": VIAM_MACHINE_ADDRESS,
         "atlas_configured": bool(os.getenv("MONGODB_URI")),
         "mock": MOCK_MODE,
+        "sim": _sim_state,
+        "stages": _SIM_STAGES,
         "git_sha": GIT_SHA,
         "last_prediction": _last_prediction,
     })
@@ -1372,9 +1008,22 @@ async def handle_stream(request):
     return response
 
 
+_DOC_PAGES = {"index", "problem", "approach", "prediction", "force", "api", "about", "api_atlas", "api_feature_extractor", "api_embedder", "api_teach_csv"}
+
+
+async def handle_docs(request):
+    """Serve the built-in docs pages (the presentation). /docs and /docs/{page}."""
+    page = request.match_info.get("page", "index")
+    if page not in _DOC_PAGES:
+        raise web.HTTPNotFound()
+    return web.FileResponse(os.path.join(HERE, "docs", f"{page}.html"))
+
+
 async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
     app = web.Application()
     app.router.add_get("/", handle_index)
+    app.router.add_get("/docs", handle_docs)
+    app.router.add_get("/docs/{page}", handle_docs)
     app.router.add_get("/stream", handle_stream)
     app.router.add_post("/tare", handle_tare)
     app.router.add_post("/record/start", handle_record_start)
@@ -1383,27 +1032,50 @@ async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_post("/api/cycle/predict", handle_cycle_predict)
     app.router.add_post("/api/cycle/teach", handle_cycle_teach)
     app.router.add_post("/api/cycle/abort", handle_cycle_abort)
+    app.router.add_post("/api/cycle/correct", handle_cycle_correct)
     app.router.add_get("/api/status", handle_api_status)
+    app.router.add_get("/api/simulate/candidates", handle_simulate_candidates)
     app.router.add_post("/api/vectorspace", handle_vspace)
 
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host, port)
     await site.start()
-    print(f"\n" + "=" * 60)
-    print(f"🚀 ULTRA-PERFORMANT 10s DASHBOARD RUNNING:")
+    print("\n" + "=" * 60)
+    print("🚀 ULTRA-PERFORMANT 10s DASHBOARD RUNNING:")
     print(f"   -> Open in your browser:  http://localhost:{port}")
     print("=" * 60 + "\n")
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Ultra-performant 10s rolling realtime visualizer.")
+    parser = argparse.ArgumentParser(
+        description="feels dashboard: 2-mode web UI for teaching and identifying cup contents.",
+        epilog="""examples:
+  python realtime_plot.py --port 8080          # live: needs robot + Atlas (.env)
+  FEELS_MOCK=1 python realtime_plot.py         # mock: full UI on recorded data,
+                                               # no robot or Atlas needed
+
+Environment:
+  FEELS_MOCK=1        mock mode — predict/teach run on bundled recordings,
+                      purple MOCK badge is always shown
+  FEELS_MACRO_CMD     shell template for the data-collection macro
+                      (default: repeatable_grasp.py --object {label} --record --cycles 1 --swirl-smooth)
+  MONGODB_URI         Atlas connection string (live mode)
+  MONGODB_DATABASE    database name (default: physical_ai_db)
+
+Endpoints: / (dashboard), /docs (docs site), POST /api/cycle/predict|teach|correct|abort,
+GET /api/status, POST /api/vectorspace.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--port", type=int, default=8080, help="Web dashboard port (default: 8080)")
     parser.add_argument("--delay-ms", type=int, default=200, help="Target delay between polls in ms (default: 200)")
     args = parser.parse_args()
 
     await start_web_server(port=args.port)
-    await robot_polling_loop(target_delay_ms=args.delay_ms)
+    if MOCK_MODE:
+        print("[mock] pure demo playback: robot polling disabled, no Viam dial.")
+        await asyncio.Event().wait()  # serve forever without a robot
+    else:
+        await robot_polling_loop(target_delay_ms=args.delay_ms)
 
 
 if __name__ == "__main__":

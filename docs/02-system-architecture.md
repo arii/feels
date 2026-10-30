@@ -2,7 +2,7 @@
 
 > [!IMPORTANT]
 > **Key Architectural Scoping Decisions:**
-> - **Motion Primitive:** Single deterministic sequence: **Pick Up $\to$ Swirl $\to$ Place**.
+> - **Motion Primitive:** Single deterministic sequence: **Pick Up $\to$ Swirl $\to$ Place $\to$ Back-off**.
 > - **No Pushing or Impedance Modes:** Table pushing and cup sliding are eliminated to avoid non-holonomic slippage and tipping.
 > - **No Shake or Tilt:** Replaced with smooth horizontal orbital swirling to safely excite fluid and solid dynamic signatures.
 > - **No Vision-Based Grasping:** Replaced by deterministic taped-square arm waypoints for 100% repeatable physical trials.
@@ -28,36 +28,36 @@
 
 ## System Architecture Components
 
-### 1. Hardware & Motion Execution (Fixed Pick $\to$ Swirl $\to$ Place)
+### 1. Hardware & Motion Execution (Fixed Pick $\to$ Swirl $\to$ Place $\to$ Back-off)
 - **Taped Square Workspace:** Cup is placed on a designated taped target, guaranteeing fixed Cartesian coordinates.
-- **Arm-Position-Saver Waypoints:** Standardized positions (`home-pose`, `approach`, `grasp`, `travel`, `place`).
+- **Arm-Position-Saver Waypoints:** Standardized positions (`home-pose`, `approach`, `grasp`, `travel`, `place`, `back-off`).
 - **Fixed Trajectory Pipeline:**
   1. `APPROACH` $\to$ Align gripper above cup.
   2. `GRASP` $\to$ Descend and close gripper jaws.
   3. `LIFT` $\to$ Vertical lift to elevated travel altitude.
-  4. `STATIC_HOLD` $\to$ Measure steady-state gravitational torque offset $\Delta \tau_{\text{gravity}}$ for net mass.
-  5. `SWIRL` $\to$ Execute a smooth horizontal circular/orbital swirl motion (exciting fluid vortex lag, solid chatter, and centripetal torque reactions).
-  6. `PLACE` $\to$ Descend back to table square.
-  7. `RELEASE` $\to$ Open jaws and retract arm to home pose.
+  4. `SWIRL` $\to$ Smooth horizontal circular/orbital swirl at the travel pose (exciting fluid vortex lag, solid chatter, and centripetal torque reactions).
+  5. `PLACE` $\to$ Descend to table square, open jaws.
+  6. `BACK_OFF` $\to$ Retreat clear of the placed cup.
+  7. `RETRACT` $\to$ Return to travel altitude and home pose.
 
-*(Archived: Cartesian impedance pushing, table shuffles, aggressive sine shakes, and tilt sweeps).*
+*(Archived: Cartesian impedance pushing, table shuffles, aggressive sine shakes, and tilt sweeps.)*
 
 ### 2. High-Rate Telemetry Synchronization
 - **TelemetryRecorder (`repeatable_grasp.py`):**
   - Continuous asynchronous polling of 6 actuator torques ($\tau_1 \dots \tau_6$), joint angles ($q_1 \dots q_6$), Cartesian TCP coordinates, and gripper feedback.
-  - Synchronized phase tagging: `INIT`, `APPROACH`, `REACH_GRASP`, `GRIPPER_CLOSE`, `LIFT_TO_TRAVEL`, `TRAVEL_STABLE_HOLD`, `SWIRL_EXCITATION`, `DESCEND_PLACE`, `GRIPPER_OPEN`, `RETURN_HOME`.
+  - Synchronized phase tagging: `INIT`, `APPROACH`, `REACH_GRASP`, `GRIPPER_CLOSE`, `LIFT_TO_TRAVEL`, `SWIRL`, `DESCEND_PLACE`, `GRIPPER_OPEN`, `BACK_OFF`, `RETRACT_TRAVEL`, `RETURN_HOME`.
   - Automatic standardization and export to `recordings/recording_{timestamp}_{label}.csv`.
 
 ### 3. Signal Processing & Feature Extraction Engine (`feature_extractor.py`)
-- Direct algorithmic transformation of the multi-phase rollout into a 10-dimensional physical feature vector $z$:
-  1. **Static Lift & Hold:** Net mass offset $\Delta \tau_{\text{gravity}} = \bar{\tau}_{3,\text{hold}} - \tau_{\text{tare}}$.
-  2. **Swirl Dynamic Variance:** Torque variance $\text{Var}(\tau_3)_{\text{swirl}}$ across orbital motion.
-  3. **FFT Peak Frequency & Power:** Dominant resonant frequencies $f_{\text{peak}}$, $P_{\text{peak}}$.
-  4. **High-Frequency Rattle Energy:** Integrated spectral power in the 5–25 Hz band ($E_{\text{rattle}}$) to flag candy and loose solids.
-  5. **Swirl Phase Lag ($\Delta \phi_{\text{lag}}$):** Cross-correlation phase shift between commanded orbit and measured torque response to detect fluid slosh/vortex vs. rigid mass.
-  6. **Centripetal / Tangential Coupling:** Ratio of lateral to longitudinal torque reactions.
-  7. **Gripper Compliance ($\Delta g_{\text{grip}}$):** Jaw stroke change during motion.
-- **Normalized Metric Embedding:** $e = z / \|z\|_2 \in \mathbb{S}^9$ (unit-norm cosine vector).
+- Direct algorithmic transformation of the multi-phase rollout into the real
+  10-dimensional physical feature vector $z$ (`FEATURE_NAMES` in code):
+  `mass_j2`, `mass_j3` (static gravity offsets — tare-dominated, see the audit),
+  `swirl_var_j2`, `swirl_var_j3` (torque variance during swirl),
+  `swirl_ptp_j3` (peak-to-peak swing), `phase_lag_s` (xcorr lag of TCP speed
+  vs J3 residual, ±2 s), `rattle_e` (observable band only — 5–25 Hz **not**
+  reachable at 4–5 Hz sampling, flagged `rattle_band_limited`), `grip_comp`,
+  `lift_dyn_j3`, `swirl_speed`. Per-feature scaled, L2-normalized to the
+  embedding $e$. Full table in `05-ml-pipeline.md`.
 
 ### 4. Database & Vector Memory (MongoDB Atlas)
 - **`signatures` Collection:** Stores document embeddings with vector search index `cup_dynamics_index` (numDimensions: 10, similarity: cosine).
@@ -81,8 +81,8 @@
 | Step | User Action | Robot Action | UI Screen State | Backend / Atlas State |
 |------|-------------|--------------|-----------------|----------------------|
 | 1. Standby & Tare | Places cup on taped square | Holds home pose | **Status**: live torque sparklines | Telemetry streaming at 4–5 Hz |
-| 2. Run Routine | Clicks "RUN SWIRL MACRO & PREDICT" | Executes pick up → swirl → place | **Status**: elapsed-second ticker | Buffers telemetry with phase tags |
+| 2. Run Routine | Clicks "RUN SWIRL MACRO & PREDICT" | Executes pick up → swirl → place → back-off | **Status**: elapsed-second ticker | Buffers telemetry with phase tags |
 | 3. Swirl Excitation | Observes smooth circular swirl | Sweeps circular orbit in horizontal plane | Live joint-torque sparklines react | Buffers telemetry with phase tags |
-| 4. Placement & Settle | Robot places cup on square | Descends, opens gripper, retracts to home | Macro completes | Finalizes CSV dataset in `recordings/` |
+| 4. Placement & Back-off | Robot places cup, opens gripper, backs off clear | Descends, opens gripper, retreats to back-off, returns home | Macro completes | Finalizes CSV dataset in `recordings/` |
 | 5. Detection Report | Inspects verdict card on dashboard | Stationary at home pose | **Verdict**: predicted label, confidence, top-3 neighbors, feature-space bars, "why" physics, query in vector-space plot | `feature_extractor.py` generates $e$; Atlas `$vectorSearch` returns k-NN results |
 | 6. Online Teaching (Optional) | Picks a preset chip or types a label, clicks "RUN SWIRL & SAVE TO ATLAS" | Stationary | **Status**: "Signature saved — indexed in MongoDB" | Inserts embedding into `signatures` |

@@ -49,8 +49,8 @@ FEATURE_NAMES = [
 
 # Plain-language meaning of each feature, shown in the dashboard.
 FEATURE_DESCRIPTIONS = {
-    "mass_j2": "Static gravity torque offset at shoulder (J2) — payload mass estimate",
-    "mass_j3": "Static gravity torque offset at elbow (J3) — payload mass estimate",
+    "mass_j2": "Static gravity torque offset at shoulder (J2) — payload mass estimate [excluded from matching: tare noise exceeds payload signal]",
+    "mass_j3": "Static gravity torque offset at elbow (J3) — payload mass estimate [excluded from matching: tare noise exceeds payload signal]",
     "swirl_var_j2": "Torque variance at shoulder during swirl — slosh / loose-content energy",
     "swirl_var_j3": "Torque variance at elbow during swirl",
     "swirl_ptp_j3": "Peak-to-peak torque swing at elbow during swirl — shifting mass",
@@ -58,26 +58,53 @@ FEATURE_DESCRIPTIONS = {
     "rattle_e": "High-frequency torque energy — rattle (band-limited by 4-5 Hz sampling)",
     "grip_comp": "Gripper compliance change under load — squishy vs rigid contents",
     "lift_dyn_j3": "Dynamic torque at elbow during lift — inertial mass cue",
-    "swirl_speed": "Mean TCP speed during swirl — excitation normalization",
+    "swirl_speed": "Mean TCP speed during swirl — excitation normalization [excluded from matching: measures the fixed macro's drive, not contents]",
 }
 
 # Per-feature scales so the L2-normalized embedding isn't dominated by the
 # largest-magnitude raw feature (swirl_speed ~160 mm/s vs variances ~1-5).
+# Calibrated on swirl-protocol data ONLY (--calibrate --require-swirl);
+# mixing protocols confounds motion with contents.
+#
+# Per-feature weights: 0.0 excludes a feature from the embedding (it stays in
+# z for display/diagnostics). mass_j2/mass_j3 are proven dead — the audit
+# found static hold torques identical across contents to 3 decimals, i.e.
+# payload signal (~1 N-m) is below tare noise (~10 N-m). swirl_speed is a
+# nuisance by construction: it measures how hard the fixed macro drives,
+# which is ~constant across contents, so it only compresses cosine
+# similarities toward 1. The embedding is effectively 7-D (index stays 10-D
+# with zeros in the excluded dims — no migration needed).
+FEATURE_WEIGHTS = {
+    "mass_j2": 0.0,
+    "mass_j3": 0.0,
+    "swirl_var_j2": 1.0,
+    "swirl_var_j3": 1.0,
+    "swirl_ptp_j3": 1.0,
+    "phase_lag_s": 1.0,
+    "rattle_e": 1.0,
+    "grip_comp": 1.0,
+    "lift_dyn_j3": 1.0,
+    "swirl_speed": 0.0,
+}
 # Calibrated as the 90th percentile of |z| over the recordings available on
 # 2026-10-29 (n=8, only one true SWIRL recording). RECALIBRATE on the P0
 # swirl dataset, then freeze — rescaling invalidates old Atlas signatures.
 # Regenerate with:  python feature_extractor.py --calibrate
 FEATURE_SCALES = {
-    "mass_j2": 8.828,
-    "mass_j3": 2.327,
-    "swirl_var_j2": 3.813,
-    "swirl_var_j3": 1.37,
-    "swirl_ptp_j3": 10.93,
-    "phase_lag_s": 1.366,
-    "rattle_e": 165,
-    "grip_comp": 0.7478,
-    "lift_dyn_j3": 3.069,
-    "swirl_speed": 82.66,
+    # Calibrated 2026-10-29 on swirl-only train recordings (n=33, 90th pct of |z|).
+    # The previous values were fallback-protocol calibrated and collapsed every
+    # swirl embedding to ~0.97 cosine (98%-confidence artifact). Reintroduced
+    # to the feat branch after the main-branch rollback (was 84080f0).
+    "mass_j2": 8.978,
+    "mass_j3": 3.244,
+    "swirl_var_j2": 19.866,
+    "swirl_var_j3": 4.883,
+    "swirl_ptp_j3": 16.479,
+    "phase_lag_s": 1.455,
+    "rattle_e": 179.594,
+    "grip_comp": 0.632,
+    "lift_dyn_j3": 4.141,
+    "swirl_speed": 182.422,
 }
 
 
@@ -140,6 +167,20 @@ def _phase_lag(x, y, fs, max_lag_s=2.0):
 
 # ── main extraction ─────────────────────────────────────────────────────
 def extract_features(df):
+    """Compute the 10-D swirl signature and normalized embedding from a recording.
+
+    Reads the SWIRL phase (or falls back to dynamic phases), detrends joint
+    torques against the INIT baseline, and computes the ten physical features
+    (static lift, swirl dynamics, grip/excitation groups).
+
+    Args:
+        df: recording DataFrame with phase, elapsed_sec, tcp_*_mm, tau*_nm columns.
+    Returns:
+        Dict with z (10-D raw feature list), e (L2-normalized embedding list),
+        diagnostics (tare flags, phase source, sample count, sample rate).
+    Raises:
+        ValueError: when required columns are missing.
+    """
     if not {"phase", "elapsed_sec", "tcp_x_mm", "tcp_y_mm", "tau2_nm", "tau3_nm"}.issubset(df.columns):
         raise ValueError("CSV missing required columns (phase, elapsed_sec, tcp_*, tau2/3_nm)")
     fs = _fs(df)
@@ -205,9 +246,11 @@ def extract_features(df):
     ], dtype=float)
     z = np.nan_to_num(z, nan=0.0, posinf=0.0, neginf=0.0)
     scales = np.array([FEATURE_SCALES[n] for n in FEATURE_NAMES], dtype=float)
+    weights = np.array([FEATURE_WEIGHTS[n] for n in FEATURE_NAMES], dtype=float)
     zs = z / np.where(scales > 0, scales, 1.0)   # balanced, unit-ish features
-    norm = np.linalg.norm(zs)
-    e = (zs / norm).tolist() if norm > 1e-12 else [0.0] * len(zs)
+    zw = zs * weights                            # drop dead/nuisance dims
+    norm = np.linalg.norm(zw)
+    e = (zw / norm).tolist() if norm > 1e-12 else [0.0] * len(zw)
 
     diagnostics = {
         "fs_hz": round(float(fs), 2),
@@ -274,7 +317,18 @@ def _calibrate():
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Extract 10-D swirl features + normalized embedding.")
+    """CLI entry: extract features from a CSV or recalibrate FEATURE_SCALES."""
+    ap = argparse.ArgumentParser(
+        description="Extract 10-D swirl features + normalized embedding.",
+        epilog="""examples:
+  python feature_extractor.py recordings/foo.csv          # print z, e, diagnostics
+  python feature_extractor.py --calibrate --require-swirl  # recompute FEATURE_SCALES
+                                                           # from swirl recordings, then
+                                                           # paste the output into FEATURE_SCALES
+
+The 5-25 Hz rattle band is NOT observable at 4-5 Hz cloud sampling;
+diagnostics flags rattle_band_limited honestly.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("csv", nargs="?", help="Telemetry CSV from repeatable_grasp.py --record")
     ap.add_argument("--calibrate", action="store_true",
                     help="recompute FEATURE_SCALES from recordings/ and print them")
