@@ -43,6 +43,16 @@ RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recor
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+def _git_sha():
+    try:
+        out = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                             cwd=HERE, capture_output=True, text=True, timeout=5)
+        return out.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+GIT_SHA = _git_sha()
+
 # ── pick-swirl-place cycle machinery ──────────────────────────────────────
 _cycle_lock = asyncio.Lock()
 _cycle_proc: Optional[subprocess.Popen] = None
@@ -883,6 +893,7 @@ HTML_PAGE = """<!DOCTYPE html>
         b.innerText = s.atlas_configured ? 'ATLAS: SYNCED' : 'ATLAS: NO URI';
         b.style.background = s.atlas_configured ? '#238636' : '#da3633';
         document.getElementById('mock-badge').style.display = s.mock ? 'inline-block' : 'none';
+        document.getElementById('build-info').innerText = 'build ' + (s.git_sha || 'unknown');
         if (s.last_prediction && s.last_prediction.ok) renderDecision(s.last_prediction);
         const busy = s.cycle_busy;
         for (const id of ['predict-btn', 'teach-btn']) {
@@ -953,6 +964,7 @@ HTML_PAGE = """<!DOCTYPE html>
         data.aborted ? 'Cycle aborted.' : 'No cycle running.';
     }
   </script>
+  <div id="build-info" style="text-align:center; color:#6e7681; font-size:0.7rem; padding:12px;">build …</div>
 </body>
 </html>
 """
@@ -1138,6 +1150,7 @@ async def handle_api_status(request):
         "viam_address": VIAM_MACHINE_ADDRESS,
         "atlas_configured": bool(os.getenv("MONGODB_URI")),
         "mock": MOCK_MODE,
+        "git_sha": GIT_SHA,
         "last_prediction": _last_prediction,
     })
 
