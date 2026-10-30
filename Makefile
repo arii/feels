@@ -38,7 +38,11 @@ test: ## offline smoke suite: compile + CLI help + mock dashboard endpoints
 	(curl -sf http://localhost:18099/ -o /dev/null && \
 	 curl -sf -X POST http://localhost:18099/api/cycle/predict -o /dev/null && \
 	 curl -sf http://localhost:18099/docs -o /dev/null && \
-	 curl -sf http://localhost:18099/docs/figures -o /dev/null && \
+	 curl -sf http://localhost:18099/docs/problem -o /dev/null && \
+	 curl -sf http://localhost:18099/docs/approach -o /dev/null && \
+	 curl -sf http://localhost:18099/docs/prediction -o /dev/null && \
+	 curl -sf http://localhost:18099/docs/force -o /dev/null && \
+	 curl -sf http://localhost:18099/docs/api -o /dev/null && \
 	 echo ALL_SMOKE_PASS); \
 	rc=$$?; kill $$(cat /tmp/feels-test.pid) 2>/dev/null || true; \
 	rm -f /tmp/feels-test.pid /tmp/feels-test.log; exit $$rc

@@ -609,7 +609,6 @@ async def _simulate_run(csv_path: str, speed: float = 1.0):
 
     _cycle_status = "running"
     total = float(times[-1] - times[0]) if times is not None else len(df) * 0.3
-    t0 = __import__("time").monotonic()
     for i in range(len(df)):
         if _cycle_status == "aborted":
             _sim_state = None

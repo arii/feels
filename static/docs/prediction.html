@@ -47,7 +47,7 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   quantities in three groups, matched in the 7 informative dimensions.</p>
 
   <h2>The Taught Library</h2>
-  <p>The library holds the taught signatures — 113 at last count, each a 10-D
+  <p>The library holds the taught signatures — 113 at last count (110 in the vector-space plot; 3 mystery held out), each a 10-D
   embedding with its label, material, category, and session tag, stored in
   MongoDB Atlas. Teaching writes a signature; the next prediction searches
   it. The offline evaluation used an 84/21 train/test split of the
@@ -72,19 +72,6 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   Chronos foundation-model embeddings (56% on swirl-only data, the best
   measured). Neither runs live — Chronos needs its own 2304-D index and
   torch on the venue machine.</p>
-  <h3>Encoding bake-off results</h3>
-  <table>
-    <tr><th>Encoding</th><th>Material accuracy (n=21)</th><th>Swirl-only (n=9)</th><th>Notes</th></tr>
-    <tr><td>Hand (10-D)</td><td>24&ndash;29%</td><td>22%</td><td>Deployed baseline; scales recalibrated swirl-only</td></tr>
-    <tr><td>PCA-10</td><td><strong>43%</strong></td><td>33%</td><td>Unsupervised, fit on train torque-deltas only</td></tr>
-    <tr><td>Chronos-2304</td><td>&mdash;</td><td><strong>56%</strong></td><td>Zero-shot time-series foundation model</td></tr>
-  </table>
-  <p style="font-size:0.85rem; color:#8b949e;">Held-out test via <code>atlas.identify</code> ranking (top-5, mean cosine per material).
-  The decision rule mattered more than the encoding: shrinkage-LDA on the hand features reaches
-  52% category / 43% material, roughly 2&times; the kNN retrieval rate on the same features.
-  Absolute accuracy stays near 40&ndash;50% for every method &mdash; the 3.5&nbsp;Hz sampling rate,
-  not the embedding choice, is the bottleneck.</p>
-
 
   <h2>What a Prediction Looks Like</h2>
   <p>A fresh recording comes off the swirl macro. The extractor computes the
