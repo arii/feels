@@ -215,7 +215,13 @@
           <option value="4">4&times;</option>
         </select>
       </div>
-      <div id="stage-strip" style="display:flex; gap:4px; margin:8px 0; align-items:center; font-size:0.72rem; color:#6e7681;"></div>
+      <div id="run-banner" style="display:none; align-items:center; gap:10px; background:#1a2f1a; border:1px solid #3fb950; border-radius:8px; padding:10px 14px; margin:8px 0; font-size:0.9rem;">
+        <span id="run-dot" style="width:12px; height:12px; border-radius:50%; background:#3fb950; animation:pulse 1.2s ease-in-out infinite;"></span>
+        <span id="run-text" style="color:#e6edf3; font-weight:600;">Running…</span>
+        <span id="run-elapsed" style="color:#8b949e; font-family:monospace;"></span>
+      </div>
+      <style>@keyframes pulse { 0%,100% { opacity:1; transform:scale(1);} 50% { opacity:0.4; transform:scale(0.85);} }</style>
+      <div id="stage-strip" style="display:flex; gap:4px; margin:8px 0; align-items:center; font-size:0.85rem; color:#6e7681;"></div>
       <div style="background:#21262d; border-radius:6px; height:8px; margin:6px 0; overflow:hidden; display:none;" id="sim-progress-wrap">
         <div id="sim-progress" style="height:100%; width:0%; background:#58a6ff; transition:width 0.3s;"></div>
       </div>
@@ -776,6 +782,7 @@ function toggleJoints() {
           if (btn) btn.disabled = busy;
         }
         if (busy) {
+          showRunBanner(s.sim ? 'Simulating…' : 'Running swirl macro on the robot…');
           document.getElementById('predict-status').innerText = s.sim
             ? `Simulating — replaying ${s.sim.csv} (${s.sim.stage}…)`
             : 'Swirl macro running on the robot…';
@@ -784,6 +791,7 @@ function toggleJoints() {
           document.getElementById('sim-progress').style.width = Math.round((s.sim.progress || 0) * 100) + '%';
           renderStageStrip(s.sim.stage);
         }
+        if (!busy) hideRunBanner();
       } catch (e) { /* dashboard stays usable offline */ }
     }
 
@@ -791,6 +799,22 @@ function toggleJoints() {
       el.innerHTML = matches.map((m, i) =>
         `<div>${i + 1}. ${m.label} — ${(m.similarity * 100).toFixed(1)}% similarity</div>`
       ).join('');
+    }
+
+    let runT0 = null, runTimer = null;
+    function showRunBanner(text) {
+      document.getElementById('run-banner').style.display = 'flex';
+      document.getElementById('run-text').innerText = text;
+      runT0 = Date.now();
+      clearInterval(runTimer);
+      runTimer = setInterval(() => {
+        const s = Math.round((Date.now() - runT0) / 1000);
+        document.getElementById('run-elapsed').innerText = s + 's elapsed';
+      }, 500);
+    }
+    function hideRunBanner() {
+      document.getElementById('run-banner').style.display = 'none';
+      clearInterval(runTimer);
     }
 
     const SIM_STAGES = ['home', 'approach', 'grasp', 'travel', 'swirl', 'place', 'predict'];
@@ -839,12 +863,14 @@ function toggleJoints() {
       const simSpeed = parseFloat(document.getElementById('sim-speed').value || '1');
       btn.disabled = true;
       document.getElementById('decision-card').style.display = 'none';
+      showRunBanner(simMode ? 'Simulating…' : 'Running pick-up → swirl → place…');
       renderStageStrip(simMode ? 'home' : null);
       const t0 = Date.now();
       const tick = () => {
         status.innerText = simMode
           ? `Simulating — replaying ${simCsv || 'recording'} at ${simSpeed}×… ${Math.round((Date.now() - t0) / 1000)}s elapsed`
           : `Running pick-up → swirl → place… ${Math.round((Date.now() - t0) / 1000)}s elapsed`;
+        hideRunBanner();
       };
       tick();
       const timer = setInterval(tick, 1000);
@@ -891,6 +917,7 @@ function toggleJoints() {
       if (!name) { status.innerText = 'Pick a class first.'; return; }
       btn.disabled = true;
       const t0 = Date.now();
+      showRunBanner(`Teaching "${name}" — swirl macro running…`);
       const tick = () => { status.innerText = `Teaching "${name}" — running swirl macro… ${Math.round((Date.now() - t0) / 1000)}s elapsed`; };
       tick();
       const timer = setInterval(tick, 1000);
@@ -912,6 +939,7 @@ function toggleJoints() {
       } finally {
         clearInterval(timer);
         btn.disabled = false;
+        hideRunBanner();
       }
     }
 
