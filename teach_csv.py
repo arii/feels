@@ -28,6 +28,19 @@ MOTION_TYPE = "swirl_macro"
 
 
 def resolve_label(csv_path, df, override=None):
+    """Determine the teach label for a CSV.
+
+    Precedence: explicit override, then the object_label column, then the
+    recording_YYYYMMDD_HHMMSS_<label>.csv filename.
+
+    Args:
+        csv_path: path to the recording CSV.
+        df: the recording DataFrame.
+        override: forced label, or None.
+
+    Returns:
+        Label string, or None when none can be determined.
+    """
     if override:
         return override
     if "object_label" in df.columns:
@@ -44,6 +57,22 @@ def resolve_label(csv_path, df, override=None):
 
 def teach_file(db, csv_path, session, label_override=None, dry_run=False,
                force=False, include_mystery=False, require_swirl=False):
+    """Extract features from one CSV and teach it to Atlas.
+
+    Args:
+        db: MongoDB database handle.
+        csv_path: path to the recording CSV.
+        session: session tag, e.g. "thu".
+        label_override: forced label, or None.
+        dry_run: report what would be taught without writing.
+        force: re-teach files already in Atlas.
+        include_mystery: also teach mystery-labeled files.
+        require_swirl: skip recordings without a true SWIRL phase.
+
+    Returns:
+        Tuple (status, filename, detail) where status is one of
+        "taught", "dry", "skip", "error".
+    """
     name = os.path.basename(csv_path)
     try:
         df = pd.read_csv(csv_path)
@@ -84,6 +113,7 @@ def teach_file(db, csv_path, session, label_override=None, dry_run=False,
 
 
 def list_library():
+    """Print signature counts per label in the Atlas library."""
     db = atlas.get_db()
     rows = list(db.signatures.aggregate([
         {"$group": {"_id": "$label", "n": {"$sum": 1},
@@ -100,6 +130,7 @@ def list_library():
 
 
 def main():
+    """CLI entry: batch-teach recordings to Atlas."""
     ap = argparse.ArgumentParser(
         description="Batch-teach recording CSVs into Atlas.",
         epilog="""examples:

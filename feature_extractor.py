@@ -167,6 +167,20 @@ def _phase_lag(x, y, fs, max_lag_s=2.0):
 
 # ── main extraction ─────────────────────────────────────────────────────
 def extract_features(df):
+    """Compute the 10-D swirl signature and normalized embedding from a recording.
+
+    Reads the SWIRL phase (or falls back to dynamic phases), detrends joint
+    torques against the INIT baseline, and computes the ten physical features
+    (static lift, swirl dynamics, grip/excitation groups).
+
+    Args:
+        df: recording DataFrame with phase, elapsed_sec, tcp_*_mm, tau*_nm columns.
+    Returns:
+        Dict with z (10-D raw feature list), e (L2-normalized embedding list),
+        diagnostics (tare flags, phase source, sample count, sample rate).
+    Raises:
+        ValueError: when required columns are missing.
+    """
     if not {"phase", "elapsed_sec", "tcp_x_mm", "tcp_y_mm", "tau2_nm", "tau3_nm"}.issubset(df.columns):
         raise ValueError("CSV missing required columns (phase, elapsed_sec, tcp_*, tau2/3_nm)")
     fs = _fs(df)
@@ -303,6 +317,7 @@ def _calibrate():
 
 
 def main():
+    """CLI entry: extract features from a CSV or recalibrate FEATURE_SCALES."""
     ap = argparse.ArgumentParser(
         description="Extract 10-D swirl features + normalized embedding.",
         epilog="""examples:

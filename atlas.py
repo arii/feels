@@ -43,6 +43,13 @@ _client: MongoClient | None = None
 
 
 def get_db():
+    """Return the MongoDB database handle, connecting on first call.
+
+    Returns:
+        The feels database object.
+    Raises:
+        RuntimeError: when MONGODB_URI is not set.
+    """
     global _client
     if _client is None:
         if not MONGODB_URI:
@@ -240,6 +247,11 @@ def material_of(label: str) -> str:
     water_025pct / water_150g / water_half -> water; solid_020g -> solid;
     dish_soap_half -> soap; candy_mixed -> candy; empty_cup -> empty.
     Unknown labels map to themselves (their own material class).
+
+    Args:
+        label: taught signature label, e.g. "water_075pct".
+    Returns:
+        Material stem, e.g. "water".
     """
     stem = _CAPACITY_SUFFIX.sub("", label.strip().lower())
     return MATERIAL_STEMS.get(stem, stem)
@@ -263,6 +275,11 @@ def category_of(label: str) -> str:
     """Coarse category for a taught label: liquid / solid / empty.
 
     Unknown materials map to themselves (their own category).
+
+    Args:
+        label: taught signature label, e.g. "screws_100g".
+    Returns:
+        "liquid", "solid", "empty", or the material itself when unknown.
     """
     mat = material_of(label)
     return CATEGORY_OF_MATERIAL.get(mat, mat)
@@ -460,6 +477,13 @@ def predict_lda(query_z, confidence_threshold=0.82):
     86% — roughly 2x the vector-search retrieval rule on the same features.
     Raises ValueError when the library can't support it; callers fall back
     to identify().
+
+    Args:
+        query_z: 10-D raw feature vector of the query run.
+        confidence_threshold: below this score the result is flagged low-confidence.
+    Returns:
+        Dict with label, material, category, matches, margins, and
+        decider="lda" — the same shape as identify().
     """
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
     from sklearn.preprocessing import StandardScaler
@@ -482,6 +506,7 @@ def predict_lda(query_z, confidence_threshold=0.82):
     order = np.argsort(proba)[::-1]
 
     def aggregate(fn):
+        """Sum class probabilities into groups (material / category) and rank."""
         groups = {}
         for i in order:
             g = fn(classes[i])

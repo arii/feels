@@ -38,11 +38,29 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
     <a href="/">← Dashboard</a>
   </span>
 </nav>
-<main>
-  <h1>API reference</h1>
+<main>  <h1>API reference</h1>
   <p>Generated from the code's docstrings. The technical surface: vector memory,
   feature extraction, HTTP endpoints, and the teaching CLI.</p>
 <h2>atlas.py — vector memory</h2>
+<div class="fn"><h3><code>get_db</code></h3>
+<pre>def get_db():</pre>
+<p>Return the MongoDB database handle, connecting on first call.</p>
+<pre class="doc">Returns:
+    The feels database object.
+Raises:
+    RuntimeError: when MONGODB_URI is not set.</pre>
+</div>
+<div class="fn"><h3><code>setup_collections</code></h3>
+<pre>def setup_collections():</pre>
+<p>Create the three collections and their scalar indexes.<br>The vector search index on signatures.feature_vector must be created<br>in the Atlas UI (see instructions below).<br>Run this once at the start of the hackathon.</p>
+</div>
+<div class="fn"><h3><code>ensure_vector_indexes</code></h3>
+<pre>def ensure_vector_indexes(which):</pre>
+<p>Create Atlas vector search indexes. Idempotent — safe to re-run.</p>
+<pre class="doc">Run once before first use of an embedder whose index doesn&#x27;t exist yet:
+    python -c &quot;import atlas; atlas.ensure_vector_indexes(&#x27;chronos&#x27;)&quot;
+which: &quot;all&quot; | &quot;index_10d&quot; | &quot;chronos&quot;</pre>
+</div>
 <div class="fn"><h3><code>teach</code></h3>
 <pre>def teach(label: str, feature_vector: list[float], raw_data: list[float] | None, motion_type: str, properties: dict | None, session: str) -&gt; dict:</pre>
 <p>Insert a labeled run into Atlas.</p>
@@ -55,6 +73,26 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
     session:        &quot;thu&quot; or &quot;fri&quot; — used to filter vector search by day
 Returns:
     dict with inserted run_id and sig_id</pre>
+</div>
+<div class="fn"><h3><code>material_of</code></h3>
+<pre>def material_of(label: str) -&gt; str:</pre>
+<p>Coarse material class for a taught label.</p>
+<pre class="doc">water_025pct / water_150g / water_half -&gt; water; solid_020g -&gt; solid;
+dish_soap_half -&gt; soap; candy_mixed -&gt; candy; empty_cup -&gt; empty.
+Unknown labels map to themselves (their own material class).
+Args:
+    label: taught signature label, e.g. &quot;water_075pct&quot;.
+Returns:
+    Material stem, e.g. &quot;water&quot;.</pre>
+</div>
+<div class="fn"><h3><code>category_of</code></h3>
+<pre>def category_of(label: str) -&gt; str:</pre>
+<p>Coarse category for a taught label: liquid / solid / empty.</p>
+<pre class="doc">Unknown materials map to themselves (their own category).
+Args:
+    label: taught signature label, e.g. &quot;screws_100g&quot;.
+Returns:
+    &quot;liquid&quot;, &quot;solid&quot;, &quot;empty&quot;, or the material itself when unknown.</pre>
 </div>
 <div class="fn"><h3><code>identify</code></h3>
 <pre>def identify(feature_vector: list[float], top_k: int, session: str | None, confidence_threshold: float) -&gt; dict:</pre>
@@ -91,70 +129,109 @@ as identify() so the dashboard works unchanged.
 Measured accuracy (held-out): category 52%, material 43%, empty/nonempty
 86% — roughly 2x the vector-search retrieval rule on the same features.
 Raises ValueError when the library can&#x27;t support it; callers fall back
-to identify().</pre>
+to identify().
+Args:
+    query_z: 10-D raw feature vector of the query run.
+    confidence_threshold: below this score the result is flagged low-confidence.
+Returns:
+    Dict with label, material, category, matches, margins, and
+    decider=&quot;lda&quot; — the same shape as identify().</pre>
 </div>
-<div class="fn"><h3><code>material_of</code></h3>
-<pre>def material_of(label: str) -&gt; str:</pre>
-<p>Coarse material class for a taught label.</p>
-<pre class="doc">water_025pct / water_150g / water_half -&gt; water; solid_020g -&gt; solid;
-dish_soap_half -&gt; soap; candy_mixed -&gt; candy; empty_cup -&gt; empty.
-Unknown labels map to themselves (their own material class).</pre>
+<div class="fn"><h3><code>seed_items</code></h3>
+<pre>def seed_items(overwrite: bool):</pre>
+<p>Insert baseline items into the items catalogue.</p>
 </div>
-<div class="fn"><h3><code>category_of</code></h3>
-<pre>def category_of(label: str) -&gt; str:</pre>
-<p>Coarse category for a taught label: liquid / solid / empty.</p>
-<pre class="doc">Unknown materials map to themselves (their own category).</pre>
-</div>
-<div class="fn"><h3><code>get_db</code></h3>
-<pre>def get_db():</pre>
-</div>
-<div class="fn"><h3><code>setup_collections</code></h3>
-<pre>def setup_collections():</pre>
-<p>Create the three collections and their scalar indexes.<br>The vector search index on signatures.feature_vector must be created<br>in the Atlas UI (see instructions below).<br>Run this once at the start of the hackathon.</p>
-</div>
-<div class="fn"><h3><code>ensure_vector_indexes</code></h3>
-<pre>def ensure_vector_indexes(which):</pre>
-<p>Create Atlas vector search indexes. Idempotent — safe to re-run.</p>
-<pre class="doc">Run once before first use of an embedder whose index doesn&#x27;t exist yet:
-    python -c &quot;import atlas; atlas.ensure_vector_indexes(&#x27;chronos&#x27;)&quot;
-which: &quot;all&quot; | &quot;index_10d&quot; | &quot;chronos&quot;</pre>
+<div class="fn"><h3><code>aggregate</code></h3>
+<pre>def aggregate(fn):</pre>
+<p>Sum class probabilities into groups (material / category) and rank.</p>
 </div>
 <h2>feature_extractor.py — 10-D signatures</h2>
 <div class="fn"><h3><code>extract_features</code></h3>
 <pre>def extract_features(df):</pre>
+<p>Compute the 10-D swirl signature and normalized embedding from a recording.</p>
+<pre class="doc">Reads the SWIRL phase (or falls back to dynamic phases), detrends joint
+torques against the INIT baseline, and computes the ten physical features
+(static lift, swirl dynamics, grip/excitation groups).
+Args:
+    df: recording DataFrame with phase, elapsed_sec, tcp_*_mm, tau*_nm columns.
+Returns:
+    Dict with z (10-D raw feature list), e (L2-normalized embedding list),
+    diagnostics (tare flags, phase source, sample count, sample rate).
+Raises:
+    ValueError: when required columns are missing.</pre>
 </div>
 <div class="fn"><h3><code>swirl_window_series</code></h3>
 <pre>def swirl_window_series(df):</pre>
 <p>Detrended torque residuals over the dynamic (swirl) window, for the<br>dashboard &#x27;why&#x27; charts. Returns a JSON-safe dict.</p>
 </div>
-<h2>FEATURE_NAMES</h2><pre>[&#x27;mass_j2&#x27;, &#x27;mass_j3&#x27;, &#x27;swirl_var_j2&#x27;, &#x27;swirl_var_j3&#x27;, &#x27;swirl_ptp_j3&#x27;, &#x27;phase_lag_s&#x27;, &#x27;rattle_e&#x27;, &#x27;grip_comp&#x27;, &#x27;lift_dyn_j3&#x27;, &#x27;swirl_speed&#x27;]</pre>
-<h2>HTTP API — realtime_plot.py</h2><table><tr><th>Method</th><th>Path</th><th>Handler</th><th>What it does</th></tr>
-<tr><td><code>GET</code></td><td><code>/</code></td><td><code>handle_index</code></td><td></td></tr>
+<div class="fn"><h3><code>main</code></h3>
+<pre>def main():</pre>
+<p>CLI entry: extract features from a CSV or recalibrate FEATURE_SCALES.</p>
+</div>
+<h2>HTTP API — realtime_plot.py</h2>
+<table><tr><th>Method</th><th>Path</th><th>Handler</th><th>What it does</th></tr>
+<tr><td><code>GET</code></td><td><code>/</code></td><td><code>handle_index</code></td><td>Serve the dashboard single-page app (static/index.html).</td></tr>
 <tr><td><code>GET</code></td><td><code>/docs</code></td><td><code>handle_docs</code></td><td>Serve the built-in docs pages (the presentation). /docs and /docs/{page}.</td></tr>
 <tr><td><code>GET</code></td><td><code>/docs/{page}</code></td><td><code>handle_docs</code></td><td>Serve the built-in docs pages (the presentation). /docs and /docs/{page}.</td></tr>
-<tr><td><code>GET</code></td><td><code>/stream</code></td><td><code>handle_stream</code></td><td></td></tr>
-<tr><td><code>POST</code></td><td><code>/tare</code></td><td><code>handle_tare</code></td><td></td></tr>
-<tr><td><code>POST</code></td><td><code>/record/start</code></td><td><code>handle_record_start</code></td><td></td></tr>
-<tr><td><code>POST</code></td><td><code>/record/stop</code></td><td><code>handle_record_stop</code></td><td></td></tr>
-<tr><td><code>GET</code></td><td><code>/record/download</code></td><td><code>handle_record_download</code></td><td></td></tr>
+<tr><td><code>GET</code></td><td><code>/stream</code></td><td><code>handle_stream</code></td><td>GET /stream — Server-Sent Events feed of torque samples.</td></tr>
+<tr><td><code>POST</code></td><td><code>/tare</code></td><td><code>handle_tare</code></td><td>POST /tare — recalibrate the torque baseline from the latest loads.</td></tr>
+<tr><td><code>POST</code></td><td><code>/record/start</code></td><td><code>handle_record_start</code></td><td>POST /record/start — begin buffering samples for a labeled recording.</td></tr>
+<tr><td><code>POST</code></td><td><code>/record/stop</code></td><td><code>handle_record_stop</code></td><td>POST /record/stop — stop buffering and write recordings/recording_*.csv.</td></tr>
+<tr><td><code>GET</code></td><td><code>/record/download</code></td><td><code>handle_record_download</code></td><td>GET /record/download?file= — download a recording CSV.</td></tr>
 <tr><td><code>POST</code></td><td><code>/api/cycle/predict</code></td><td><code>handle_cycle_predict</code></td><td>Mode 1: run the swirl macro on a mystery cup → features → Atlas $vectorSearch.</td></tr>
 <tr><td><code>POST</code></td><td><code>/api/cycle/teach</code></td><td><code>handle_cycle_teach</code></td><td>Mode 2: run the swirl macro on a labeled item → save signature to Atlas.</td></tr>
 <tr><td><code>POST</code></td><td><code>/api/cycle/abort</code></td><td><code>handle_cycle_abort</code></td><td>Stop the running macro subprocess (physical e-stop remains at the venue).</td></tr>
 <tr><td><code>POST</code></td><td><code>/api/cycle/correct</code></td><td><code>handle_cycle_correct</code></td><td>Teach the true label for the most recent prediction&#x27;s recording.</td></tr>
-<tr><td><code>GET</code></td><td><code>/api/status</code></td><td><code>handle_api_status</code></td><td></td></tr>
+<tr><td><code>GET</code></td><td><code>/api/status</code></td><td><code>handle_api_status</code></td><td>GET /api/status — dashboard health.</td></tr>
+<tr><td><code>GET</code></td><td><code>/api/simulate/candidates</code></td><td><code>handle_simulate_candidates</code></td><td>List recordings suitable for simulated replay (have a SWIRL phase).</td></tr>
 <tr><td><code>POST</code></td><td><code>/api/vectorspace</code></td><td><code>handle_vspace</code></td><td>2-D PCA of the Atlas signature library, optionally with the query</td></tr>
 </table>
-<h2>teach_csv.py — CLI</h2><pre>python teach_csv.py [paths] [flags]</pre><table>
-<tr><th>Flag</th><th>What it does</th></tr>
-<tr><td><code>paths</code></td><td>CSV files</td></tr>
-<tr><td><code>--session</code></td><td>session tag (default: thu</td></tr>
-<tr><td><code>--label</code></td><td>force one label for all files&quot;</td></tr>
-<tr><td><code>--dry-run</code></td><td>show what would be taught&quot;</td></tr>
-<tr><td><code>--force</code></td><td>re-teach files already in Atlas&quot;</td></tr>
+<h2>teach_csv.py — CLI</h2><pre>python teach_csv.py [paths] [flags]</pre>
+<table><tr><th>Flag</th><th>What it does</th></tr>
+<tr><td><code>paths</code></td><td></td></tr>
+<tr><td><code>--session</code></td><td></td></tr>
+<tr><td><code>--label</code></td><td>force one label for all files</td></tr>
+<tr><td><code>--dry-run</code></td><td>show what would be taught</td></tr>
+<tr><td><code>--force</code></td><td>re-teach files already in Atlas</td></tr>
 <tr><td><code>--include-mystery</code></td><td></td></tr>
-<tr><td><code>--require-swirl</code></td><td></td></tr>
-<tr><td><code>--list</code></td><td>show signature counts per label&quot;</td></tr>
+<tr><td><code>--require-swirl</code></td><td>only teach recordings with a true SWIRL phase</td></tr>
+<tr><td><code>--list</code></td><td>show signature counts per label</td></tr>
 </table>
-</main>
+<div class="fn"><h3><code>resolve_label</code></h3>
+<pre>def resolve_label(csv_path, df, override):</pre>
+<p>Determine the teach label for a CSV.</p>
+<pre class="doc">Precedence: explicit override, then the object_label column, then the
+recording_YYYYMMDD_HHMMSS_&lt;label&gt;.csv filename.
+Args:
+    csv_path: path to the recording CSV.
+    df: the recording DataFrame.
+    override: forced label, or None.
+Returns:
+    Label string, or None when none can be determined.</pre>
+</div>
+<div class="fn"><h3><code>teach_file</code></h3>
+<pre>def teach_file(db, csv_path, session, label_override, dry_run, force, include_mystery, require_swirl):</pre>
+<p>Extract features from one CSV and teach it to Atlas.</p>
+<pre class="doc">Args:
+    db: MongoDB database handle.
+    csv_path: path to the recording CSV.
+    session: session tag, e.g. &quot;thu&quot;.
+    label_override: forced label, or None.
+    dry_run: report what would be taught without writing.
+    force: re-teach files already in Atlas.
+    include_mystery: also teach mystery-labeled files.
+    require_swirl: skip recordings without a true SWIRL phase.
+Returns:
+    Tuple (status, filename, detail) where status is one of
+    &quot;taught&quot;, &quot;dry&quot;, &quot;skip&quot;, &quot;error&quot;.</pre>
+</div>
+<div class="fn"><h3><code>list_library</code></h3>
+<pre>def list_library():</pre>
+<p>Print signature counts per label in the Atlas library.</p>
+</div>
+<div class="fn"><h3><code>main</code></h3>
+<pre>def main():</pre>
+<p>CLI entry: batch-teach recordings to Atlas.</p>
+</div></main>
 </body>
 </html>
