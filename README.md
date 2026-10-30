@@ -5,6 +5,14 @@ Powered by the [Viam Python SDK](https://github.com/viamrobotics/viam-python-sdk
 
 > 🗺️ **New here? See [`PROJECT_MAP.md`](PROJECT_MAP.md)** — every module grouped by purpose, how to run it, and how to reuse it for your own robot.
 
+### Links
+
+| | |
+|---|---|
+| 📦 **Dataset** | [`dhyuti-n/feels-cup-dynamics`](https://huggingface.co/datasets/dhyuti-n/feels-cup-dynamics) on Hugging Face — 106 labeled swirl recordings, stratified train/test |
+| 🤖 **Viam module** | [`braveorangerover:object-picker`](https://app.viam.com/module/braveorangerover/object-picker) in the Viam Registry — three deployable on-robot models (below) |
+| 📓 **Code** | [github.com/arii/feels](https://github.com/arii/feels) |
+
 ---
 
 > [!IMPORTANT]
@@ -41,12 +49,16 @@ The **feels** system enables an industrial robotic arm (UFactory xArm850) to det
 ## Architecture
 
 ```
-                          ┌─────────────────────────────────────────────┐
-                          │            sfhack12  (Viam machine)          │
-   PHYSICAL               │   xArm850 ──┬── gripper ──┬── RealSense cam  │
-   cup on taped square ──▶│   arm-position-saver switches: approach/     │
-                          │   grasp/travel/place/back-off  + motion svc  │
-                          └───────────────────────┬─────────────────────┘
+                  ┌───────────────────────────────────────────────────────────────┐
+                  │                     sfhack12  (Viam machine)                   │
+   PHYSICAL       │   xArm850 ──┬── gripper ──┬── RealSense cam                    │
+   cup on taped ─▶│   arm-position-saver switches: approach/grasp/travel/place     │
+   square         │                                                                │
+                  │   ON-ROBOT MODULES  (braveorangerover:object-picker @ 50 Hz)   │
+                  │   ├─ sensing:torque-features   torque + force/weight + FFT      │
+                  │   ├─ pick_logic:yolo3d-pick    vision detect / pick             │
+                  │   └─ content:classifier        solid / liquid / empty cascade   │
+                  └───────────────────────────────┬───────────────────────────────┘
                                                   │ Viam Python SDK (gRPC/WebRTC)
                                                   ▼
         ┌──────────────────────────────────────────────────────────────────────┐
@@ -54,6 +66,8 @@ The **feels** system enables an industrial robotic arm (UFactory xArm850) to det
         │  pick → lift → ◯ swirl → place     (arm.do_command{"load"} telemetry)  │
         └───────────────────────────────┬──────────────────────────────────────┘
                                          │  24-ch torque+pose CSV  (recordings/)
+                                         │  ──────────────────────────────────────▶  🤗 Hugging Face
+                                         │          split_dataset.py + push_to_hf.py   feels-cup-dynamics
                                          ▼
         ┌──────────────────────────────────────────────────────────────────────┐
         │  FEATURES  feature_extractor.py  →  10-D vector  +  unit embedding e   │
@@ -80,7 +94,11 @@ The **feels** system enables an industrial robotic arm (UFactory xArm850) to det
 torques → `feature_extractor` turns each run into a 10-D embedding → that embedding
 is either **classified** (cascade: empty → solid/liquid, as a 2-D state spectrum) or
 **stored/queried** in **MongoDB Atlas Vector Search** (teach a new item in one shot,
-or k-NN identify). The **dashboard** drives and visualizes the whole loop.
+or k-NN identify). The same sensing + pick + classify logic also ships as three
+**on-robot Viam modules** (one registry entry, [`braveorangerover:object-picker`](https://app.viam.com/module/braveorangerover/object-picker))
+that run on the machine host at 50 Hz to beat cloud latency. Labeled recordings are
+split and published to the [**Hugging Face dataset**](https://huggingface.co/datasets/dhyuti-n/feels-cup-dynamics).
+The **dashboard** drives and visualizes the whole loop.
 See [`PROJECT_MAP.md`](PROJECT_MAP.md) for per-module detail.
 
 ---
@@ -156,14 +174,17 @@ python effective_force.py --duration 15.0
 
 ### 6. Deployable Viam modules (on-robot)
 
-Three models ship as one Viam module (`meta.json` + `run.sh` + `src/module_main.py`),
-deployed directly onto the robot host to beat cloud latency and run at 50 Hz:
+Three models ship as one public Viam module — [**`braveorangerover:object-picker`**](https://app.viam.com/module/braveorangerover/object-picker)
+(`meta.json` + `run.sh` + `src/module_main.py`) — deployed directly onto the robot
+host to beat cloud latency and run at 50 Hz:
 
 | model | role |
 |---|---|
-| `braveorangerover:sensing:torque-features` | on-robot torque sampling + pose-normalized force/weight + FFT |
-| `braveorangerover:pick_logic:yolo3d-pick` | vision object picking (configurable target class) |
-| `braveorangerover:content:classifier` | solid / liquid / empty from the torque cascade |
+| [`braveorangerover:sensing:torque-features`](https://app.viam.com/module/braveorangerover/object-picker) | on-robot torque sampling + pose-normalized force/weight + FFT |
+| [`braveorangerover:pick_logic:yolo3d-pick`](https://app.viam.com/module/braveorangerover/object-picker) | vision object picking (configurable target class) |
+| [`braveorangerover:content:classifier`](https://app.viam.com/module/braveorangerover/object-picker) | solid / liquid / empty from the torque cascade |
+
+All three expose an `rdk:service:generic` API and are driven through `do_command`.
 
 ```bash
 viam module upload --version 0.0.3 --platform linux/amd64 .   # deploy
@@ -242,6 +263,35 @@ always records with `--swirl-smooth`, so new data is consistent by construction.
 PCA projection of the Atlas signature library, with the query projected in the
 same basis. Powers the dashboard's Vector space card; refreshes on load, every
 5 s, and after each teach/predict.
+
+---
+
+## Dataset (Hugging Face)
+
+The labeled telemetry recordings are published as a train/test dataset:
+[**`dhyuti-n/feels-cup-dynamics`**](https://huggingface.co/datasets/dhyuti-n/feels-cup-dynamics).
+
+- **106 recordings**, one example per trial, split **85 train / 21 test**.
+- **Stratified by `(label, motion_path)` at the recording level** (seed 42, ~80/20)
+  so rows within a trial never leak across the split.
+- Each example carries trial metadata (`label`, `motion_path`, `split`, `n_rows`)
+  plus every telemetry channel (`tcp_*`, `q1–q6_deg`, `tau1–6_nm`, `gripper_*`,
+  `phase`) as a nested per-sample time series.
+- 9 labeled classes: `empty_cup`, `water_{025,050,075,100}pct`,
+  `solid_{020,050,100}g`, `screws_100g`.
+
+```python
+from datasets import load_dataset
+ds = load_dataset("dhyuti-n/feels-cup-dynamics")   # DatasetDict: train, test
+```
+
+Reproduce / republish:
+
+```bash
+python src/split_dataset.py              # (re)write recordings/split_manifest.csv (stratified)
+python tools/push_to_hf.py --dry-run     # build the DatasetDict, inspect, don't push
+python tools/push_to_hf.py               # push to the Hub (private by default; --public to open)
+```
 
 ---
 
