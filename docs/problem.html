@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>feels docs — the formal problem</title>
+<style>
+:root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
+body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
+.docnav { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); position:sticky; top:0; flex-wrap:wrap; gap:8px; }
+.docnav a { color:var(--muted); text-decoration:none; margin-left:18px; font-size:0.9rem; }
+.docnav a:hover, .docnav a.active { color:var(--text); }
+.docnav a.brand { margin-left:0; color:var(--text); font-weight:700; }
+main { max-width:780px; margin:0 auto; padding:36px 24px 80px; }
+h1 { font-size:2rem; margin-bottom:0.3em; }
+h2 { font-size:1.3rem; margin-top:2em; border-bottom:1px solid var(--border); padding-bottom:0.3em; }
+p, li { color:#c9d1d9; }
+code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em; }
+pre { background:#161b22; border:1px solid var(--border); border-radius:8px; padding:16px; overflow-x:auto; }
+.honest { background:rgba(210,153,34,0.08); border:1px solid #9e6a03; border-radius:8px; padding:12px 16px; margin:1.5em 0; }
+.honest strong { color:#d29922; }
+</style>
+</head>
+<body>
+<nav class="docnav">
+  <a class="brand" href="index.html">feels · docs</a>
+  <span>
+    <a class="active" href="problem.html">Problem</a>
+    <a href="approach.html">Approach</a>
+    <a href="prediction.html">Prediction</a>
+    <a href="force.html">Extracting Force</a>
+    <a href="api.html">API</a>
+    <a href="about.html">About</a>
+    <a href="/" class="dashlink">← Dashboard</a>
+  </span>
+</nav>
+<main>
+  <h1>Classifying Sealed Contents Using Only Physical Interaction</h1>
+
+  <p>A 6-DOF arm holding a sealed cup uses proprioception to classify its
+  contents (empty, water, loose candy, or a rigid weight). Because the lid
+  visually seals the container and static weights can be indistinguishable,
+  the system relies entirely on active movement to identify the object.</p>
+
+  <h2>Mapping Swirl Dynamics to a 10-D Signature</h2>
+  <p>The system measures dynamics — how contents move when swirled — to identify
+  them. The robot executes a fixed motion (pick up → swirl → place) and
+  maps this directly to a prediction:</p>
+
+  <h2>What Makes Classification Hard</h2>
+  <ul>
+    <li><strong>Coarse sensing:</strong> the arm reports torque telemetry at 4–5 Hz.
+    The 5–25 Hz rattle band sits above Nyquist, so the system uses what the
+    channel carries.</li>
+    <li><strong>Baseline drift:</strong> joint-torque baselines wander with pose and
+    temperature. Static offsets are unreliable, so the signal comes from motion.</li>
+    <li><strong>Hidden by design:</strong> the contents stay sealed. The only
+    supervision is the label the operator teaches.</li>
+    <li><strong>Static hold torques</strong> carry no payload signal at this pose
+    (verified identical across contents). Everything discriminative comes from
+    the swirl dynamics.</li>
+  </ul>
+</main>
+<script>if(location.hostname.includes("github.io")){document.querySelectorAll(".dashlink").forEach(e=>e.style.display="none")}</script>
+</body>
+</html>

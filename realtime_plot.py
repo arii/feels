@@ -959,7 +959,7 @@ async def handle_stream(request):
     return response
 
 
-_DOC_PAGES = {"index", "problem", "approach", "prediction", "force", "api", "api_atlas", "api_feature_extractor", "api_embedder", "api_teach_csv"}
+_DOC_PAGES = {"index", "problem", "approach", "prediction", "force", "api", "about", "api_atlas", "api_feature_extractor", "api_embedder", "api_teach_csv"}
 
 
 async def handle_docs(request):
@@ -967,7 +967,7 @@ async def handle_docs(request):
     page = request.match_info.get("page", "index")
     if page not in _DOC_PAGES:
         raise web.HTTPNotFound()
-    return web.FileResponse(os.path.join(HERE, "static", "docs", f"{page}.html"))
+    return web.FileResponse(os.path.join(HERE, "docs", f"{page}.html"))
 
 
 async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
