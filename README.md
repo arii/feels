@@ -154,13 +154,22 @@ python src/repeatable_grasp.py --record --object water_half
 python effective_force.py --duration 15.0
 ```
 
-### 6. Zero-Latency On-Robot Control Service (`control_service.py`)
+### 6. Deployable Viam modules (on-robot)
 
-To eliminate the ~158ms WebRTC cloud latency and sample at 50–200 Hz, deploy [`control_service.py`](control_service.py) (`hackathons:control_logic:generic-service`) directly onto the robot host (`sfhack12`). Test with:
+Three models ship as one Viam module (`meta.json` + `run.sh` + `src/module_main.py`),
+deployed directly onto the robot host to beat cloud latency and run at 50 Hz:
+
+| model | role |
+|---|---|
+| `braveorangerover:sensing:torque-features` | on-robot torque sampling + pose-normalized force/weight + FFT |
+| `braveorangerover:pick_logic:yolo3d-pick` | vision object picking (configurable target class) |
+| `braveorangerover:content:classifier` | solid / liquid / empty from the torque cascade |
 
 ```bash
-python src/client_control_service.py
+viam module upload --version 0.0.3 --platform linux/amd64 .   # deploy
+python src/use_modules.py all                                 # call the deployed services
 ```
+*(The pre-module script `control_service.py` is archived in `src/converted_to_modules/`.)*
 
 ### 7. Swirl Feature Extractor + 2-Mode Dashboard
 

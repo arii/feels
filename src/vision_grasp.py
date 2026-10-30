@@ -75,6 +75,30 @@ DEFAULT_SIDE_THETA = 175.7  # Degrees roll around tool axis for horizontal finge
 # Contact detection parameters
 DEFAULT_CONTACT_THRESH = 0.22  # Torque delta in Nm to declare physical contact (Joint 3 / Joint 5)
 
+# Multi-view detection parameters
+DEFAULT_VIEWS = 5            # number of YOLO-3D samples to aggregate
+DEFAULT_VANTAGE_SPREAD = 40.0  # +/- Cartesian nudge (mm) between vantage views
+MAD_REJECT_K = 3.0          # reject a sample axis > K * median-abs-deviation from the median
+
+
+def robust_centroid(points: List[Tuple[float, float, float]]):
+    """Outlier-robust centroid of 3-D points.
+    Uses the per-axis median + MAD (median absolute deviation) to drop fliers,
+    then averages the survivors. Returns (centroid_xyz, n_used, spread_mm) or None.
+    """
+    if not points:
+        return None
+    P = np.array(points, dtype=float)
+    med = np.median(P, axis=0)
+    mad = np.median(np.abs(P - med), axis=0)
+    mad = np.where(mad < 1e-6, 1e-6, mad)
+    # keep a point only if ALL axes are within K*MAD of the median
+    keep = np.all(np.abs(P - med) <= MAD_REJECT_K * mad, axis=1)
+    kept = P[keep] if keep.any() else P
+    centroid = kept.mean(axis=0)
+    spread = float(np.linalg.norm(kept.std(axis=0))) if len(kept) > 1 else 0.0
+    return (float(centroid[0]), float(centroid[1]), float(centroid[2])), int(len(kept)), spread
+
 
 class CupDetector:
     """
@@ -87,13 +111,15 @@ class CupDetector:
         machine: RobotClient,
         camera_name: str = "cam",
         yolo_3d_name: str = "yolo-3d",
-        yolo_2d_name: str = "yolo"
+        yolo_2d_name: str = "yolo",
+        target_class: str = "cup",
     ):
         self.machine = machine
         self.cam = Camera.from_robot(machine, camera_name)
         self.camera_name = camera_name
         self.yolo_3d_name = yolo_3d_name
         self.yolo_2d_name = yolo_2d_name
+        self.target_class = target_class   # object label to pick (e.g. "cup", "bottle")
         self.fx = DEFAULT_FX
         self.fy = DEFAULT_FY
         self.cx = DEFAULT_CX
@@ -148,7 +174,7 @@ class CupDetector:
             pcs = await yolo3d.get_object_point_clouds(self.camera_name)
             for pc in pcs:
                 for g in pc.geometries.geometries:
-                    if g.label == "cup":
+                    if g.label == self.target_class:
                         c = g.center
                         ref_frame = pc.geometries.reference_frame or self.camera_name
                         print(f"[YOLO-3D] Segmented cup found in {ref_frame}: x={c.x:.1f}, y={c.y:.1f}, z={c.z:.1f} mm")
@@ -192,7 +218,7 @@ class CupDetector:
             await self.init_intrinsics()
             yolo2d = VisionClient.from_robot(self.machine, self.yolo_2d_name)
             detections = await yolo2d.get_detections_from_camera(self.camera_name)
-            cups = [d for d in detections if d.class_name == "cup"]
+            cups = [d for d in detections if d.class_name == self.target_class]
             if not cups:
                 return None
 
@@ -293,12 +319,16 @@ class VisionGraspController:
     and placement cycle.
     """
 
-    def __init__(self, machine: RobotClient):
+    def __init__(self, machine: RobotClient, arm_name: str = "arm", gripper_name: str = "gripper",
+                 motion_name: str = "builtin", camera_name: str = "cam",
+                 yolo_3d_name: str = "yolo-3d", yolo_2d_name: str = "yolo",
+                 target_class: str = "cup"):
         self.machine = machine
-        self.arm = Arm.from_robot(machine, "arm")
-        self.gripper = Gripper.from_robot(machine, "gripper")
-        self.motion = MotionClient.from_robot(machine, "builtin")
-        self.detector = CupDetector(machine)
+        self.arm = Arm.from_robot(machine, arm_name)
+        self.gripper = Gripper.from_robot(machine, gripper_name)
+        self.motion = MotionClient.from_robot(machine, motion_name)
+        self.detector = CupDetector(machine, camera_name=camera_name, yolo_3d_name=yolo_3d_name,
+                                    yolo_2d_name=yolo_2d_name, target_class=target_class)
 
     async def move_pose(self, pose: Pose, label: str = "pose", timeout: float = 30.0) -> bool:
         """
@@ -419,6 +449,89 @@ class VisionGraspController:
 
         return True, contact_detected
 
+    async def detect_cup_robust(
+        self,
+        n_views: int = DEFAULT_VIEWS,
+        vantage_spread: float = DEFAULT_VANTAGE_SPREAD,
+        target_z: Optional[float] = None,
+        z_offset: float = DEFAULT_Z_OFFSET,
+        dry_run: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Multi-view detection: sample YOLO-3D from several arm/camera vantage poses,
+        transform each cup centroid to the world frame, and fuse them into an
+        OUTLIER-ROBUST centroid before planning the grasp. Far steadier than a
+        single frame — rejects spurious detections and averages sensor noise.
+
+        Vantages are small Cartesian nudges around the current (staging) pose, so it
+        works whether the camera is wrist-mounted (true multi-view) or fixed
+        (repeated samples of a stationary cup — still reduces noise).
+        """
+        base = await self.arm.get_end_position()
+        o = dict(o_x=base.o_x, o_y=base.o_y, o_z=base.o_z, theta=base.theta)
+        s = vantage_spread
+        # vantage offsets (dx,dy): centre first, then a small cross pattern
+        offsets = [(0, 0), (s, 0), (-s, 0), (0, s), (0, -s), (s, s), (-s, -s), (s, -s)]
+        offsets = offsets[:max(1, n_views)]
+
+        print(f"\n[MULTI-VIEW] Collecting up to {len(offsets)} YOLO-3D detections "
+              f"(vantage spread ±{s:.0f}mm)...")
+        points, cam_pos = [], None
+        for i, (dx, dy) in enumerate(offsets):
+            if (dx or dy) and not dry_run:
+                vp = Pose(x=base.x + dx, y=base.y + dy, z=base.z, **o)
+                if not await self.move_pose(vp, label=f"vantage-{i}"):
+                    print(f"  • vantage {i}: move blocked, skipping")
+                    continue
+                await asyncio.sleep(0.4)
+            # YOLO-3D point cloud first; fall back to 2D YOLO + ray-plane per sample
+            det = await self.detector.detect_cup_3d(z_offset=z_offset, target_z=target_z)
+            src = "3d"
+            if not det:
+                det = await self.detector.detect_cup_2d_fallback(
+                    target_z=target_z if target_z is not None else DEFAULT_GRASP_Z)
+                src = "2d"
+            # the world point to aggregate: measured centroid (3D) or ray-plane estimate (2D)
+            c = det.get("detected_centroid_world") or det.get("position_world") if det else None
+            if c:
+                points.append(tuple(c))
+                cam_pos = det.get("camera_pos_world", cam_pos)
+                print(f"  • view {i} [{src}]: cup @ X={c[0]:.1f} Y={c[1]:.1f} Z={c[2]:.1f} mm")
+            else:
+                print(f"  • view {i}: no cup detected")
+
+        # return the arm to the base vantage
+        if not dry_run and len(offsets) > 1:
+            await self.move_pose(Pose(x=base.x, y=base.y, z=base.z, **o), label="vantage-return")
+
+        if not points:
+            print("[MULTI-VIEW] No valid detections across any vantage.")
+            return None
+        rc = robust_centroid(points)
+        centroid, n_used, spread = rc
+        print(f"[MULTI-VIEW] Fused {n_used}/{len(points)} inlier views → "
+              f"robust centroid X={centroid[0]:.1f} Y={centroid[1]:.1f} Z={centroid[2]:.1f} mm "
+              f"(spread σ={spread:.1f}mm)")
+
+        if target_z is not None:
+            final_z = max(MIN_SAFE_Z, min(MAX_SAFE_Z, float(target_z)))
+        else:
+            final_z = max(MIN_SAFE_Z, min(MAX_SAFE_Z, float(centroid[2] + z_offset)))
+
+        if cam_pos is None:
+            P_cam, _ = await self.detector.get_camera_extrinsics()
+            cam_pos = (float(P_cam[0]), float(P_cam[1]), float(P_cam[2]))
+
+        return {
+            "method": f"yolo-3d-multiview(x{n_used})",
+            "confidence": 1.0,
+            "position_world": (centroid[0], centroid[1], final_z),
+            "detected_centroid_world": centroid,
+            "camera_pos_world": cam_pos,
+            "n_views": n_used,
+            "spread_mm": round(spread, 1),
+        }
+
     async def execute_grasp(
         self,
         dry_run: bool = False,
@@ -427,6 +540,8 @@ class VisionGraspController:
         tcp_offset: float = DEFAULT_TCP_OFFSET,
         contact_thresh: float = DEFAULT_CONTACT_THRESH,
         full_cycle: bool = True,
+        views: int = 1,
+        vantage_spread: float = DEFAULT_VANTAGE_SPREAD,
     ) -> bool:
         """
         Execute full vision-guided grasp and placement routine:
@@ -462,9 +577,13 @@ class VisionGraspController:
             await self.gripper.open(timeout=10.0)
             await asyncio.sleep(0.5)
 
-        # 2. Identify cup (Look phase)
+        # 2. Identify cup (Look phase) — single frame, or robust multi-view fusion
         print("\n[STEP 2] IDENTIFY PHASE: Localizing cup before approach occlusion...")
-        det = await self.detector.detect_cup(target_z=target_z, z_offset=z_offset)
+        if views and views > 1:
+            det = await self.detect_cup_robust(n_views=views, vantage_spread=vantage_spread,
+                                               target_z=target_z, z_offset=z_offset, dry_run=dry_run)
+        else:
+            det = await self.detector.detect_cup(target_z=target_z, z_offset=z_offset)
         if not det:
             print("[✗] Error: Cup could not be detected. Aborting grasp.")
             return False
@@ -579,6 +698,8 @@ async def main():
     parser.add_argument("--tcp-offset", type=float, default=DEFAULT_TCP_OFFSET, help="Flange-to-cup standoff offset (default: 142.0mm to prevent pushing)")
     parser.add_argument("--contact-thresh", type=float, default=DEFAULT_CONTACT_THRESH, help="Torque deflection in Nm to detect contact (default: 0.22Nm)")
     parser.add_argument("--stage", action="store_true", help="Move arm to staging home-pose before detecting")
+    parser.add_argument("--views", type=int, default=1, help="YOLO-3D samples to fuse into a robust centroid (default 1; try 5)")
+    parser.add_argument("--vantage-spread", type=float, default=DEFAULT_VANTAGE_SPREAD, help="±Cartesian nudge (mm) between multi-view vantages (default 40)")
     args = parser.parse_args()
 
     opts = RobotClient.Options.with_api_key(
@@ -592,7 +713,14 @@ async def main():
             if args.stage:
                 await controller.move_waypoint("home-pose")
                 await asyncio.sleep(1.0)
-            det = await controller.detector.detect_cup(target_z=args.z_height, z_offset=args.z_offset)
+            if args.views and args.views > 1:
+                # detect-only = read-only preview: sample N times in place (no arm motion).
+                # (true move-the-camera multi-view runs during --grasp.)
+                det = await controller.detect_cup_robust(
+                    n_views=args.views, vantage_spread=args.vantage_spread,
+                    target_z=args.z_height, z_offset=args.z_offset, dry_run=True)
+            else:
+                det = await controller.detector.detect_cup(target_z=args.z_height, z_offset=args.z_offset)
             if not det:
                 print("[!] No cup detected in current view.")
                 print("    Hint: If arm is currently close to the table (Z < 150mm), run with --stage to move to staging pose for unoccluded perception.")
@@ -630,6 +758,8 @@ async def main():
             tcp_offset=args.tcp_offset,
             contact_thresh=args.contact_thresh,
             full_cycle=full_cycle,
+            views=args.views,
+            vantage_spread=args.vantage_spread,
         )
 
 

@@ -7,7 +7,9 @@ codebase: every module, grouped by purpose, with how to run it and how to reuse 
 ```
 feels/
 ├─ src/            all application modules (grouped by purpose below)
-│    ├─ Robot control & motion   repeatable_grasp, safe_pick, vision_grasp, control_service, main, sensors
+│    ├─ Robot control & motion   repeatable_grasp, safe_pick, vision_grasp, main, sensors
+│    ├─ Viam modules (deployable) pick_service, torque_service, content_service (+ module_main, use_modules)
+│    ├─ converted_to_modules/     old standalone scripts now replaced by modules (control_service, …)
 │    ├─ ML / classification      feature_extractor, train_classifier, predict_content, state_spectrum, predict_mystery
 │    ├─ Atlas vector memory      atlas, openset, teach_csv, push_to_atlas
 │    ├─ Dashboard                realtime_plot (+ ../static/)
@@ -32,9 +34,11 @@ so they live together in one package dir; self-contained one-offs are in `tools/
 |---|---|---|
 | `repeatable_grasp.py` | Pick → swirl → place macro via Viam arm-position-saver switches, with labeled telemetry recording + optional smooth swirl | the **core robot routine**; `--record --object <label>` builds the dataset |
 | `safe_pick.py` | Vision-gated, grasp-verified pickup (wraps `repeatable_grasp` primitives) | drop-in safe pick on top of the switch waypoints |
-| `vision_grasp.py` | Vision-guided 3-D side grasp with contact detection | reusable grasp planner (`CupDetector`, `SideGraspPlanner`) |
-| `control_service.py` | On-robot Viam Generic Service for 100 Hz telemetry + onboard features | deploy to the robot to beat cloud latency |
-| `client_control_service.py` | Test client for the on-robot service over gRPC | — |
+| `vision_grasp.py` | Vision-guided 3-D side grasp: **robust multi-view** YOLO-3D detection (fused outlier-rejected centroid) + contact-guarded approach | reusable `CupDetector` / `SideGraspPlanner` / `VisionGraspController` (any target class) |
+| `pick_service.py` | **Deployable module** `braveorangerover:pick_logic:yolo3d-pick` — configure a target class and pick via `do_command` | "say cup → picks cups"; swap `target_class` for any YOLO class |
+| `torque_service.py` | **Deployable module** `braveorangerover:sensing:torque-features` — on-robot torque + pose-normalized force/weight + FFT | reusable sensing module (supersedes `converted_to_modules/control_service.py`) |
+| `content_service.py` | **Deployable module** `braveorangerover:content:classifier` — solid/liquid/empty from the torque cascade | wraps `train_classifier` |
+| `use_modules.py` | Client that calls all three deployed module services over `do_command` | example of using the modules |
 | `main.py` | CLI: `identify` / `teach` / `tare` / `status` | top-level entry point |
 | `sensors.py` | Full component inventory + live sensor readout | `python src/sensors.py` to inspect any machine |
 

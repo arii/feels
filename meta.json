@@ -1,0 +1,24 @@
+{
+  "module_id": "braveorangerover:object-picker",
+  "visibility": "public",
+  "url": "https://github.com/arii/feels",
+  "description": "Three models: yolo3d-pick (vision object picking), torque-features (on-robot proprioceptive torque/force sensing), and content:classifier (solid/liquid/empty from the torque cascade).",
+  "models": [
+    {
+      "api": "rdk:service:generic",
+      "model": "braveorangerover:pick_logic:yolo3d-pick",
+      "short_description": "Vision object picker: configure a YOLO class and detect / pick / pick_place via do_command."
+    },
+    {
+      "api": "rdk:service:generic",
+      "model": "braveorangerover:sensing:torque-features",
+      "short_description": "On-robot torque sampling + pose-normalized force/weight + FFT features via do_command."
+    },
+    {
+      "api": "rdk:service:generic",
+      "model": "braveorangerover:content:classifier",
+      "short_description": "Predicts solid / liquid / empty from the proprioceptive torque cascade via do_command."
+    }
+  ],
+  "entrypoint": "run.sh"
+}
