@@ -640,14 +640,8 @@ async def run_grasp_cycle(
     if not await move_to_waypoint(machine, arm, "travel"):
         return False
 
-    # 5b. Fixed Stop at Travel Pose (Stability Gated)
-    await wait_for_stability_in_travel(
-        arm=arm,
-        recorder=recorder,
-        stable_duration=stable_hold,
-        variance_threshold=settle_threshold
-    )
-
+    # 5b. Continuous flow: no settle/dwell between travel and swirl.
+    # (Stability-gated baseline moved to post-hoc QC; see predict_mystery.py --qc.)
     # 5d. Optional SWIRL agitation at travel (circle, fixed Z + orientation)
     if use_swirl:
         if swirl_smooth_mode:
