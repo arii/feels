@@ -143,7 +143,7 @@ def _macro_cmd(object_label: str) -> list:
         import shlex
         return [a.format(label=object_label, cycles=1, here=HERE)
                 for a in shlex.split(tpl)]
-    return [sys.executable, os.path.join(HERE, "repeatable_grasp.py"),
+    return [sys.executable, os.path.join(HERE, "src", "repeatable_grasp.py"),
             "--object", object_label, "--record", "--cycles", "1", "--swirl-smooth"]
 
 
