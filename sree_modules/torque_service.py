@@ -8,7 +8,7 @@ torques at a configurable rate into a ring buffer and exposes, over do_command:
     {"action": "telemetry"}         latest torques + pose-normalized force + est. weight
     {"action": "features"}          time + FFT features over the recorded window
     {"action": "effective_force"}   pose-normalized vertical force F_z (gravity-cancelled by reach)
-    {"action": "tare"}              recalibrate the empty baseline
+    {"action": "baseline"}              recalibrate the empty baseline
     {"action": "record_start"} / {"action": "record_stop"} / {"action": "record_data"}
     {"action": "status"}
 
@@ -24,7 +24,7 @@ payload/weight estimate). See analysis/effective_force.py for the physics.
     "arm": "arm",
     "sampling_rate_hz": 50,
     "lever_arm_m": 0.45,
-    "tare_j2_nm": 43.57, "tare_j3_nm": -16.82,
+    "baseline_j2_nm": 43.57, "baseline_j3_nm": -16.82,
     "force_joint": 2
   }
 }
@@ -85,8 +85,8 @@ class TorqueFeatures(GenericService, EasyResource):
         self.arm = dependencies[Arm.get_resource_name(a["arm"])]
         self.sampling_rate_hz = float(a.get("sampling_rate_hz", 50.0))
         self.lever_arm_m = float(a.get("lever_arm_m", 0.45))
-        self.tare_j2_nm = float(a.get("tare_j2_nm", 43.57))
-        self.tare_j3_nm = float(a.get("tare_j3_nm", -16.82))
+        self.tare_j2_nm = float(a.get("baseline_j2_nm", 43.57))
+        self.tare_j3_nm = float(a.get("baseline_j3_nm", -16.82))
         self.force_joint = int(a.get("force_joint", 2))
         self._buf = deque(maxlen=int(a.get("buffer_size", 2000)))
         self._rec = []
@@ -114,8 +114,14 @@ class TorqueFeatures(GenericService, EasyResource):
                 res = await self.arm.do_command({"load": ""}, timeout=0.5)
                 loads = res.get("load", []) if isinstance(res, dict) else []
                 loads = [float(x) for x in loads[:6]]
+                # Joint angles for the pipeline CSV (feature_extractor needs q for QC)
+                try:
+                    jp = await self.arm.get_joint_positions(timeout=0.5)
+                    joints = [float(v) for v in jp.values[:6]] if hasattr(jp, 'values') else [0.0]*6
+                except Exception:
+                    joints = [0.0]*6
                 if len(loads) >= 6:
-                    s = {"t": time.time(), "loads": loads}
+                    s = {"t": time.time(), "loads": loads, "joints_deg": joints}
                     self._buf.append(s)
                     if self._recording:
                         self._rec.append(s)
@@ -171,8 +177,8 @@ class TorqueFeatures(GenericService, EasyResource):
             recent = np.array([s["loads"] for s in list(self._buf)[-20:]])
             self.tare_j2_nm = float(np.mean(recent[:, 1]))
             self.tare_j3_nm = float(np.mean(recent[:, 2]))
-            return {"status": "ok", "tare_j2_nm": round(self.tare_j2_nm, 4),
-                    "tare_j3_nm": round(self.tare_j3_nm, 4)}
+            return {"status": "ok", "baseline_j2_nm": round(self.tare_j2_nm, 4),
+                    "baseline_j3_nm": round(self.tare_j3_nm, 4)}
 
         if action == "record_start":
             self._rec = []
@@ -187,12 +193,23 @@ class TorqueFeatures(GenericService, EasyResource):
             return {"count": len(self._rec),
                     "timestamps": [s["t"] for s in self._rec],
                     "torques_nm": [s["loads"] for s in self._rec]}
+        if action == "record_csv":
+            # Export as pipeline-compatible CSV for feature_extractor.py
+            # Columns: timestamp, q1..q6_deg, tau1..tau6_nm (phases added by caller)
+            import csv, io
+            out = io.StringIO()
+            w = csv.writer(out)
+            w.writerow(["timestamp"] + [f"q{i}_deg" for i in range(1,7)] + [f"tau{i}_nm" for i in range(1,7)])
+            t0 = self._rec[0]["t"] if self._rec else 0
+            for s in self._rec:
+                w.writerow([round(s["t"]-t0, 3)] + [round(v, 2) for v in s.get("joints_deg", [0]*6)] + [round(v, 4) for v in s["loads"]])
+            return {"status": "ok", "csv": out.getvalue(), "samples": len(self._rec)}
 
         if action == "features":
             return self._compute_features()
 
         return {"error": f"unknown action '{action}'",
-                "available": ["telemetry", "features", "effective_force", "tare",
+                "available": ["telemetry", "features", "effective_force", "tare", "record_csv",
                               "record_start", "record_stop", "record_data", "status"]}
 
     def _compute_features(self) -> dict:
