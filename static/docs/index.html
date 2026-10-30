@@ -14,7 +14,7 @@ body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkM
 main { max-width:900px; margin:0 auto; padding:48px 24px 80px; text-align:center; }
 .kicker { color:var(--muted); margin:0; font-size:0.9rem; }
 .hook { font-size:3rem; font-weight:800; margin:0.2em 0 0.1em; letter-spacing:-0.02em; }
-.tagline { font-size:1.25rem; font-weight:700; margin:0 0 1.6em; }
+.subtitle { font-size:1.1rem; color:#8b949e; margin:0 0 1.6em; }
 #runBtn { font-size:1.2rem; font-weight:700; color:#fff; background:#3b82f6; border:none; border-radius:8px; padding:12px 24px; cursor:pointer; }
 #runBtn:disabled { opacity:0.45; cursor:default; }
 #runBtn:not(:disabled):hover { filter:brightness(1.12); }
@@ -59,8 +59,8 @@ details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
 </nav>
 <main>
   <p class="kicker">Viam + MongoDB hackathon · live demo</p>
-  <h1 class="hook">Teaching a robot to feel.</h1>
-  <p class="tagline">A lidded cup. A swirl. The contents, identified by touch.</p>
+  <h1>Teaching a robot to feel.</h1>
+  <p class="subtitle">Object classification through physical interaction.</p>
 
   <button id="runBtn" onclick="runDemo()">&#9654; Run the demo</button><br>
   <div class="modes">
