@@ -262,24 +262,21 @@ def material_of(label: str) -> str:
 # (water vs soap) is a harder claim than the 3.5 Hz signal reliably supports;
 # the category is the robust one.
 CATEGORY_OF_MATERIAL = {
-    "water": "liquid",
-    "soap": "liquid",
+    "water": "water",
     "solid": "solid",
-    "screws": "solid",
-    "candy": "solid",
     "empty": "empty",
 }
 
 
 def category_of(label: str) -> str:
-    """Coarse category for a taught label: liquid / solid / empty.
+    """Class for a taught label: water / solid / empty.
 
     Unknown materials map to themselves (their own category).
 
     Args:
-        label: taught signature label, e.g. "screws_100g".
+        label: taught signature label, e.g. "water".
     Returns:
-        "liquid", "solid", "empty", or the material itself when unknown.
+        "water", "solid", "empty", or the material itself when unknown.
     """
     mat = material_of(label)
     return CATEGORY_OF_MATERIAL.get(mat, mat)

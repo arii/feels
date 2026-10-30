@@ -254,19 +254,8 @@
         <label style="color:var(--muted); font-size:0.85rem;">Name
           <select id="teach-name" onchange="updateTeachLabel()" style="background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem; margin-left:4px;">
             <option value="water">water</option>
-            <option value="candy">candy</option>
             <option value="solid">solid</option>
-            <option value="soap">soap</option>
-            <option value="screws">screws</option>
             <option value="empty">empty</option>
-          </select></label>
-        <label style="color:var(--muted); font-size:0.85rem;">Amount
-          <select id="teach-amount" onchange="updateTeachLabel()" style="background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem; margin-left:4px;">
-            <option value="full">full</option>
-            <option value="half" selected>half</option>
-            <option value="quarter">quarter</option>
-            <option value="empty">empty</option>
-            <option value="mixed">mixed</option>
           </select></label>
         <span id="teach-composed" style="color:var(--text); font-family:monospace; font-size:0.95rem; padding:10px 4px;"></span>
         <button class="rec-start" id="teach-btn" onclick="teachItem()" style="font-size:0.9rem; padding:10px 16px;">Run swirl &amp; save to Atlas</button>
@@ -882,16 +871,11 @@ function toggleJoints() {
       }
     }
 
-    // Label taxonomy: <name>_<amount>, composed from dropdowns.
-    // Category is derived from the name (water/soap→liquid, solid/candy/screws→solid,
-    // empty→empty) — no separate input needed.
+    // Three classes: water, solid, empty. The label IS the class.
     function composeTeachLabel() {
       const custom = document.getElementById('teach-label-input').value.trim();
       if (custom) return custom;
-      const name = document.getElementById('teach-name').value;
-      if (name === 'empty') return 'empty_cup';
-      const amount = document.getElementById('teach-amount').value;
-      return name + '_' + amount;
+      return document.getElementById('teach-name').value;
     }
     function updateTeachLabel() {
       document.getElementById('teach-composed').textContent = '→ ' + composeTeachLabel();
@@ -901,7 +885,7 @@ function toggleJoints() {
       const btn = document.getElementById('teach-btn');
       const status = document.getElementById('teach-status');
       const name = composeTeachLabel();
-      if (!name) { status.innerText = 'Pick a name and amount first.'; return; }
+      if (!name) { status.innerText = 'Pick a class first.'; return; }
       btn.disabled = true;
       const t0 = Date.now();
       const tick = () => { status.innerText = `Teaching "${name}" — running swirl macro… ${Math.round((Date.now() - t0) / 1000)}s elapsed`; };
