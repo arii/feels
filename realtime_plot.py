@@ -91,8 +91,10 @@ async def _run_swirl_macro(object_label: str) -> str:
         _cycle_proc = subprocess.Popen(
             cmd, cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         loop = asyncio.get_event_loop()
-        rc = await loop.run_in_executor(None, _cycle_proc.wait)
-        out = _cycle_proc.stdout.read() if _cycle_proc.stdout else ""
+        # communicate() drains stdout while waiting — wait()+read() would
+        # deadlock once the pipe buffer (~64KB) fills on a chatty macro.
+        out, _ = await loop.run_in_executor(None, _cycle_proc.communicate)
+        rc = _cycle_proc.returncode
         _cycle_proc = None
         if rc != 0:
             _cycle_status = "error"
@@ -478,6 +480,9 @@ HTML_PAGE = """<!DOCTYPE html>
       align-items: center;
       justify-content: space-between;
     }
+    .feat-grid { display:grid; grid-template-columns: 1fr auto; gap:2px 10px; font-family:monospace; font-size:0.72rem; margin-top:4px; }
+    .feat-name { color:#6e7681; }
+    .feat-val { color:#e6edf3; text-align:right; }
   </style>
 </head>
 <body>
@@ -509,6 +514,8 @@ HTML_PAGE = """<!DOCTYPE html>
         <div class="kpi-sub" id="pred-conf-text">confidence —</div>
         <div class="kpi-label" style="margin-top:8px;">Nearest Atlas neighbors</div>
         <div id="pred-neighbors" style="font-size:0.85rem; margin-top:4px;"></div>
+        <div class="kpi-label" style="margin-top:8px;">10-D swirl signature</div>
+        <div class="feat-grid" id="pred-features"></div>
       </div>
       <div class="kpi-sub" id="predict-status"></div>
     </div>
@@ -731,6 +738,10 @@ HTML_PAGE = """<!DOCTYPE html>
         `confidence ${pct}%${data.low_confidence ? ' — LOW, consider teaching this item' : ''}` +
         (data.mock ? '  (MOCK)' : '');
       setNeighbors(document.getElementById('pred-neighbors'), data.matches || []);
+      const fn = (data.features && data.features.names) || [];
+      const fv = (data.features && data.features.z) || [];
+      document.getElementById('pred-features').innerHTML = fn.map((n, i) =>
+        `<div class="feat-name">${n}</div><div class="feat-val">${(fv[i] ?? 0).toFixed(3)}</div>`).join('');
       const dq = data.diagnostics || {};
       document.getElementById('predict-status').innerText = `Done — ${data.csv}` +
         (data.mock ? '  (MOCK data, not live hardware)' : '') +
@@ -884,6 +895,7 @@ async def _mock_predict():
         sim = float(np.dot(e_q, e_r))  # both L2-normalized → cosine similarity
         matches.append({"label": row["label"], "similarity": round(max(0.0, sim), 3)})
     matches.sort(key=lambda m: m["similarity"], reverse=True)
+    feats = feature_extractor.extract_features(df)
     return {
         "ok": True, "mock": True,
         "csv": os.path.basename(name),
@@ -891,7 +903,9 @@ async def _mock_predict():
         "confidence": float(round(float(conf), 3)),
         "low_confidence": bool(float(conf) < 0.82),
         "matches": matches,
-        "diagnostics": feature_extractor.extract_features(df)["diagnostics"],
+        "features": {"names": feature_extractor.FEATURE_NAMES,
+                     "z": [round(float(v), 4) for v in feats["z"]]},
+        "diagnostics": feats["diagnostics"],
     }
 
 
@@ -926,6 +940,8 @@ async def handle_cycle_predict(request):
                     "low_confidence": res["low_confidence"],
                     "matches": [{"label": m["label"], "similarity": round(m["score"], 3)}
                                 for m in res["matches"]],
+                    "features": {"names": feature_extractor.FEATURE_NAMES,
+                                 "z": [round(float(v), 4) for v in feats["z"]]},
                     "diagnostics": feats["diagnostics"],
                 }
             _last_prediction = result
