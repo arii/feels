@@ -832,6 +832,26 @@ function toggleJoints() {
       clearInterval(runTimer);
       runT0 = null;
     }
+    function showDoneBanner(text) {
+      const banner = document.getElementById('run-banner');
+      banner.style.display = 'flex';
+      banner.style.background = '#0d1a0d';
+      banner.style.borderColor = '#3fb950';
+      document.getElementById('run-dot').style.animation = 'none';
+      document.getElementById('run-dot').style.background = '#3fb950';
+      document.getElementById('run-text').innerText = text;
+      document.getElementById('run-elapsed').innerText = '';
+      clearInterval(runTimer);
+      // Auto-hide after 5s
+      setTimeout(() => {
+        if (document.getElementById('run-text').innerText === text) {
+          hideRunBanner();
+          // Reset banner style for next run
+          banner.style.background = '#0d2818';
+          document.getElementById('run-dot').style.animation = '';
+        }
+      }, 5000);
+    }
 
     const SIM_STAGES = ['home', 'approach', 'grasp', 'travel', 'swirl', 'place', 'predict'];
     function renderStageStrip(active) {
@@ -899,6 +919,9 @@ function toggleJoints() {
         if (!data.ok) throw new Error(data.error || 'prediction failed');
         renderStageStrip('predict');
         renderDecision(data);
+        const elapsed = Math.round((Date.now() - t0) / 1000);
+        const pred = data.category || data.label || 'unknown';
+        showDoneBanner(`Done — predicted ${pred} in ${elapsed}s`);
       } catch (e) {
         let msg = String(e.message || e);
         // Never dump raw tracebacks in the UI - one human-readable line
@@ -949,6 +972,8 @@ function toggleJoints() {
           : `✓ Signature saved! "${data.label}" indexed in MongoDB (sig ${String(data.sig_id).slice(-6)}).`;
         input.value = '';
         refreshVSpace();
+        const elapsed = Math.round((Date.now() - t0) / 1000);
+        showDoneBanner(`Done — taught "${data.label}" in ${elapsed}s`);
       } catch (e) {
         status.innerText = 'Error: ' + e.message;
       } finally {
