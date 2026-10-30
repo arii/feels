@@ -234,20 +234,34 @@
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Mode 2 &mdash; Teach new item (online dataset builder)</div>
-      <div style="display:flex; gap:8px; margin:8px 0;">
-        <input type="text" id="teach-label-input" placeholder="Item name, e.g. Loose Pens" style="flex:1; background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem;" />
+      <div style="display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center;">
+        <label style="color:var(--muted); font-size:0.85rem;">Name
+          <select id="teach-name" onchange="updateTeachLabel()" style="background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem; margin-left:4px;">
+            <option value="water">water</option>
+            <option value="candy">candy</option>
+            <option value="solid">solid</option>
+            <option value="soap">soap</option>
+            <option value="screws">screws</option>
+            <option value="empty">empty</option>
+          </select></label>
+        <label style="color:var(--muted); font-size:0.85rem;">Amount
+          <select id="teach-amount" onchange="updateTeachLabel()" style="background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem; margin-left:4px;">
+            <option value="150g">150g</option>
+            <option value="100g">100g</option>
+            <option value="50g">50g</option>
+            <option value="20g">20g</option>
+            <option value="full">full</option>
+            <option value="half" selected>half</option>
+            <option value="quarter">quarter</option>
+            <option value="mixed">mixed</option>
+          </select></label>
+        <span id="teach-composed" style="color:var(--text); font-family:monospace; font-size:0.95rem; padding:10px 4px;"></span>
         <button class="rec-start" id="teach-btn" onclick="teachItem()" style="font-size:0.9rem; padding:10px 16px;">RUN SWIRL &amp; SAVE TO ATLAS</button>
       </div>
-      <div style="display:flex; flex-wrap:wrap; gap:6px; margin:8px 0;">
-        <span class="chip-label">confound set:</span>
-        <button class="chip" onclick="setTeachLabel('solid_150g')">solid_150g</button>
-        <button class="chip" onclick="setTeachLabel('water_150g')">water_150g</button>
-        <button class="chip" onclick="setTeachLabel('candy_150g')">candy_150g</button>
-        <button class="chip" onclick="setTeachLabel('soap_150g')">soap_150g</button>
-        <span class="chip-label" style="margin-left:8px;">basics:</span>
-        <button class="chip" onclick="setTeachLabel('empty_cup')">empty_cup</button>
-        <button class="chip" onclick="setTeachLabel('water_half')">water_half</button>
-        <button class="chip" onclick="setTeachLabel('candy_mixed')">candy_mixed</button>
+      <details style="margin:4px 0;">
+        <summary style="color:var(--muted); font-size:0.8rem; cursor:pointer;">Custom label (escape hatch)</summary>
+        <input type="text" id="teach-label-input" placeholder="e.g. water_075pct — overrides the dropdowns" style="width:100%; margin-top:6px; background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem;" />
+      </details>
         <button class="chip" onclick="setTeachLabel('dish_soap_half')">dish_soap_half</button>
       </div>
       <div class="kpi-sub" id="teach-status">Signature saved → vector indexed in MongoDB, instantly queryable.</div>
@@ -774,16 +788,26 @@
       }
     }
 
-    function setTeachLabel(name) {
-      document.getElementById('teach-label-input').value = name;
+    // Label taxonomy: <name>_<amount>, composed from dropdowns.
+    // Category is derived from the name (water/soap→liquid, solid/candy/screws→solid,
+    // empty→empty) — no separate input needed.
+    function composeTeachLabel() {
+      const custom = document.getElementById('teach-label-input').value.trim();
+      if (custom) return custom;
+      const name = document.getElementById('teach-name').value;
+      if (name === 'empty') return 'empty_cup';
+      const amount = document.getElementById('teach-amount').value;
+      return name + '_' + amount;
+    }
+    function updateTeachLabel() {
+      document.getElementById('teach-composed').textContent = '→ ' + composeTeachLabel();
     }
 
     async function teachItem() {
-      const input = document.getElementById('teach-label-input');
       const btn = document.getElementById('teach-btn');
       const status = document.getElementById('teach-status');
-      const name = input.value.trim();
-      if (!name) { status.innerText = 'Enter an item name first.'; return; }
+      const name = composeTeachLabel();
+      if (!name) { status.innerText = 'Pick a name and amount first.'; return; }
       btn.disabled = true;
       const t0 = Date.now();
       const tick = () => { status.innerText = `Teaching "${name}" — running swirl macro… ${Math.round((Date.now() - t0) / 1000)}s elapsed`; };
@@ -844,7 +868,8 @@
       document.getElementById('predict-status').innerText =
         data.aborted ? 'Cycle aborted.' : 'No cycle running.';
     }
-  </script>
+      updateTeachLabel();
+</script>
   <div id="build-info" style="text-align:center; color:#6e7681; font-size:0.7rem; padding:12px;">build …</div>
 </body>
 </html>

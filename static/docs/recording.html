@@ -33,19 +33,18 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
     <a href="/docs/force">Extracting Force</a>
     <a href="/docs/figures">Figures</a>
     <a class="active" href="/docs/recording">Recording</a>
-    <a href="/docs/api">API</a>
     <a href="/">← Dashboard</a>
   </span>
 </nav>
 <main>
   <h1>How to record</h1>
-  <p>The classifier only knows what it has felt. This page is the data-collection
-  protocol: what to record, what good data looks like, and the pipeline's acceptance
-  criteria. Follow it and the signatures stay comparable across runs.</p>
+  <p>Use the tool: the dashboard's Mode 2 button runs the fixed macro
+  (<code>repeatable_grasp.py --object &lt;label&gt; --record --swirl-smooth</code>).
+  Nothing else to do by hand.</p>
 
   <h2>What to record</h2>
-  <p><strong>First, the confound set</strong> — the core of the experiment. Four
-  items at the same mass, different contents:</p>
+  <p><strong>First, the confound set</strong> — four items at the same mass,
+  different contents:</p>
   <ul>
     <li><code>solid_150g</code> — a rigid 150 g weight</li>
     <li><code>water_150g</code> — 150 g of water</li>
@@ -54,61 +53,10 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   </ul>
   <p>These four weigh the same — the baseline reads identical. Separation comes
   from dynamics alone; that is the claim being tested.</p>
-  <p><strong>Then the basics:</strong> <code>empty_cup</code>,
-  <code>water_075pct</code>, <code>solid_020g</code>, <code>screws_100g</code>.
-  Record <strong>2–3 repetitions per item</strong>; repeats are what let the
-  matcher average out run-to-run noise.</p>
-  <p>The venue currently has water, solid weights, screws, and empty cups —
-  record the confound set as props allow. The same-mass contrast is the point;
-  partial coverage still teaches the system something.</p>
 
-  <h2>How to record</h2>
-  <ol>
-    <li><strong>Swirl protocol only.</strong> One continuous pick → swirl → place → back-off,
-    run with
-    <code>python repeatable_grasp.py --object &lt;label&gt; --record --swirl-smooth</code>
-    (or the dashboard's Mode 1 / Mode 2 buttons, which run exactly this).</li>
-    <li><strong>Same cup, same placement</strong> every run. The gripper reports
-    one number; a different cup changes it and pollutes the grip feature.</li>
-    <li><strong>Baseline before each session.</strong> The extractor QCs the
-    <code>INIT</code> baseline of every recording — preview any batch with
-    <code>teach_csv.py --dry-run recordings/</code> and read the
-    <code>baseline=</code> flags before teaching.</li>
-  </ol>
-  <p><strong>Good</strong> = the <code>SWIRL</code> phase is present in the
-  <code>phase</code> column and the baseline flags are clean.
-  <strong>Skipped</strong> = anything <code>teach_csv.py --require-swirl</code>
-  refuses: recordings with no <code>SWIRL</code> samples, or a baseline sampled mid-motion.</p>
-
-  <h2>Recording requirements</h2>
-  <ul>
-    <li><strong>Non-swirl motions.</strong> The embedding encodes motion as much
-    as contents — measured: the same item recorded under two protocols scores
-    0.41–0.45 cosine, while different items under one protocol reach 0.92.
-    Keep one protocol per library so the embedding encodes the cup.</li>
-    <li><strong>Partial or interrupted runs.</strong> An aborted macro leaves a
-    truncated phase sequence; the extractor's windows assume the full
-    pick → swirl → place → back-off.</li>
-    <li><strong>Teach labeled files.</strong> Files labeled
-    <code>mystery</code> are held out for testing
-    (<code>--include-mystery</code> overrides).</li>
-  </ul>
-
-  <h2>Teaching what you recorded</h2>
-  <ul>
-    <li><strong>Live, one item at a time:</strong> Mode 2 on the dashboard. The
-    preset chips fill in confound-set and basics labels; the run teaches
-    straight into Atlas.</li>
-    <li><strong>Batch:</strong>
-    <code>python teach_csv.py --require-swirl recordings/</code> teaches every
-    labeled CSV with a true <code>SWIRL</code> phase and skips the rest.</li>
-    <li><strong>Re-teach:</strong> <code>--force</code> replaces existing
-    signatures for the same CSVs (dedup is on <code>properties.csv</code>).</li>
-    <li><strong>Preview:</strong> <code>--dry-run</code> lists what would be
-    taught, with phase source and baseline flags per file. Run it before every
-    batch.</li>
-  </ul>
-  <p>New signatures take effect on the next prediction — teaching is the training step.</p>
+  <h2>Acceptance criteria</h2>
+  <p><strong>Good</strong> = the <code>SWIRL</code> phase is present and the
+  baseline flags are clean. The tool refuses the rest.</p>
 </main>
 </body>
 </html>
