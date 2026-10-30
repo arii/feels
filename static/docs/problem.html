@@ -43,13 +43,8 @@ pre { background:#161b22; border:1px solid var(--border); border-radius:8px; pad
 
   <h2>Mapping Swirl Dynamics to a 10-D Signature</h2>
   <p>The system measures dynamics — how contents move when swirled — to identify
-  them. The robot executes a fixed probing motion (pick up → swirl → place) and
+  them. The robot executes a fixed motion (pick up → swirl → place) and
   maps this directly to a prediction:</p>
-  <p><strong>Time Series → 10-D Signature:</strong> The pipeline converts raw
-  joint torques into explicit physical features.</p>
-  <p><strong>Normalize:</strong> The system scales and L2-normalizes the features.</p>
-  <p><strong>Vector Search:</strong> The algorithm queries the taught library for
-  the nearest neighbor to instantly classify the item.</p>
 
   <h2>What Makes Classification Hard</h2>
   <ul>

@@ -38,20 +38,9 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
 <main>
   <h1>How the System Predicts</h1>
 
-  <h2>Ten Features That Describe a Swirl</h2>
-  <p>The extractor reads the joint-torque time series and computes ten
-  physical quantities, in three groups:</p>
-  <table>
-    <tr><th>Group</th><th>Features</th><th>What they capture</th></tr>
-    <tr><td>Static lift</td><td><code>mass_j2</code>, <code>mass_j3</code>, <code>lift_dyn_j3</code></td><td>Gravity torque offsets from the lift; an inertial cue as the arm accelerates</td></tr>
-    <tr><td>Swirl dynamics</td><td><code>swirl_var_j2</code>, <code>swirl_var_j3</code>, <code>swirl_ptp_j3</code>, <code>phase_lag_s</code>, <code>rattle_e</code></td><td>Slosh energy in the swirl; the swing of shifting mass; the lag between TCP motion and torque (viscous damping); rattle energy in the observable band</td></tr>
-    <tr><td>Grip and excitation</td><td><code>grip_comp</code>, <code>swirl_speed</code></td><td>Gripper compliance under load; the TCP swirl speed that drives the excitation</td></tr>
-  </table>
-  <p>Three of the ten — the two static mass offsets and swirl speed — carry
-  zero weight in the embedding. The static offsets sit below baseline noise,
-  and swirl speed measures the macro's drive rather than the contents. The
-  matcher works in the 7 informative dimensions; all ten stay in the vector
-  for display.</p>
+  <p>The extractor reads the joint-torque time series and computes the 10-D signature
+  described in <a href="/docs/approach" style="color:#58a6ff;">Approach</a> &mdash; ten physical
+  quantities in three groups, matched in the 7 informative dimensions.</p>
 
   <h2>The Taught Library</h2>
   <p>The library holds the taught signatures — 113 at last count, each a 10-D
