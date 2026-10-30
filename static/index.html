@@ -254,8 +254,10 @@
         <label style="color:var(--muted); font-size:0.85rem;">Name
           <select id="teach-name" onchange="updateTeachLabel()" style="background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem; margin-left:4px;">
             <option value="water">water</option>
-            <option value="solid">solid</option>
-            <option value="empty">empty</option>
+            <option value="empty">empty (gripper holding nothing)</option>
+            <option value="empty_cup">empty cup</option>
+            <option value="screws">screws</option>
+            <option value="candy">candy</option>
           </select></label>
         <span id="teach-composed" style="color:var(--text); font-family:monospace; font-size:0.95rem; padding:10px 4px;"></span>
         <button class="rec-start" id="teach-btn" onclick="teachItem()" style="font-size:0.9rem; padding:10px 16px;">Run swirl &amp; save to Atlas</button>
@@ -871,7 +873,8 @@ function toggleJoints() {
       }
     }
 
-    // Three classes: water, solid, empty. The label IS the class.
+    // Five classes: water, empty (nothing held), empty_cup, screws, candy.
+    // The label IS the class.
     function composeTeachLabel() {
       const custom = document.getElementById('teach-label-input').value.trim();
       if (custom) return custom;

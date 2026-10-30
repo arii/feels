@@ -235,7 +235,7 @@ MATERIAL_STEMS = {
     "screws": "screws",
     "screw": "screws",
     "empty": "empty",
-    "empty_cup": "empty",
+    "empty_cup": "empty_cup",
 }
 
 _CAPACITY_SUFFIX = re.compile(r"_(\d+(pct|g|ml|oz)|half|full|mixed|empty)$")
@@ -245,7 +245,8 @@ def material_of(label: str) -> str:
     """Coarse material class for a taught label.
 
     water_025pct / water_150g / water_half -> water; solid_020g -> solid;
-    dish_soap_half -> soap; candy_mixed -> candy; empty_cup -> empty.
+    dish_soap_half -> soap; candy_mixed -> candy.
+    empty and empty_cup are distinct classes (gripper empty vs holding empty cup).
     Unknown labels map to themselves (their own material class).
 
     Args:
@@ -263,20 +264,22 @@ def material_of(label: str) -> str:
 # the category is the robust one.
 CATEGORY_OF_MATERIAL = {
     "water": "water",
-    "solid": "solid",
     "empty": "empty",
+    "empty_cup": "empty_cup",
+    "screws": "screws",
+    "candy": "candy",
 }
 
 
 def category_of(label: str) -> str:
-    """Class for a taught label: water / solid / empty.
+    """Class for a taught label: water / empty / empty_cup / screws / candy.
 
     Unknown materials map to themselves (their own category).
 
     Args:
         label: taught signature label, e.g. "water".
     Returns:
-        "water", "solid", "empty", or the material itself when unknown.
+        One of the five classes, or the material itself when unknown.
     """
     mat = material_of(label)
     return CATEGORY_OF_MATERIAL.get(mat, mat)
