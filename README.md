@@ -158,21 +158,24 @@ Open **`http://localhost:8080`** in your browser to:
 - Explore the **Vector space** card: 2-D PCA of the Atlas 10-D signature library, hover any dot for its label, gold/silver/bronze rings mark the top-3 neighbors after a prediction. Refreshes live as items are taught.
 - The footer shows the running `build <sha>` — compare with the branch tip after pulling.
 
-### 4. CLI Headless Execution
+---
 
-To run the repeatable pick-and-place swirl sequence from the terminal:
+## Usage
+
+### Run the macro from the CLI
 
 ```bash
-# Run one full pick up -> swirl -> place cycle with labeled telemetry recording
+# One full pick → swirl → place cycle with labeled telemetry recording
 python src/repeatable_grasp.py --record --object water_half
 ```
-### 5. Force & Weight Sensitivity Analysis
+
+### Force & weight sensitivity
 
 ```bash
-python effective_force.py --duration 15.0
+python analysis/effective_force.py --duration 15.0
 ```
 
-### 6. Deployable Viam modules (on-robot)
+### Deployable Viam modules (on-robot)
 
 Three models ship as one public Viam module — [**`braveorangerover:object-picker`**](https://app.viam.com/module/braveorangerover/object-picker)
 (`meta.json` + `run.sh` + `src/module_main.py`) — deployed directly onto the robot
@@ -192,9 +195,9 @@ python src/use_modules.py all                                 # call the deploye
 ```
 *(The pre-module script `control_service.py` is archived in `src/converted_to_modules/`.)*
 
-### 7. Swirl Feature Extractor + 2-Mode Dashboard
+### Feature extractor & 2-mode dashboard
 
-The demo loop is pick-up → swirl → place, driven by `repeatable_grasp.py --swirl-smooth` (locked in, don't touch it). Everything below consumes its CSVs.
+The demo loop is pick → swirl → place, driven by `repeatable_grasp.py --swirl-smooth` (locked in, don't touch it). Everything below consumes its CSVs.
 
 **Feature extractor:**
 
@@ -206,7 +209,7 @@ python src/feature_extractor.py recordings/recording_20261029_180332_empty_cup.c
 python src/feature_extractor.py --calibrate
 ```
 
-Outputs `z` (10 interpretable features: mass offsets, swirl variances, peak-to-peak, phase lag, rattle energy, grip compliance, lift transient, swirl speed), `e` (L2-normalized embedding matching the Atlas `cup_dynamics_index`: 10 dims, cosine), and `diagnostics` (sampling rate, tare QC flags, rattle-band limits). The 5–25 Hz rattle band is **not** observable at 4–5 Hz cloud sampling — the extractor flags `rattle_band_limited` honestly; the real band needs the 100 Hz on-robot module (step 6).
+Outputs `z` (10 interpretable features: mass offsets, swirl variances, peak-to-peak, phase lag, rattle energy, grip compliance, lift transient, swirl speed), `e` (L2-normalized embedding matching the Atlas `cup_dynamics_index`: 10 dims, cosine), and `diagnostics` (sampling rate, tare QC flags, rattle-band limits). The 5–25 Hz rattle band is **not** observable at 4–5 Hz cloud sampling — the extractor flags `rattle_band_limited` honestly; the real band needs the 100 Hz on-robot module (above).
 
 **Dashboard API (2 modes):**
 
@@ -318,62 +321,7 @@ Even without a dedicated 6-axis F/T flange sensor, the xArm850 reports high-reso
 
 ---
 
-## Baseline Code Sample
-
-The baseline connection pattern in [`main.py`](main.py):
-
-```python
-import asyncio
-from viam.robot.client import RobotClient
-from viam.components.arm import Arm
-from viam.components.camera import Camera
-from viam.components.gripper import Gripper
-from viam.services.generic import Generic as GenericService
-
-async def connect():
-    opts = RobotClient.Options.with_api_key(
-        api_key='<API-KEY>',
-        api_key_id='<API-KEY-ID>'
-    )
-    return await RobotClient.at_address('sfhack12-main.ty1cywh7tq.viam.cloud', opts)
-
-async def main():
-    async with await connect() as machine:
-        print('Resources:')
-        print(machine.resource_names)
-        
-        # arm
-        arm: Arm = Arm.from_robot(machine, "arm")
-        arm_return_value = await arm.get_end_position()
-        print(f"arm get_end_position return value: {arm_return_value}")
-
-        # cam
-        cam: Camera = Camera.from_robot(machine, "cam")
-        cam_return_value = await cam.get_images()
-        print(f"cam get_images return value: {cam_return_value}")
-
-        # gripper
-        gripper: Gripper = Gripper.from_robot(machine, "gripper")
-        gripper_return_value = await gripper.is_moving()
-        print(f"gripper is_moving return value: {gripper_return_value}")
-
-        # table
-        table: Gripper = Gripper.from_robot(machine, "table")
-        table_return_value = await table.is_moving()
-        print(f"table is_moving return value: {table_return_value}")
-
-        # ceiling
-        ceiling: Gripper = Gripper.from_robot(machine, "ceiling")
-        ceiling_return_value = await ceiling.is_moving()
-        print(f"ceiling is_moving return value: {ceiling_return_value}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
----
-
-## 8. Repeatable Grasping Workflow (Arm Saver Positions)
+## Repeatable Grasping Workflow (Arm-Saver Waypoints)
 
 Using the newly configured `erh:vmodutils:arm-position-saver` switches on `sfhack12`, automated pick-and-place trajectories can be reliably commanded with synchronized gripper open/close operations:
 
