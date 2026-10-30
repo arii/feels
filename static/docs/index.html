@@ -68,7 +68,7 @@ details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
     <button id="modePlayback" class="mode" onclick="setMode('playback')">Playback</button>
   </div>
 
-  <p class="stageline" id="stageline"><span id="sgSwirl">○ Swirl</span> &nbsp;→&nbsp; <span id="sgPredict">○ Predict</span></p>
+  <p class="stageline" id="stageline"><span id="sgLift">○ lift</span> &nbsp;→&nbsp; <span id="sgSwirl">○ swirl</span> &nbsp;→&nbsp; <span id="sgPredict">○ predict</span></p>
   <div id="verdict"></div>
 
   <div id="vspaceWrap">
@@ -245,11 +245,11 @@ function setMode(m) {
 function stage(id, cls, glyph) {
   const el = document.getElementById(id);
   el.className = cls || "";
-  const names = {sgSwirl: "Swirl", sgPredict: "Predict"};
+  const names = {sgLift: "lift", sgSwirl: "swirl", sgPredict: "predict"};
   el.textContent = (glyph || "○") + " " + names[id];
 }
 function resetStages() {
-  ["sgSwirl","sgPredict"].forEach(id => stage(id));
+  ["sgLift","sgSwirl","sgPredict"].forEach(id => stage(id));
   document.getElementById("verdict").innerHTML = "";
 }
 function setStatus(html) { document.getElementById("vspaceStatus").innerHTML = html; }
@@ -257,7 +257,8 @@ async function runDemo() {
   const btn = document.getElementById("runBtn");
   btn.disabled = true;
   resetStages();
-  stage("sgSwirl", "on", "●");
+  stage("sgLift", "on", "●");
+  setStatus("<strong>Status: Running (" + demoMode + ").</strong> Lifting…");
   setStatus("<strong>Status: Running (" + demoMode + ").</strong> Swirling…");
   let pred = null;
   try {
@@ -277,6 +278,7 @@ async function runDemo() {
       const s = await (await fetch("/api/status")).json();
       if (!s.cycle_busy) {
         clearInterval(poll);
+        stage("sgLift", "done", "●");
         stage("sgSwirl", "done", "●");
         stage("sgPredict", "on", "●");
         setStatus("<strong>Status: Predicting.</strong> 10-D signature → Atlas…");

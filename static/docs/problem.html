@@ -35,47 +35,35 @@ pre { background:#161b22; border:1px solid var(--border); border-radius:8px; pad
   </span>
 </nav>
 <main>
-  <h1>The formal problem</h1>
+  <h1>Classifying Sealed Contents Using Only Physical Interaction</h1>
 
-  <h2>The Setup</h2>
-  <p>A 6-DOF arm holds a <strong>lidded, opaque cup</strong>. To identify the
-  contents, the system relies entirely on standard joint-torque telemetry.</p>
-  <p>The contents belong to a set of classes: <strong>empty, water, loose candy,
-  or a rigid weight</strong>.</p>
-  <p>Because the lid visually seals the container, the system uses physical
-  interaction to classify the objects.</p>
+  <p>A 6-DOF arm holding a sealed cup uses proprioception to classify its
+  contents (empty, water, loose candy, or a rigid weight). Because the lid
+  visually seals the container and static weights can be indistinguishable,
+  the system relies entirely on active movement to identify the object.</p>
 
-  <h3>The Solution: Dynamics</h3>
-  <p>The system leverages <strong>dynamics</strong> — measuring how the contents
-  move when swirled — to reveal exactly what is inside.</p>
-  <p>The robot executes one fixed probing motion (pick up → swirl → place).
-  The pipeline maps this directly to a prediction:</p>
-  <ol>
-    <li><strong>Time Series → 10-D Signature:</strong> raw joint torques are
-    converted into explicit physical features.</li>
-    <li><strong>Normalize:</strong> features are scaled and L2-normalized.</li>
-    <li><strong>Vector Search:</strong> the system immediately finds the nearest
-    neighbor in the taught library for instant classification.</li>
-  </ol>
+  <h2>Mapping Swirl Dynamics to a 10-D Signature</h2>
+  <p>The system measures dynamics — how contents move when swirled — to identify
+  them. The robot executes a fixed probing motion (pick up → swirl → place) and
+  maps this directly to a prediction:</p>
+  <p><strong>Time Series → 10-D Signature:</strong> The pipeline converts raw
+  joint torques into explicit physical features.</p>
+  <p><strong>Normalize:</strong> The system scales and L2-normalizes the features.</p>
+  <p><strong>Vector Search:</strong> The algorithm queries the taught library for
+  the nearest neighbor to instantly classify the item.</p>
 
-  <h2>The 150g test</h2>
-  <p>Four 150g items with different contents — <code>solid_150g</code>,
-  <code>water_150g</code>, <code>candy_150g</code>, <code>soap_150g</code>.
-  Same weight, so when the system tells them apart, the discrimination comes
-  from dynamics, not weight: how the contents move when swirled.</p>
-
-  <h2>What makes it hard</h2>
+  <h2>What Makes Classification Hard</h2>
   <ul>
-    <li><strong>Coarse sensing:</strong> 4–5 Hz torque telemetry. The true 5–25 Hz
-      rattle band is above Nyquist — we use what the channel carries.</li>
+    <li><strong>Coarse sensing:</strong> the arm reports torque telemetry at 4–5 Hz.
+    The 5–25 Hz rattle band sits above Nyquist, so the system uses what the
+    channel carries.</li>
     <li><strong>Baseline drift:</strong> joint-torque baselines wander with pose and
-      temperature; static offsets are unreliable, so the signal must come from
-      motion.</li>
-    <li><strong>Hidden by design:</strong> the contents stay sealed, so the only
-      supervision is the label the operator teaches.</li>
-    <li><strong>Static hold torques</strong> carry no payload signal at our pose
-      (verified identical across contents). Everything discriminative comes from
-      the swirl dynamics.</li>
+    temperature. Static offsets are unreliable, so the signal comes from motion.</li>
+    <li><strong>Hidden by design:</strong> the contents stay sealed. The only
+    supervision is the label the operator teaches.</li>
+    <li><strong>Static hold torques</strong> carry no payload signal at this pose
+    (verified identical across contents). Everything discriminative comes from
+    the swirl dynamics.</li>
   </ul>
 </main>
 </body>
