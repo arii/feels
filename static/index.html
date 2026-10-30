@@ -61,14 +61,18 @@
     .grid-kpi {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 12px;
-      margin-bottom: 18px;
+      gap: 24px;
+      margin-bottom: 36px;
     }
     .kpi-card {
       background: var(--card-bg);
       border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 12px 16px;
+      border-radius: 12px;
+      padding: 24px 28px;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+    .kpi-card:hover {
+      border-color: #388bfd;
     }
     .kpi-label { font-size: 0.75rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
     .kpi-val { font-size: 1.8rem; font-weight: 700; color: var(--text-bright); margin-top: 4px; font-variant-numeric: tabular-nums; }
@@ -119,24 +123,53 @@
       color: var(--text-bright);
     }
     .section-title {
-      font-size: 1.05rem;
+      font-size: 1.15rem;
+      font-weight: 600;
       color: var(--text-bright);
-      margin: 20px 0 12px 0;
+      margin: 44px 0 20px 0;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      letter-spacing: 0.01em;
     }
     .grid-joints {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 12px;
-      margin-bottom: 20px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-bottom: 36px;
+    }
+    @media (max-width: 1100px) {
+      .grid-joints { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 700px) {
+      .grid-joints { grid-template-columns: 1fr; }
     }
     .joint-card {
       background: var(--card-bg);
       border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 12px 14px;
+      border-radius: 10px;
+      padding: 20px;
+      transition: border-color 0.25s ease;
+    }
+    .joint-card:hover {
+      border-color: #388bfd;
+    }
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.45; }
+    }
+    .fade-in {
+      animation: fadeSlideIn 0.35s ease-out;
+    }
+    .loading-pulse {
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    #vspace-canvas {
+      transition: opacity 0.3s ease;
     }
     .joint-header {
       display: flex;
@@ -673,8 +706,10 @@ function toggleJoints() {
 
     function renderVSpace(data) {
       const c = document.getElementById('vspace-canvas');
+      c.style.opacity = '0.25';
       const note = document.getElementById('vspace-note');
       const { ctx, w, h, dpr } = sizeCanvas(c);
+      requestAnimationFrame(() => { c.style.opacity = '1'; });
       ctx.clearRect(0, 0, w, h);
       const pts = data.points || [];
       if (!pts.length) {
@@ -727,7 +762,9 @@ function toggleJoints() {
     }
 
     function renderDecision(data) {
-      document.getElementById('decision-card').style.display = 'block';
+      const dc = document.getElementById('decision-card');
+      dc.style.display = 'block';
+      dc.classList.remove('fade-in'); void dc.offsetWidth; dc.classList.add('fade-in');
       // Category is the headline claim; material and the fine-grained taught
       // label are supporting detail.
       const cat = data.category || data.material || data.prediction || 'unknown';
@@ -763,6 +800,7 @@ function toggleJoints() {
       lastMatchLabels = (data.matches || []).slice(0, 3).map(m => m.label);
       refreshVSpace();
       const dq = data.diagnostics || {};
+      document.getElementById('predict-status').classList.remove('loading-pulse');
       document.getElementById('predict-status').innerText = `Done — ${data.csv}` +
         (data.mock ? '  (MOCK data, not live hardware)' : '') +
         (data.simulated ? `  (SIMULATED replay${data.true_label ? ` — true contents: ${data.true_label}` : ''})` : '') +
@@ -818,6 +856,8 @@ function toggleJoints() {
       const mode = document.getElementById('run-mode').value;
       const sim = mode === 'simulate';
       setJointsCollapsed(sim);
+      const m1 = document.querySelector('.grid-kpi');
+      if (m1) { m1.classList.remove('fade-in'); void m1.offsetWidth; m1.classList.add('fade-in'); }
       document.getElementById('sim-csv').style.display = sim ? '' : 'none';
       document.getElementById('sim-speed').style.display = sim ? '' : 'none';
       document.getElementById('sim-progress-wrap').style.display = sim ? '' : 'none';
@@ -841,6 +881,8 @@ function toggleJoints() {
       const simCsv = document.getElementById('sim-csv').value;
       const simSpeed = parseFloat(document.getElementById('sim-speed').value || '1');
       btn.disabled = true;
+      status.classList.add('loading-pulse');
+      status.innerText = simMode ? 'Replaying recording…' : 'Running swirl macro…';
       document.getElementById('decision-card').style.display = 'none';
       renderStageStrip(simMode ? 'home' : null);
       const t0 = Date.now();
@@ -891,6 +933,7 @@ function toggleJoints() {
       if (!name) { status.innerText = 'Pick a name and amount first.'; return; }
       btn.disabled = true;
       const t0 = Date.now();
+      status.classList.add('loading-pulse');
       const tick = () => { status.innerText = `Teaching "${name}" — running swirl macro… ${Math.round((Date.now() - t0) / 1000)}s elapsed`; };
       tick();
       const timer = setInterval(tick, 1000);
@@ -905,12 +948,14 @@ function toggleJoints() {
         status.innerText = data.mock
           ? `✓ (MOCK) "${data.label}" recorded — not saved to Atlas.`
           : `✓ Signature saved! "${data.label}" indexed in MongoDB (sig ${String(data.sig_id).slice(-6)}).`;
+        status.classList.remove('fade-in'); void status.offsetWidth; status.classList.add('fade-in');
         input.value = '';
         refreshVSpace();
       } catch (e) {
         status.innerText = 'Error: ' + e.message;
       } finally {
         clearInterval(timer);
+        status.classList.remove('loading-pulse');
         btn.disabled = false;
       }
     }
