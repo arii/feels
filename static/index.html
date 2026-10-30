@@ -886,7 +886,6 @@ function toggleJoints() {
         status.innerText = simMode
           ? `Simulating — replaying ${simCsv || 'recording'} at ${simSpeed}×… ${Math.round((Date.now() - t0) / 1000)}s elapsed`
           : `Running pick-up → swirl → place… ${Math.round((Date.now() - t0) / 1000)}s elapsed`;
-        hideRunBanner();
       };
       tick();
       const timer = setInterval(tick, 1000);
