@@ -129,17 +129,8 @@ def _vspace_cache_load():
         return []
 
 
-async def handle_vspace(request):
-    """2-D PCA of the Atlas signature library, optionally with the query
-    vector projected in the same basis (POST {"query": [10 floats]}).
-    Falls back to the local cache when Atlas is unreachable — the venue
-    wifi dropping must not blank the plot."""
-    try:
-        data = await request.json()
-    except Exception:
-        data = {}
-    query = data.get("query")
-    cached = False
+def _vspace_cache_refresh_from_atlas():
+    """Re-query Atlas and overwrite the cache file. Called after teach."""
     try:
         a = _atlas()
         docs = list(a.get_db().signatures.find({}, {"label": 1, "feature_vector": 1}))
@@ -147,9 +138,32 @@ async def handle_vspace(request):
                  for d in docs if d.get("feature_vector")]
         if items:
             _vspace_cache_save(items)
+        return items
     except Exception:
-        items = _vspace_cache_load()
-        cached = True
+        return []
+
+
+async def handle_vspace(request):
+    """2-D PCA of the signature library, optionally with the query
+    vector projected in the same basis (POST {"query": [10 floats]}).
+    Reads from the local cache file on every request — the cache is updated
+    on each teach, so the display reflects the current library without
+    Atlas read-after-write delays."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    query = data.get("query")
+    # Always read from cache file; teach path keeps it fresh.
+    items = _vspace_cache_load()
+    cached = True
+    if not items:
+        # Cache empty: try Atlas once (first boot, or teach happened elsewhere)
+        try:
+            items = _vspace_cache_refresh_from_atlas()
+            cached = False if items else True
+        except Exception:
+            pass
     try:
         if items:
             top_dim = max(set(len(v) for _, v in items),
@@ -882,6 +896,8 @@ async def handle_cycle_teach(request):
                             "phase_source": feats["diagnostics"]["phase_source"],
                             "csv": os.path.basename(csv_path),
                             "z": [round(float(v), 4) for v in feats["z"]]})
+            # Refresh the vspace cache so the vector card shows the new point
+            _vspace_cache_refresh_from_atlas()
             return web.json_response({
                 "ok": True, "label": label, "csv": os.path.basename(csv_path),
                 "sig_id": saved.get("sig_id"),
@@ -941,6 +957,8 @@ async def handle_cycle_correct(request):
                             "csv": os.path.basename(csv_path),
                             "z": [round(float(v), 4) for v in feats["z"]],
                             "correction_of": last.get("prediction")})
+            # Refresh the vspace cache so the vector card shows the new point
+            _vspace_cache_refresh_from_atlas()
             return web.json_response({
                 "ok": True, "label": label, "was": last.get("prediction"),
                 "csv": os.path.basename(csv_path),
