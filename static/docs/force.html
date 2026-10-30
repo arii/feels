@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>feels docs — effective force without a force-torque sensor</title>
+<title>feels docs — reading force from joint torques</title>
 <style>
 :root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
 body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
@@ -27,7 +27,7 @@ pre { background:#161b22; border:1px solid var(--border); border-radius:8px; pad
   <span>
     <a href="/docs/problem">Problem</a>
     <a href="/docs/approach">Approach</a>
-    <a class="active" href="/docs/force">Force without a sensor</a>
+    <a class="active" href="/docs/force">Force from torques</a>
     <a href="/docs/relevance">Why it matters</a>
     <a href="/docs/figures">Figures</a>
     <a href="/docs/recording">Recording</a>
@@ -35,48 +35,46 @@ pre { background:#161b22; border:1px solid var(--border); border-radius:8px; pad
   </span>
 </nav>
 <main>
-  <h1>Effective force measurement without a force-torque sensor</h1>
+  <h1>Reading force from joint torques</h1>
 
   <h2>The textbook relation</h2>
   <p>Joint torques and end-effector forces are linked through the arm's Jacobian:</p>
   <pre>τ = Jᵀ(q) · F  +  gravity(q)  +  dynamics(q, q̇, q̈)</pre>
   <p>A wrist-mounted 6-axis force-torque sensor measures <code>F</code> directly.
-  Without one: subtract gravity and the arm's own dynamics, and the leftover
-  torque residuals are the payload.</p>
+  The same information is recoverable from the arm itself: subtract gravity and
+  the arm's own dynamics, and the leftover torque residuals carry the payload's
+  signature.</p>
 
   <h2>What we actually do</h2>
-  <p>We do <strong>not</strong> invert the Jacobian, and we do <strong>not</strong>
-  output calibrated newtons. Full force estimation would need an accurate mass
-  model of the arm plus a clean tare — and our audit showed the tare baseline is
-  the noisiest part of the system (~10 N·m of drift against a ≤2 N·m payload
-  signal). Instead:</p>
+  <p>Full force estimation needs an accurate arm mass model plus a clean tare;
+  our audit measured ~10 N·m of tare drift against a ≤2 N·m payload signal.
+  The pipeline therefore works with residuals — three steps:</p>
   <ol>
     <li><strong>Detrend:</strong> a low-pass filter removes gravity and slow
       pose trends, leaving torque <em>residuals</em> — the fast, motion-coupled
       part of the signal.</li>
-    <li><strong>Signature, not newtons:</strong> variance, peak-to-peak swing,
+    <li><strong>Signatures in native units:</strong> variance, peak-to-peak swing,
       and phase lag of the residuals become features. A sloshing liquid shows
       high residual variance and a measurable phase lag; a rigid weight shows
       low variance and near-zero lag.</li>
-    <li><strong>Compare, don't calibrate:</strong> features are never converted
-      to force units. They only need <em>contrast</em> between classes.</li>
+    <li><strong>Contrast over calibration:</strong> features stay in native units.
+      They only need <em>contrast</em> between classes.</li>
   </ol>
 
   <h2>Why this is enough</h2>
-  <p>Classification needs <em>contrast</em>, not newtons. Water and soap imprint
+  <p>Classification needs <em>contrast</em>. Water and soap imprint
   different residuals on the same driven swirl — different viscosity, different
   slosh. The swirl is the excitation signal; the residuals are the response.</p>
 
-  <h2>Why not just mount the sensor?</h2>
-  <p>A 6-axis F/T sensor costs $5k+, needs wrist integration and calibration.
-  Every servo arm already reports joint loads — the motor controllers' own
-  telemetry channel. For "which of these is it?" (not "how many newtons?"),
-  that channel carries enough signal.</p>
+  <h2>Why joint torques suffice</h2>
+  <p>Every servo arm already streams joint loads — the motor controllers' own
+  telemetry channel. For "which of these is it?", that channel carries enough
+  signal: water and soap imprint different residuals on the same driven swirl.</p>
 
-  <div class="honest"><strong>What we don't claim.</strong> No calibrated force
-  output. Pose-dependent gravity terms are removed, not modeled — so residuals
-  are only comparable within one fixed macro. And tare drift means static
-  offsets are untrustworthy; everything we use comes from the motion.</div>
+  <div class="honest"><strong>Measured limits.</strong> Residuals are comparable
+  within one fixed macro (pose-dependent gravity is subtracted out).
+  Static offsets carry tare drift, so every feature comes from the motion.
+  Rattle energy is observable only to 4–5 Hz at this telemetry rate.</div>
 </main>
 </body>
 </html>

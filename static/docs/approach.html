@@ -30,7 +30,7 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   <span>
     <a href="/docs/problem">Problem</a>
     <a class="active" href="/docs/approach">Approach</a>
-    <a href="/docs/force">Force without a sensor</a>
+    <a href="/docs/force">Force from torques</a>
     <a href="/docs/relevance">Why it matters</a>
     <a href="/docs/figures">Figures</a>
     <a href="/docs/recording">Recording</a>
@@ -41,15 +41,14 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   <h1>Approach</h1>
 
   <h2>1. One fixed macro</h2>
-  <p>Pick up → swirl → place → back-off. A single smooth horizontal orbit at travel height —
-  no fragile multi-part choreography, no vision, no per-item tuning. The macro is
-  deterministic, so every recording is comparable. (It's locked in for the
+  <p>Pick up → swirl → place → back-off. A single smooth horizontal orbit at travel height — one deterministic
+  motion, so every recording is comparable. (It's locked in for the
   hackathon: <code>repeatable_grasp.py --swirl-smooth</code>.)</p>
 
   <h2>2. Ten explicit physical features</h2>
-  <p>The torque time series becomes a 10-D vector <code>z</code>. No learned
-  encoder — each feature has a physical meaning, shown with plain-language
-  explanations in the dashboard:</p>
+  <p>The torque time series becomes a 10-D vector <code>z</code> whose features
+  each have a physical meaning, shown with plain-language explanations
+  in the dashboard:</p>
   <table>
     <tr><th>Group</th><th>Features</th><th>What they capture</th></tr>
     <tr><td>Static lift</td><td><code>mass_j2</code>, <code>mass_j3</code>*, <code>lift_dyn_j3</code></td><td>Gravity torque offsets = mass estimate; inertial cue from the lift</td></tr>
@@ -69,7 +68,7 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   <p>Atlas <code>$vectorSearch</code> finds the neighborhood (and powers the
   vector-space plot), but the call is made by a shrinkage-LDA classifier refit
   on the whole library at every prediction &mdash; teaching a new item takes
-  effect immediately, no training step. On 21 held-out cups: category right
+  effect immediately. On 21 held-out cups: category right
   52% of the time, vs 24% for pure nearest-neighbor on the same features.
   LDA probabilities are uncalibrated, so the dashboard shows the
   <em>measured</em> accuracy, not a per-prediction score. Predictions come at
@@ -77,9 +76,9 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   <strong>material</strong> (water, screws, &hellip;), closest taught item
   &mdash; so the headline stays inside what the signal supports.</p>
 
-  <h2>4. Teach without training</h2>
+  <h2>4. Teach by example</h2>
   <p>A new item is one stored embedding &mdash; <code>atlas.teach(label,
-  e)</code>. The next query searches it. No retraining, no deployment.</p>
+  e)</code>. The next query searches it.</p>
 
   <h2>5. Keep the protocol fixed</h2>
   <p>Same cup, ~0.4 cosine across swirl/non-swirl protocols; <em>different</em>
@@ -87,10 +86,10 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   much as the contents &mdash; the library admits swirl-protocol recordings
   only.</p>
 
-  <div class="honest"><strong>What we don't do.</strong> No deep learning, no
-  learned encoder, no FFT peak-picking (there isn't enough bandwidth for it at
-  4–5 Hz). The dashboard labels the rattle band honestly: observable-band energy
-  only, with the 5–25 Hz band marked as requiring 100 Hz on-robot sampling.</div>
+  <div class="honest"><strong>What it is.</strong> A 10-D hand-built feature extractor
+  plus vector search over taught examples. The rattle band is labeled honestly:
+  observable-band energy only, with the 5–25 Hz band marked as requiring 100 Hz
+  on-robot sampling.</div>
 </main>
 </body>
 </html>

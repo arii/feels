@@ -27,7 +27,7 @@ pre { background:#161b22; border:1px solid var(--border); border-radius:8px; pad
   <span>
     <a class="active" href="/docs/problem">Problem</a>
     <a href="/docs/approach">Approach</a>
-    <a href="/docs/force">Force without a sensor</a>
+    <a href="/docs/force">Force from torques</a>
     <a href="/docs/relevance">Why it matters</a>
     <a href="/docs/figures">Figures</a>
     <a href="/docs/recording">Recording</a>
@@ -40,7 +40,7 @@ pre { background:#161b22; border:1px solid var(--border); border-radius:8px; pad
   <h2>Setup</h2>
   <p>A 6-DOF arm holds a <strong>lidded, opaque cup</strong>. The contents
   <code>c</code> belong to a set of classes <code>C</code> — empty, water, dish
-  soap, loose candy, a rigid weight — but are never directly observed. The arm
+  soap, loose candy, a rigid weight — sealed inside the cup. The arm
   reports joint angles <code>q<sub>t</sub></code> and actuator torques
   <code>τ<sub>t</sub></code> at 4–5 Hz — the only signals the decision ever sees.</p>
 
@@ -51,20 +51,19 @@ pre { background:#161b22; border:1px solid var(--border); border-radius:8px; pad
   <pre>ψ: D → ℝ¹⁰        (feature map: time series → 10-D signature)
 e = Wz / ‖Wz‖₂      (per-feature scaling + L2 normalization)
 ĉ = argmax over taught signatures of cosine(e, eᵢ)</pre>
-  <p>Classification is <strong>non-parametric</strong>: there is no trained
-  classifier. A new item is learned by storing one embedding — the next query
-  simply finds its nearest neighbors.</p>
+  <p>Classification is <strong>non-parametric</strong>: a new item is learned by
+  storing one embedding — the next query simply finds its nearest neighbors.</p>
 
-  <h2>Why vision can't solve it</h2>
-  <p>The lid is the whole problem. A camera sees a cup; every class looks
-  identical. Any vision-based method is capped at chance.</p>
+  <h2>The lid is the whole problem</h2>
+  <p>From outside, every class looks identical — a camera sees a cup. The contents
+  only reveal themselves in motion, which is what the system measures.</p>
 
-  <h2>Why a scale can't solve it</h2>
-  <p>Our confound set — <code>solid_150g</code>, <code>water_150g</code>,
-  <code>candy_150g</code>, <code>soap_150g</code> — holds mass fixed at 150 g
-  across four contents. A scale, or any static weight estimate, is capped at
-  chance on this set by construction. Only <em>dynamics</em> — how the contents
-  move when swirled — separates them.</p>
+  <h2>The confound set</h2>
+  <p>Four contents — <code>solid_150g</code>, <code>water_150g</code>,
+  <code>candy_150g</code>, <code>soap_150g</code> — with mass fixed at 150 g.
+  Mass is identical across the set, so any separation comes from
+  <em>dynamics</em> alone: how the contents move when swirled. That isolation
+  is the claim being tested.</p>
 
   <h2>What makes it hard</h2>
   <ul>
@@ -73,8 +72,8 @@ e = Wz / ‖Wz‖₂      (per-feature scaling + L2 normalization)
     <li><strong>Tare drift:</strong> joint-torque baselines wander with pose and
       temperature; static offsets are unreliable, so the signal must come from
       motion.</li>
-    <li><strong>No ground truth at runtime:</strong> the contents are hidden by
-      definition. The only supervision is the label the operator teaches.</li>
+    <li><strong>Hidden by design:</strong> the contents stay sealed, so the only
+      supervision is the label the operator teaches.</li>
   </ul>
 
   <div class="honest"><strong>Honest limits.</strong> Static hold torques carry no
