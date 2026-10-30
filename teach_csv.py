@@ -43,7 +43,7 @@ def resolve_label(csv_path, df, override=None):
 
 
 def teach_file(db, csv_path, session, label_override=None, dry_run=False,
-               force=False, include_mystery=False):
+               force=False, include_mystery=False, require_swirl=False):
     name = os.path.basename(csv_path)
     try:
         df = pd.read_csv(csv_path)
@@ -62,9 +62,14 @@ def teach_file(db, csv_path, session, label_override=None, dry_run=False,
         return ("error", name, f"extraction failed: {e}")
     if dry_run:
         dq = feats["diagnostics"]
+        proto = "swirl" if dq["phase_source"] == "SWIRL" else "fallback"
+        if require_swirl and dq["phase_source"] != "SWIRL":
+            return ("skip", name, "no SWIRL phase (fallback protocol)")
         return ("dry", name,
-                f"would teach '{label}' "
+                f"would teach '{label}' [{proto}] "
                 f"({dq['n_samples']} samples, tare={dq['tare_flags'] or 'OK'})")
+    if require_swirl and feats["diagnostics"]["phase_source"] != "SWIRL":
+        return ("skip", name, "no SWIRL phase (fallback protocol)")
     if not force and db.signatures.count_documents({"properties.csv": name}, limit=1):
         return ("skip", name, "already in Atlas (use --force to re-teach)")
     dq = feats["diagnostics"]
@@ -101,6 +106,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="show what would be taught")
     ap.add_argument("--force", action="store_true", help="re-teach files already in Atlas")
     ap.add_argument("--include-mystery", action="store_true")
+    ap.add_argument("--require-swirl", action="store_true",
+                    help="only teach recordings with a true SWIRL phase")
     ap.add_argument("--list", action="store_true", help="show signature counts per label")
     args = ap.parse_args()
 
@@ -125,7 +132,8 @@ def main():
         status, name, detail = teach_file(
             db, f, args.session, label_override=args.label,
             dry_run=args.dry_run, force=args.force,
-            include_mystery=args.include_mystery)
+            include_mystery=args.include_mystery,
+            require_swirl=args.require_swirl)
         counts[status] = counts.get(status, 0) + 1
         print(f"[{status:>7}] {name}: {detail}")
     print("\nsummary:", ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
