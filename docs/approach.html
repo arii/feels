@@ -102,6 +102,37 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   </table>
   <p style="font-size:0.85rem; color:#8b949e;">* Zero-weighted in the embedding &mdash; the static offsets sit below baseline noise, and swirl speed measures the fixed macro's drive rather than the contents. The matcher works in 7 dimensions.</p>
   
+
+  <div class="figwrap" style="margin:1.5em 0;">
+  <svg viewBox="0 0 640 240" style="width:100%; max-width:640px; display:block; margin:0 auto;" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <rect width="640" height="240" fill="#0d1117" rx="8"/>
+    <text x="320" y="28" font-size="14" fill="#e6edf3" text-anchor="middle" font-weight="bold">10 features in 3 groups</text>
+    <!-- Group 1: mass (zero-weighted) -->
+    <rect x="30" y="50" width="180" height="150" rx="8" fill="#161b22" stroke="#2d333b"/>
+    <text x="120" y="74" font-size="12" fill="#8b949e" text-anchor="middle" font-weight="bold">Mass (×2)</text>
+    <text x="120" y="96" font-size="11" fill="#6e7681" text-anchor="middle">mass_j2</text>
+    <text x="120" y="114" font-size="11" fill="#6e7681" text-anchor="middle">mass_j3</text>
+    <text x="120" y="140" font-size="10" fill="#6e7681" text-anchor="middle">zero-weighted</text>
+    <text x="120" y="156" font-size="10" fill="#6e7681" text-anchor="middle">static offsets sit</text>
+    <text x="120" y="172" font-size="10" fill="#6e7681" text-anchor="middle">below baseline noise</text>
+    <!-- Group 2: swirl dynamics -->
+    <rect x="230" y="50" width="180" height="150" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+    <text x="320" y="74" font-size="12" fill="#e6edf3" text-anchor="middle" font-weight="bold">Swirl dynamics (×5)</text>
+    <text x="320" y="96" font-size="11" fill="#e6edf3" text-anchor="middle">swirl_var_j2/j3</text>
+    <text x="320" y="114" font-size="11" fill="#e6edf3" text-anchor="middle">swirl_ptp_j3</text>
+    <text x="320" y="132" font-size="11" fill="#e6edf3" text-anchor="middle">phase_lag_s</text>
+    <text x="320" y="150" font-size="11" fill="#e6edf3" text-anchor="middle">rattle_e</text>
+    <text x="320" y="168" font-size="11" fill="#e6edf3" text-anchor="middle">lift_dyn_j3</text>
+    <!-- Group 3: other -->
+    <rect x="430" y="50" width="180" height="150" rx="8" fill="#161b22" stroke="#2d333b"/>
+    <text x="520" y="74" font-size="12" fill="#8b949e" text-anchor="middle" font-weight="bold">Other (×3)</text>
+    <text x="520" y="96" font-size="11" fill="#8b949e" text-anchor="middle">grip_comp</text>
+    <text x="520" y="114" font-size="11" fill="#6e7681" text-anchor="middle">swirl_speed</text>
+    <text x="520" y="132" font-size="10" fill="#6e7681" text-anchor="middle">(zero-weighted)</text>
+  </svg>
+  <figcaption style="text-align:center; color:#8b949e; font-size:0.9rem; margin-top:8px;">The 10-D signature. Five swirl-dynamics features carry the signal; three are zero-weighted in the matcher.</figcaption>
+  </div>
+
   <h2>Direct Torque-to-Category Mapping</h2>
   <p>The architecture maps raw joint torques directly to material categories.</p>
   <div class="figwrap" style="margin:1.2em 0;"><figure>

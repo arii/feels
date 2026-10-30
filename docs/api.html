@@ -40,7 +40,7 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
 </nav>
 <main>
   <h1>API reference</h1>
-  <p>Repository: <a href="https://github.com/arii/feels" style="color:#58a6ff;">github.com/arii/feels</a>
+  <p><svg height="20" width="20" viewBox="0 0 16 16" fill="#e6edf3" style="vertical-align:text-bottom; margin-right:6px;"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.83-.67 0-.27.01-1.31.01-2.2 0-.21-.15-.46-.55-.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><a href="https://github.com/arii/feels" style="color:#58a6ff;">github.com/arii/feels</a>
   &middot; <a href="https://github.com/arii/feels/issues" style="color:#58a6ff;">report a bug</a></p>
 
   <h2>Bringup</h2>
@@ -67,7 +67,74 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
     <li><a href="api_teach_csv.html" style="color:#58a6ff;"><code>teach_csv.py</code></a> &mdash; batch teaching CLI</li>
   </ul>
 
-<h2>HTTP API — realtime_plot.py</h2><table><tr><th>Method</th><th>Path</th><th>Handler</th><th>What it does</th></tr>
+  <div class="figwrap" style="margin:1.5em 0;">
+  <svg viewBox="0 0 640 300" style="width:100%; max-width:640px; display:block; margin:0 auto;" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <rect width="640" height="300" fill="#0d1117" rx="8"/>
+    <!-- realtime_plot (top) -->
+    <rect x="250" y="20" width="140" height="56" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+    <text x="320" y="44" font-size="13" fill="#e6edf3" text-anchor="middle" font-weight="bold">realtime_plot</text>
+    <text x="320" y="62" font-size="11" fill="#8b949e" text-anchor="middle">HTTP + SSE server</text>
+    <!-- feature_extractor (left) -->
+    <rect x="40" y="130" width="150" height="56" rx="8" fill="#161b22" stroke="#2d333b"/>
+    <text x="115" y="154" font-size="13" fill="#e6edf3" text-anchor="middle" font-weight="bold">feature_extractor</text>
+    <text x="115" y="172" font-size="11" fill="#8b949e" text-anchor="middle">10-D signatures</text>
+    <!-- atlas (right) -->
+    <rect x="450" y="130" width="150" height="56" rx="8" fill="#161b22" stroke="#2d333b"/>
+    <text x="525" y="154" font-size="13" fill="#e6edf3" text-anchor="middle" font-weight="bold">atlas</text>
+    <text x="525" y="172" font-size="11" fill="#8b949e" text-anchor="middle">vector memory</text>
+    <!-- teach_csv (bottom) -->
+    <rect x="250" y="220" width="140" height="56" rx="8" fill="#161b22" stroke="#2d333b"/>
+    <text x="320" y="244" font-size="13" fill="#e6edf3" text-anchor="middle" font-weight="bold">teach_csv</text>
+    <text x="320" y="262" font-size="11" fill="#8b949e" text-anchor="middle">batch teaching CLI</text>
+    <!-- arrows -->
+    <line x1="250" y1="48" x2="190" y2="130" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="200" y="100" font-size="10" fill="#8b949e">extract</text>
+    <line x1="390" y1="48" x2="450" y2="130" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="440" y="100" font-size="10" fill="#8b949e">identify</text>
+    <line x1="320" y1="220" x2="320" y2="186" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="330" y="205" font-size="10" fill="#8b949e">teach</text>
+    <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker></defs>
+  </svg>
+  <figcaption style="text-align:center; color:#8b949e; font-size:0.9rem; margin-top:8px;">Module relationships. <strong>realtime_plot</strong> orchestrates: it calls <strong>feature_extractor</strong> for signatures, <strong>atlas</strong> for memory, and <strong>teach_csv</strong> handles batch ingestion.</figcaption>
+  </div>
+
+
+<h2>HTTP API — realtime_plot.py</h2>
+  <div class="figwrap" style="margin:1.5em 0;">
+  <svg viewBox="0 0 640 220" style="width:100%; max-width:640px; display:block; margin:0 auto;" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <rect width="640" height="220" fill="#0d1117" rx="8"/>
+    <!-- client -->
+    <rect x="30" y="80" width="120" height="60" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+    <text x="90" y="106" font-size="13" fill="#e6edf3" text-anchor="middle" font-weight="bold">Dashboard</text>
+    <text x="90" y="124" font-size="11" fill="#8b949e" text-anchor="middle">browser</text>
+    <!-- server -->
+    <rect x="260" y="80" width="120" height="60" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+    <text x="320" y="106" font-size="13" fill="#e6edf3" text-anchor="middle" font-weight="bold">realtime_plot</text>
+    <text x="320" y="124" font-size="11" fill="#8b949e" text-anchor="middle">aiohttp</text>
+    <!-- atlas -->
+    <rect x="490" y="80" width="120" height="60" rx="8" fill="#161b22" stroke="#2d333b"/>
+    <text x="550" y="106" font-size="13" fill="#e6edf3" text-anchor="middle" font-weight="bold">Atlas</text>
+    <text x="550" y="124" font-size="11" fill="#8b949e" text-anchor="middle">MongoDB</text>
+    <!-- request arrow -->
+    <line x1="150" y1="100" x2="260" y2="100" stroke="#58a6ff" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="205" y="92" font-size="10" fill="#8b949e" text-anchor="middle">POST /api/cycle/predict</text>
+    <!-- response arrow -->
+    <line x1="260" y1="120" x2="150" y2="120" stroke="#3fb950" stroke-width="2" marker-end="url(#arr3)"/>
+    <text x="205" y="138" font-size="10" fill="#8b949e" text-anchor="middle">JSON + SSE stream</text>
+    <!-- atlas arrows -->
+    <line x1="380" y1="100" x2="490" y2="100" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr4)"/>
+    <text x="435" y="92" font-size="10" fill="#8b949e" text-anchor="middle">$vectorSearch</text>
+    <line x1="490" y1="120" x2="380" y2="120" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr4)"/>
+    <text x="435" y="138" font-size="10" fill="#8b949e" text-anchor="middle">neighbors</text>
+    <defs>
+      <marker id="arr2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker>
+      <marker id="arr3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#3fb950" stroke-width="1.5"/></marker>
+      <marker id="arr4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#8b949e" stroke-width="1.5"/></marker>
+    </defs>
+  </svg>
+  <figcaption style="text-align:center; color:#8b949e; font-size:0.9rem; margin-top:8px;">Request flow. The dashboard posts to <strong>realtime_plot</strong>, which queries <strong>Atlas</strong> and streams telemetry back over SSE.</figcaption>
+  </div>
+<table><tr><th>Method</th><th>Path</th><th>Handler</th><th>What it does</th></tr>
 <tr><td><code>GET</code></td><td><code>/</code></td><td><code>handle_index</code></td><td></td></tr>
 <tr><td><code>GET</code></td><td><code>/docs</code></td><td><code>handle_docs</code></td><td>Serve the built-in docs pages (the presentation). /docs and /docs/{page}.</td></tr>
 <tr><td><code>GET</code></td><td><code>/docs/{page}</code></td><td><code>handle_docs</code></td><td>Serve the built-in docs pages (the presentation). /docs and /docs/{page}.</td></tr>

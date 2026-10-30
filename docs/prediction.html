@@ -272,6 +272,30 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   measured). Neither runs live — Chronos needs its own 2304-D index and
   torch on the venue machine.</p>
 
+
+  <div class="figwrap" style="margin:1.5em 0;">
+  <svg viewBox="0 0 640 200" style="width:100%; max-width:640px; display:block; margin:0 auto;" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <rect width="640" height="200" fill="#0d1117" rx="8"/>
+    <!-- teach (left) -->
+    <rect x="40" y="60" width="160" height="80" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+    <text x="120" y="88" font-size="13" fill="#e6edf3" text-anchor="middle" font-weight="bold">Teach</text>
+    <text x="120" y="108" font-size="11" fill="#8b949e" text-anchor="middle">Mode 2: swirl + label</text>
+    <text x="120" y="124" font-size="11" fill="#8b949e" text-anchor="middle">→ Atlas library</text>
+    <!-- predict (right) -->
+    <rect x="440" y="60" width="160" height="80" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+    <text x="520" y="88" font-size="13" fill="#e6edf3" text-anchor="middle" font-weight="bold">Predict</text>
+    <text x="520" y="108" font-size="11" fill="#8b949e" text-anchor="middle">Mode 1: swirl mystery</text>
+    <text x="520" y="124" font-size="11" fill="#8b949e" text-anchor="middle">→ LDA decides</text>
+    <!-- arrows forming loop -->
+    <line x1="200" y1="90" x2="440" y2="90" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrT)"/>
+    <text x="320" y="82" font-size="10" fill="#8b949e" text-anchor="middle">library grows</text>
+    <line x1="440" y1="110" x2="200" y2="110" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arrT)"/>
+    <text x="320" y="128" font-size="10" fill="#8b949e" text-anchor="middle">wrong? teach correction</text>
+    <defs><marker id="arrT" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#8b949e" stroke-width="1.5"/></marker></defs>
+  </svg>
+  <figcaption style="text-align:center; color:#8b949e; font-size:0.9rem; margin-top:8px;">The teach/predict loop. Teaching adds to the library; prediction queries it. Corrections close the loop.</figcaption>
+  </div>
+
   <h2>What a Prediction Looks Like</h2>
   <p>A fresh recording comes off the swirl macro. The extractor computes the
   10-D signature. <code>predict_lda</code> decides. The decision card shows
