@@ -256,6 +256,7 @@
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Mode 2 &mdash; Teach new item (online dataset builder)</div>
+      <div id="library-stats" style="font-size:0.8rem; color:#8b949e; margin:4px 0; font-family:monospace;"></div>
       <div style="display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center;">
         <label style="color:var(--muted); font-size:0.85rem;">Name
           <select id="teach-name" onchange="updateTeachLabel()" style="background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem; margin-left:4px;">
@@ -774,6 +775,12 @@ function toggleJoints() {
         b.style.background = s.atlas_configured ? '#238636' : '#da3633';
         document.getElementById('mock-badge').style.display = s.mock ? 'inline-block' : 'none';
         document.getElementById('build-info').innerText = 'build ' + (s.git_sha || 'unknown');
+        if (s.library) {
+          const lib = s.library;
+          const parts = Object.entries(lib.per_class).map(([k, v]) => `${k}: ${v}`);
+          document.getElementById('library-stats').innerText =
+            `Library: ${lib.total} taught (${parts.join(' · ') || 'empty'})`;
+        }
         refreshVSpace();
         if (s.last_prediction && s.last_prediction.ok) renderDecision(s.last_prediction);
         const busy = s.cycle_busy;

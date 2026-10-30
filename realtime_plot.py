@@ -1020,6 +1020,14 @@ async def handle_cycle_abort(request):
     return web.json_response({"ok": True, "aborted": False, "note": "no cycle running"})
 
 
+def _library_stats():
+    """Per-class counts from the vspace cache file."""
+    from collections import Counter
+    items = _vspace_cache_load()
+    counts = Counter(l for l, _ in items)
+    return {"total": len(items), "per_class": dict(sorted(counts.items()))}
+
+
 async def handle_api_status(request):
     return web.json_response({
         "cycle": _cycle_status,
@@ -1031,6 +1039,7 @@ async def handle_api_status(request):
         "stages": _SIM_STAGES,
         "git_sha": GIT_SHA,
         "last_prediction": _last_prediction,
+        "library": _library_stats(),
     })
 
 
