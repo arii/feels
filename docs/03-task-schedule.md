@@ -1,130 +1,66 @@
 # Hackathon Task Schedule
 
-## Day 1: Thursday, 11:30 AM to 10:00 PM
-
-**Goal:** Day 1 ends with the full loop working from a terminal: pick, shake, store, identify.
-The 1:30 PM go/no-go test decides whether the signal is real before anything else is built on it.
-
----
-
-### 11:30 AM – 12:30 PM: Foundations
-
-#### Robotics
-- [x] Connect with the Viam Python SDK; read joint positions; verify gripper and camera
-- [x] Build and launch real-time 6-joint visualizer with tare calibration and CSV recording (`realtime_plot.py`)
-- [x] Complete preliminary signal verification: proved $\Delta \tau = -6.20\,\text{N}\cdot\text{m}$ load reaction on Joint 3 (Recordings 1–4)
-- [ ] Tape a square for the cup. Find a side grasp that holds a lidded cup firmly without crushing it (lower gripper force/speed)
-- [ ] Posture optimization: Reposition arm to cantilever angle ($q_2 \in [45^\circ, 60^\circ]$) to maximize torque sensitivity on both shoulder and elbow
-- [ ] On-robot data daemon: Deploy high-rate sampling (100–200 Hz via socket port 30000 on `sfhack12`)
-- [ ] Simulation: Test URDF/PyBullet/Viam mock for offline trajectory validation and collision avoidance
-- [ ] Alternative controller investigation: Evaluate velocity control and Cartesian impedance/compliance modes
-
-#### AI
-- [x] Create Atlas collections: `runs` (raw arrays, one document per run), `signatures` (features + embedding), `items` (label, description, photo)
-- [x] Seed item catalogue: empty_cup, water_half, dish_soap_half, candy_loose, solid_weight
-- [ ] Write a fake-run generator in the contract format: water rings and decays slowly, soap decays fast, candy has sharp spikes
-- [ ] Feature extractor v1: the 10 hand-crafted features from the event guide (lift torque, shake variance, FFT peak frequency and power, 5–25 Hz rattle energy, post-stop decay rate, tilt hysteresis, grip change)
+> [!IMPORTANT]
+> **Refined Direction & Priority Focus:**
+> - **Motion Routine:** Deterministic **Pick Up $\to$ Swirl $\to$ Place** routine from fixed taped square.
+> - **Archived Concepts:** No pushing / impedance sliding, no violent linear shaking, no tilt sweeps, no dynamic YOLO-3D grasping, no neural network training.
+> - **Core Delivery:** High-reliability **MongoDB Atlas feature extraction** (`feature_extractor.py`) paired with an intuitive **Web UX** (`realtime_plot.py`) for live detection reporting, telemetry visualization, and online recording.
 
 ---
 
-### 12:30 PM – 1:30 PM: Go/No-Go Signal Test
+## Day 1: Thursday — Foundations, Swirl Routine & Feature Pipeline
 
-#### Robotics
-- [ ] With the cup placed in the gripper by hand, run the shake-and-freeze motion 5 times each for water, dish soap, and candy at equal weight (use a kitchen scale)
-- [ ] Save each run with its label
-
-#### AI
-- [ ] Plot post-stop torque per joint for all 15 runs on one figure
-- [ ] Compute leave-one-out k-NN accuracy for both the hand-crafted features and the spectrum embedding
-
-**Gate at 1:30 PM:** 80% or better across 3 classes = go. Below that, try currents instead of torque, a bigger shake, or another axis until 2:30 PM, then fall back (see Risks).
+**Goal:** Establish the end-to-end loop: pick up $\to$ swirl $\to$ place $\to$ extract 10D features $\to$ index in Atlas $\to$ display detection report on the website.
 
 ---
 
-### 1:30 PM – 4:00 PM: Build the Halves
+### Phase 1: Robotics & Fixed Swirl Routine
+- [x] Connect via Viam Python SDK; verify arm, gripper, and joint state telemetry
+- [x] Launch high-performance rolling visualizer (`realtime_plot.py`)
+- [x] Verify torque sensitivity on Joint 2 and Joint 3 ($\Delta \tau \approx -6.2\,\text{N}\cdot\text{m}$)
+- [x] Configure fixed arm waypoints (`home-pose`, `approach`, `grasp`, `travel`, `place`) on taped square
+- [ ] Implement smooth horizontal swirl orbital trajectory in travel position
+- [ ] Wire synchronized phase tagging: `INIT` $\to$ `APPROACH` $\to$ `GRASP` $\to$ `LIFT` $\to$ `HOLD` $\to$ `SWIRL` $\to$ `PLACE` $\to$ `HOME`
 
-#### Robotics
-- [ ] `run_macro()`: pick from the taped square, lift 15 cm, hold 1.5 s, shake 2.5 s, tilt 25° and back over 2 s, place back
-- [ ] Write phase marks into each run. Start shake speed and acceleration low; raise them in steps
+### Phase 2: Signal Processing & MongoDB Atlas Memory
+- [x] Create Atlas collections (`runs`, `signatures`, `items`) and vector index `cup_dynamics_index`
+- [x] Verify `atlas.py` `teach()` and `identify()` methods
+- [ ] Implement `feature_extractor.py`:
+  - Static mass offset ($\Delta \tau_{\text{gravity}}$)
+  - Swirl torque variance ($\text{Var}(\tau_{\text{swirl}})$)
+  - FFT dominant frequency and power
+  - High-frequency rattle energy ($E_{\text{rattle}}$ 5–25 Hz)
+  - Orbital swirl phase lag ($\Delta \phi_{\text{lag}}$)
+  - L2-normalized 10D embedding vector $e \in \mathbb{S}^9$
+- [ ] Record reference datasets for calibration set: `empty_cup`, `water_half`, `dish_soap_half`, `candy_mixed`, `solid_weight`
+- [ ] Teach baseline signatures into MongoDB Atlas memory
 
-#### AI
-- [x] Create the Atlas vector index `cup_dynamics_index` on `signatures.feature_vector` (cosine, 10-dim) with `label` and `session` filter fields — READY
-- [x] `teach()`: insert run + signature (`atlas.py`) — verified working
-- [x] `identify()`: `$vectorSearch` (k = 5) then `$group` by label; confidence = mean similarity of winning label — verified working
-
----
-
-### 4:00 PM – 6:00 PM: Integrate to MVP
-
-#### Both
-- [ ] Swap fake runs for real ones; fix format mismatches
-- [ ] Teach 5 runs for each of the 5 items (about 25 runs, roughly 15 minutes)
-- [ ] Blind test: one person fills, the other runs `identify`. Record the accuracy
-
-**Checkpoint 6:00 PM:** The loop works end to end from the terminal.
-
----
-
-### 7:00 PM – 9:00 PM: Strengthen
-
-#### Robotics
-- [ ] Wrap the port 30000 reader as a Viam sensor component so torque appears in the Viam app
-- [ ] Mark fill lines on cups so every refill matches. Collect 10 more runs per item
-
-#### AI
-- [ ] Re-run the offline evaluation with the bigger dataset; keep the embedding that scores best
-- [ ] Dashboard skeleton (Streamlit): Identify and Teach buttons, top 3 neighbours with similarity, torque overlay against neighbours
-
-**Before leaving:** Record a backup video of one full successful run.
+### Phase 3: Web Dashboard UX & Online Recording
+- [ ] Integrate `RepeatableGraspController` into `realtime_plot.py`:
+  - "▶ Run Pick & Place Cycle" button
+  - "⏹ Abort" button
+  - Real-time active phase badge
+- [ ] Add live Detection Report Card:
+  - Winning label banner with emoji and confidence percentage
+  - Top-3 k-NN matches with cosine similarity scores
+- [ ] Add Online Recording & Teaching controls:
+  - "Teach / Save to Atlas" 1-click button
+  - Dataset recordings drawer with instant CSV download links
 
 ---
 
-## Day 2: Friday, 8:30 AM to 3:30 PM
+## Day 2: Friday — Calibration, Rehearsals & Live Demos
 
-**Goal:** Day 2 turns the working loop into a show — a dashboard judges can read, live teaching, and three clean rehearsals. Code freezes at 2:00 PM.
-
----
-
-### 8:30 AM – 9:00 AM: Morning Check
-
-#### Both
-- [ ] Re-tare with an empty cup; refill cups to their marked lines
-- [ ] Run 5 blind tests. If accuracy dropped overnight, re-teach 3 fresh runs per item tagged `session: fri`, and filter the vector search to today's session
+**Goal:** Polish the operator web dashboard for live judging, record clean validation runs, and execute seamless live demonstrations.
 
 ---
 
-### 9:00 AM – 12:30 PM: The Show Layer
+### Morning Check (8:30 AM – 10:30 AM)
+- [ ] Empty cup tare recalibration
+- [ ] Check MongoDB Atlas connectivity and index status
+- [ ] Run 5 automated validation cycles (one per item); verify 100% classification accuracy on detection report card
 
-#### Robotics
-- [ ] Wire Home, Release Grip, and Stop into one-click functions the dashboard can call
-- [ ] Add slip detection: if gripper position changes during the shake, abort and retry
-- [ ] Stretch (only if the loop is solid by 10:30 AM): find the cup with a YOLO "cup" detector through Viam's vision service instead of the taped square
-- [ ] Run 20 back-to-back cycles to shake out reliability bugs
-
-#### AI
-- [ ] Finish the dashboard: camera feed, live torque trace, FFT chart, decision card (label, confidence bar, top 3 Atlas neighbours with similarity %)
-- [ ] Drive dashboard updates from an Atlas Change Stream on `signatures`, so the screen reacts to the database
-- [ ] Teach flow: type a label, press Teach, robot runs 3 shakes, signatures inserted; show a "saved to Atlas" message
-- [ ] Low-confidence fallback: below 0.85, run one more shake on another axis and combine both results
-
-**Checkpoint 12:30 PM:** Demo runs entirely from the dashboard.
-
----
-
-### 12:30 PM – 2:00 PM: Rehearse and Fix
-
-#### Both
-- [ ] 3 full dress rehearsals of the demo script with a timer. Fix only what breaks
-- [ ] Record a fresh backup video of a perfect run
-- [ ] Pick the "new item" for live teaching and test it twice (paperclips or rice work well)
-
----
-
-### 2:00 PM – 3:30 PM: Freeze and Prepare
-
-#### Robotics
-- [ ] Code freeze. Prepare 3 identical lidded cups plus the teaching item; check the arm is homed
-
-#### AI
-- [ ] Code freeze. Clear test clutter from Atlas (keep the reference signatures). Open the dashboard and Atlas UI on the demo screen
-- [ ] Rehearse the 60-second pitch
+### The Show Layer & Demo Polish (10:30 AM – 2:00 PM)
+- [ ] Polish web visualizer CSS for judging display (high-contrast dark mode, clear typography)
+- [ ] Verify 1-click online teaching: demonstrate teaching a new mystery item live during the demo presentation
+- [ ] Code freeze at 2:00 PM; run full rehearsal runs before 3:30 PM presentations

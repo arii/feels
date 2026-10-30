@@ -1,77 +1,38 @@
 # feels
 
-Lightweight physical AI and robotics repository powered by the [Viam Python SDK](https://github.com/viamrobotics/viam-python-sdk) and AI agent workflows.
+**Proprioceptive Dynamic Identification of Sealed Container Payloads**  
+Powered by the [Viam Python SDK](https://github.com/viamrobotics/viam-python-sdk) and [MongoDB Atlas Vector Search](https://www.mongodb.com/products/platform/atlas-vector-search).
+
+---
+
+> [!IMPORTANT]
+> **Key Architecture Decisions & Operational Focus:**
+> - **Motion Routine:** Fixed **Pick Up $\to$ Swirl $\to$ Place** sequence from a calibrated taped table square.
+> - **Operational Focus:** **MongoDB Atlas feature extraction** (`feature_extractor.py`) paired with an intuitive **Web UX** (`realtime_plot.py`) for live detection reporting, real-time telemetry streaming, and online recording.
+> - **Archived Approaches:** Pushing / table sliding, violent linear shakes, tilt sweeps, dynamic vision grasping, and on-site deep learning training are officially ARCHIVED.
 
 ---
 
 ## Overview
 
-This repository is designed for rapid development and testing of robotic workflows with Viam. It includes:
-- **`viam-python`** async client scripts to interface with machine hardware.
-- **Agentic Skills & Plugins** from [`viam-devrel/agent-skills`](https://github.com/viam-devrel/agent-skills) to provide LLM agents (Claude Code, Antigravity, Cursor) with deep robotics SDK expertise.
-- **Safety Directives** configured for collision avoidance, safe Z-boundaries, and heartbeat management.
+The **feels** system enables an industrial robotic arm (UFactory xArm850) to determine the contents of an opaque, covered coffee cup (water, viscous soap, loose candy, rigid mass, or empty tare) using **proprioceptive torque telemetry** without needing line-of-sight vision into the container.
 
-### Target Machine & Components
-
-- **Machine Address:** `sfhack12-main.ty1cywh7tq.viam.cloud`
-- **Configured Components:**
-  - `arm` (`Arm`): Robotic arm position and trajectory control
-  - `cam` (`Camera`): Vision stream and image acquisition
-  - `gripper` (`Gripper`): End-effector grasp and state detection
-  - `table` (`Gripper`): Auxiliary fixture / table gripper
-  - `ceiling` (`Gripper`): Overhead gripper mechanism
+### End-to-End Pipeline
+1. **Fixed Pick & Place:** Approaches a taped table square, grasps the cup, lifts to travel altitude, executes a smooth horizontal swirl, and places the cup back down.
+2. **Dynamic Swirl Excitation:** Horizontal circular orbital swirl induces fluid vortex lag, loose candy chatter, and rotational inertia without spillage.
+3. **Deterministic Feature Extraction:** Extracts a 10-dimensional explicit physical feature vector $z$ and calculates a unit-norm embedding $e \in \mathbb{S}^9$.
+4. **MongoDB Atlas Vector Memory:** Queries the Atlas `cup_dynamics_index` via `$vectorSearch` for instant k-NN classification and online item registration.
+5. **Real-Time Operator UX:** A high-performance web dashboard displaying 10-second rolling force/weight plots, 6-joint sparklines, active cycle phase badges, and live classification verdict cards.
 
 ---
 
-## Agentic Skills & Marketplace
+## Hardware & Environment
 
-This repo integrates with the official **Viam Agent Skills** repository: [`viam-devrel/agent-skills`](https://github.com/viam-devrel/agent-skills).
-
-### 1. Claude Code Plugin Marketplace
-
-To enable Viam agent skills inside **Claude Code**, run:
-
-```bash
-# Add the marketplace
-/plugin marketplace add viam-devrel/agent-skills
-
-# Install the Python SDK skill
-/plugin install viam-python@viam-agent-skills
-
-# (Optional) Install the full bundle or other skills
-/plugin install viam-skills@viam-agent-skills
-/plugin install viam-modules-fleet@viam-agent-skills
-/plugin install local-viam-server@viam-agent-skills
-```
-
-### 2. Antigravity / Cursor Agents
-
-- **Workspace Skill:** The repository includes `.agents/skills/viam-python/` containing verified SDK references and cheatsheets. Agents running in Antigravity or Cursor automatically discover these instructions.
-- **CLI Plugin (agy):**
-  ```bash
-  agy plugin install /path/to/agent-skills/plugins/viam-python
-  ```
-
-### Available Skills in `viam-devrel/agent-skills`
-
-| Skill | Description |
-|---|---|
-| `viam-python` | Async patterns, component/service APIs, module development, image transforms |
-| `viam-go-motion-vision` | Motion planning, WorldState, frame system, and spatial math (Go) |
-| `viam-modules-fleet` | CLI, module packaging, registry, fleet configuration |
-| `local-viam-server` | Spin up a local `viam-server` linked to cloud machine parts |
-| `viam-machine-config` | Read and deploy machine configuration via the Viam app API |
-| `viam-ml` | Training data capture and model deployment |
-
----
-
-## SDKs & Prerequisites
-
-- **Python:** 3.10+ (Python 3.12 recommended)
-- **Core SDKs:**
-  - `viam-sdk` (`>=0.85.0`)
-  - `python-dotenv` (`>=1.0.0`)
-  - `pymongo` (`>=4.10.0`) *(optional, for Atlas telemetry & state persistence)*
+- **Target Machine:** `sfhack12` (`sfhack12-main.ty1cywh7tq.viam.cloud`)
+- **Manipulator:** UFactory xArm850 (6-DOF)
+- **Gripper:** UFactory parallel-jaw gripper
+- **Sensors:** Actuator strain/current load sensing via `arm.do_command({"load": ""})`
+- **Reference Camera:** Intel RealSense D435 (contextual / monitoring)
 
 ---
 
@@ -79,58 +40,51 @@ To enable Viam agent skills inside **Claude Code**, run:
 
 ### 1. Virtual Environment Setup
 
-Create and activate a Python virtual environment:
-
 ```bash
-# Create venv
+# Create and activate venv
 python3 -m venv .venv
-
-# Activate venv (Linux/macOS)
 source .venv/bin/activate
 
 # Install dependencies
-pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
 ### 2. Configure Credentials
 
-Copy the template environment file and fill in your machine credentials:
+Ensure `.env` contains your Viam and MongoDB Atlas credentials:
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env`:
 ```env
 VIAM_API_KEY=your_api_key_here
 VIAM_API_KEY_ID=your_api_key_id_here
 VIAM_MACHINE_ADDRESS=sfhack12-main.ty1cywh7tq.viam.cloud
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/
+MONGODB_DATABASE=physical_ai_db
 ```
 
-### 3. Run the Hardware Inspection Script
+### 3. Launch the Operator Web Dashboard & Visualizer
 
-Test connection and query active components:
-
-```bash
-python main.py
-```
-
-### 4. Interactive Real-Time Visualizer & Weight Detection Dashboard
-
-Launch the 10-second rolling telemetry dashboard with separated 6-joint axes and 1-click session recording:
+Launch the high-performance visualizer:
 
 ```bash
 python realtime_plot.py --port 8080
 ```
-Open **`http://localhost:8080`** in any browser.
 
-### 5. Inspect All Sensors and Encoders
+Open **`http://localhost:8080`** in your browser to:
+- Monitor live payload weight and vertical force in real time.
+- View individual 6-joint actuator torque sparklines.
+- Click **"▶ Run Pick & Place Cycle"** to trigger the automated pick $\to$ swirl $\to$ place sequence.
+- Inspect the **Detection Reporting Card** to see the predicted object, confidence score, and top-3 Atlas matches.
+- Click **"Teach / Save to Atlas"** to register a new calibrated item into Atlas memory on the fly.
+- Download recorded CSV datasets from the dataset drawer.
+
+### 4. CLI Headless Execution
+
+To run the repeatable pick-and-place swirl sequence from the terminal:
 
 ```bash
-python sensors.py
+# Run one full pick up -> swirl -> place cycle with labeled telemetry recording
+python repeatable_grasp.py --record --object water_half
 ```
-
 ### 6. Force & Weight Sensitivity Analysis
 
 ```bash
@@ -328,22 +282,26 @@ python repeatable_grasp.py --dry-run
 
 ---
 
-## Safety Directives
+## Calibrated Object Library
 
-When writing code that moves physical hardware, follow the rules defined in [`.cursorrules`](.cursorrules):
-
-1. **Client Lifecycle & Heartbeat:** Always use `async with await connect() as machine:` to maintain the 2-second heartbeat and prevent estop triggers.
-2. **Motion Planning:** Use `MotionClient.move()` with a valid `WorldState` rather than unconstrained raw arm motion.
-3. **Hard Z-Boundary:** Always enforce $Z \ge 15\text{ mm}$ (`MIN_SAFE_Z_MM = 15.0`) to prevent collisions with the work surface.
-4. **Two-Phase Grasping:** Always plan a pre-grasp pose $100\text{ mm}$ above the target before descending, and verify grasp using `await gripper.is_holding_something()`.
+| Object Label | Dynamic Physical Signature | Atlas Verdict |
+|--------------|----------------------------|---------------|
+| `empty_cup` | Zero mass offset ($\Delta \tau \approx 0$), zero swirl variance | 👻 Empty cup (tare) |
+| `water_half` | Medium mass (~180g), dynamic swirl vortex lag | 💧 Water (fluid slosh) |
+| `dish_soap_half` | Medium mass (~210g), heavy viscous swirl damping | 🫧 Dish soap (viscous fluid) |
+| `candy_mixed` | Sharp impact chatter in 5–25 Hz rattle band | 🍬 Candy (trick-or-treat rattle) |
+| `solid_weight` | High mass (~350g), rigid coupling, zero swirl lag | 🪨 Solid weight (rigid mass) |
 
 ---
 
-## Next Steps & Roadmap
+## Project Documentation Index
 
-See [**`PLAN.md`**](PLAN.md) for the concrete finish plan (tonight + demo day), and [**`TODO.md`**](TODO.md) for the longer research backlog:
-1. **Simulator Integration:** Test PyBullet / URDF / MuJoCo / Viam mock components for collision-free trajectory testing.
-2. **On-Robot Data Collection:** Deploy a low-latency daemon on `sfhack12` to poll at 100–200 Hz over direct socket (port 30000).
-3. **Kinematic Posture Optimization:** Move arm to a cantilever pose ($q_2 \approx 45^\circ\text{--}60^\circ, q_3 \approx 45^\circ\text{--}90^\circ$) to maximize perpendicular moment arm and signal-to-noise ratio.
-4. **Dynamic Trajectory Sensing:** Move beyond static mass detection with sine shakes, impulse freezes, and tilt sweeps.
-5. **Controller Evaluation:** Test velocity control, Cartesian impedance/compliance mode, and motor stiffness tuning.
+- [**00-Overview**](docs/00-overview.md) — Problem statement, core scope, and architecture decisions.
+- [**01-Hardware & Setup**](docs/01-hardware-and-viam-setup.md) — Robot hardware specifications and Viam configuration.
+- [**02-System Architecture**](docs/02-system-architecture.md) — End-to-end tech stack, telemetry sync, and storyboard.
+- [**03-Task Schedule**](docs/03-task-schedule.md) — Hackathon roadmap and execution checkpoints.
+- [**04-Implementation Phases**](docs/04-implementation-phases.md) — Minimal viable demo, swirl routine, and what was cut.
+- [**05-ML Pipeline**](docs/05-ml-pipeline.md) — 10D feature extraction, metric embedding, and Atlas Vector Search.
+- [**06-Formal Problem Definition**](docs/06-formal-problem-definition.md) — Mathematical state, action space, and non-parametric metric retrieval.
+- [**PLAN.md**](plan.md) — Concrete finish plan and verification steps.
+- [**TODO.md**](TODO.md) — Active task backlog and archived exploration avenues.

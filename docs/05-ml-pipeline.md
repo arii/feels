@@ -1,192 +1,114 @@
 # ML Pipeline — Feature Extraction, Embeddings & Atlas Vector Search
 
-## Overview
-
-The ML pipeline converts raw multi-modal robot telemetry into a compact embedding vector, then uses MongoDB Atlas Vector Search for k-NN classification and online item registration — no gradient retraining needed between demo runs.
-
----
-
-## 1. Feature Extraction Pipeline (Edge Compute)
-
-Convert variable-length time-series signals from the motion library (a_lift, a_shake, a_tilt) into a fixed-dimensional feature vector e ∈ R^d.
-
-### Static Hold
-- Steady-state gravity torque difference Δτ_g to estimate net payload mass m
-
-### Periodic Shake / Tilt (FFT Features)
-- **Dominant resonant frequencies and spectral spread** — distinguishes sloshing liquid from rigid bodies
-- **Phase lag Δφ** between commanded acceleration and measured torque — viscosity indicator
-- **High-frequency transient power (5–25 Hz rattle band)** — loose candy/pens vs. solid objects
-
-### Grasp Aperture & Viscoelasticity
-- Change in gripper stroke Δg and grip stall current during shake — detects compliant vs. rigid cup responses
-
-### Full 10-Dimensional Feature Vector
-
-| Feature | Description |
-|---------|-------------|
-| Δτ_gravity | Steady-state mass offset during static lift |
-| Var(τ̃_shake) | Residual torque variance during sine shake |
-| f_peak | Dominant spectral frequency via FFT |
-| P_peak | Dominant spectral power via FFT |
-| E_rattle | Integrated spectral energy in high-frequency 5–25 Hz band |
-| Δφ_lag | Cross-correlation phase shift between input acceleration and measured torque |
-| Δτ_hyst | Torque hysteresis loop area during tilt |
-| Δg_grip | Grip deformation metric |
-| Δi_grip | Grip compliance stall metric |
-| (reserved) | Additional hand-crafted feature slot |
+> [!IMPORTANT]
+> **On-Site Deep Learning Training Archived:**
+> We do NOT train CNNs, Transformers, or PyTorch neural networks on-site. Training deep networks under limited time and sample constraints risks severe overfitting and instability. Instead, we compute deterministic, hand-crafted physical features from the pick-up, swirl, and hold telemetry and map them to a normalized unit embedding $e \in \mathbb{S}^9$ for non-parametric MongoDB Atlas Vector Search (`$vectorSearch`).
 
 ---
 
-## 2. Embedding Model
+## 1. Feature Extraction Pipeline (`feature_extractor.py`)
 
-Pass the extracted features through a lightweight encoder:
-- **Option A:** Small MLP trained via PyTorch on the Linux compute host
-- **Option B:** Temporal contrastive network (1D-CNN or Mini-LSTM / Temporal Transformer)
+The feature extraction engine transforms variable-length time-series rollouts $D = \{s_t\}_{t=0}^T$ into a fixed 10-dimensional physical feature vector $z \in \mathbb{R}^{10}$, then calculates the normalized metric embedding $e \in \mathbb{S}^9$.
 
-Output: normalized d-dimensional embedding vector e = Wz / ‖Wz‖₂ ∈ S^(d-1)
+```
+Telemetry Rollout D
+  ├── Phase 1: Static Hold  ──► Δτ_gravity (Mass)
+  ├── Phase 2: Swirl Orbit  ──► Var(τ_swirl), f_peak, P_peak, E_rattle, Δφ_lag
+  └── Compliance            ──► Δg_grip, Δi_grip
+                                        ↓
+                         Raw 10D Feature Vector z
+                                        ↓
+                       Normalized Unit Embedding e = z / ‖z‖₂
+                                        ↓
+                     MongoDB Atlas $vectorSearch Retrieval
+```
 
-where W is an empirical scaling/whitening projection matrix.
+### Phase 1: Static Hold (Gravitational Mass Proxy)
+- Measures steady-state load torque difference on Joint 3:
+  $$\Delta \tau_{\text{gravity}} = \bar{\tau}_{3,\text{hold}} - \tau_{\text{tare}}$$
+- Directly estimates net payload mass:
+  $$\hat{m} = \frac{|\Delta \tau_{\text{gravity}}|}{g \cdot L_3}$$
+
+### Phase 2: Horizontal Orbital Swirl (Slosh, Chatter, and Viscosity)
+During the smooth horizontal swirl orbit:
+- **Swirl Torque Variance:**
+  $$\text{Var}(\tau_{3,\text{swirl}}) = \frac{1}{N}\sum (\tau_3(t) - \bar{\tau}_3)^2$$
+- **FFT Spectral Resonances:** Fast Fourier Transform on detrended torque:
+  $$Y(f) = \mathcal{F}\{\tau_3(t) - \bar{\tau}_3\}$$
+  - Dominant frequency $f_{\text{peak}} = \arg\max |Y(f)|^2$
+  - Dominant peak power $P_{\text{peak}} = \max |Y(f)|^2$
+- **High-Frequency Rattle Energy (5–25 Hz):** Flags loose granular candy or small objects rattling inside the cup:
+  $$E_{\text{rattle}} = \sum_{5\,\text{Hz} \le f \le 25\,\text{Hz}} |Y(f)|^2$$
+- **Swirl Phase Lag ($\Delta \phi_{\text{lag}}$):** Cross-correlation phase shift between the commanded orbital circular trajectory and the measured actuator torque response:
+  $$\Delta \phi_{\text{lag}} = \arg\max_\delta (R_{\tau, \text{cmd}}(\delta)) \cdot \frac{2\pi f_{\text{swirl}}}{f_s}$$
+  - Distinguishes lagging fluid vortex slosh (water, viscous soap) from rigid lumped mass (zero phase lag).
+
+### Full 10-Dimensional Feature Vector ($z$)
+
+| Index | Feature | Physical Meaning | Item Separation Property |
+|:-----:|---------|------------------|--------------------------|
+| 0 | $\Delta \tau_{\text{gravity}}$ | Steady-state mass offset (Nm) | Separates empty cup from loaded cups |
+| 1 | $\text{Var}(\tau_{\text{swirl}})$ | Swirl residual torque variance | High for liquids and loose items, low for rigid mass |
+| 2 | $f_{\text{peak}}$ | Dominant spectral frequency (Hz) | Natural sloshing or rattle oscillation frequency |
+| 3 | $P_{\text{peak}}$ | Dominant spectral power | Intensity of internal dynamic oscillation |
+| 4 | $E_{\text{rattle}}$ | Integrated 5–25 Hz rattle energy | **Sharp spikes for loose candy; near-zero for liquids** |
+| 5 | $\Delta \phi_{\text{lag}}$ | Orbital swirl phase lag (rad) | **Large for viscous fluids; zero for solid weights** |
+| 6 | $\tau_{\text{centripetal}}$ | Lateral centripetal torque coupling | Measures rotational fluid vortex inertia |
+| 7 | $\Delta g_{\text{grip}}$ | Gripper stroke deflection (mm) | Senses container compliance / compression |
+| 8 | $\Delta i_{\text{grip}}$ | Gripper motor load current | Grip resistance during motion |
+| 9 | $S_{\text{stability}}$ | Steady-state stability metric | Percentage of time within resting bounds |
 
 ---
 
-## 3. Online Training via MongoDB Atlas Vector Search
+## 2. Normalized Metric Embedding ($e \in \mathbb{S}^9$)
 
-Atlas serves as a metric-learning memory store, avoiding traditional slow gradient retraining between demo runs.
+Rather than relying on learned neural network parameters, the vector is directly normalized to the unit hypersphere:
 
-### Atlas Document Schema
+$$e = \frac{z}{\|z\|_2 + \epsilon}$$
 
-```json
-{
-  "_id": "run_20261029_001",
-  "item_label": "dish_soap_half_full",
-  "category": "viscous_liquid",
-  "properties": {
-    "estimated_mass_g": 185,
-    "viscosity_level": "high",
-    "fill_ratio": 0.5
+This ensures that MongoDB Atlas Vector Search computes exact cosine similarity without needing neural network training or backpropagation.
+
+---
+
+## 3. MongoDB Atlas Vector Search Pipeline
+
+Atlas operates as our metric retrieval engine. Queries are executed using the native `$vectorSearch` aggregation stage against the `cup_dynamics_index`:
+
+```javascript
+[
+  {
+    $vectorSearch: {
+      index: "cup_dynamics_index",
+      path: "feature_vector",
+      queryVector: query_embedding,
+      numCandidates: 20,
+      limit: 5,
+      filter: { session: "thu" } // optional session filter
+    }
   },
-  "motion_type": "fig8_sweep",
-  "feature_vector": [0.142, 0.891, -0.321, "... d-dim normalized embedding ..."],
-  "created_at": "2026-10-29T11:00:00Z"
-}
+  {
+    $project: {
+      label: 1,
+      properties: 1,
+      score: { $meta: "vectorSearchScore" }
+    }
+  }
+]
 ```
 
-### Atlas Collections
-- **`runs`** — Raw arrays, one document per run
-- **`signatures`** — Features + embedding (indexed for vector search)
-- **`items`** — Label, description, photo
-
-### Index Configuration
-
-Configure an **Atlas Vector Search** index (cosine or Euclidean similarity) on `feature_vector`:
-
-```js
-$vectorSearch: {
-  index: "cup_dynamics_index",
-  path: "feature_vector",
-  queryVector: <embedding>,
-  numCandidates: 20,
-  limit: 5
-}
-$project: {
-  item_label: 1,
-  category: 1,
-  score: { $meta: "vectorSearchScore" }
-}
-```
+### Classification Verdict
+The nearest neighbors are grouped by label, and the prediction is determined by:
+1. **Predicted Label:** Class with the highest mean cosine similarity score among the top-k matches.
+2. **Confidence Percentage:** Mean similarity score $\times 100\%$.
+3. **Low-Confidence Flag:** Triggered if top confidence is below $0.80$, alerting the operator to check cup placement.
 
 ---
 
-## 4. Inference & Novel Item Registration
+## 4. Online Recording & Instant Teaching (UX)
 
-### Prediction (k-NN Query)
-Execute the probing motions on an unknown cup, extract its embedding e_query, and issue an Atlas aggregation pipeline (`$vectorSearch`, k = 5, then `$group` by label).
-
-**Confidence** = mean cosine similarity of the winning label's k neighbours.
-
-### Active Identification & Uncertainty
-If the top-1 cosine score is below a certainty threshold (e.g., < 0.82), the system selects the next most informative motion (a_push or a_tilt) to disambiguate the state.
-
-### Online "One-Shot" Teaching
-When registering a new item during the live demo:
-1. Trigger the standard 3-motion diagnostic suite via the web UI
-2. Embed the resulting trajectories
-3. Insert the document into Atlas tagged with the user's label
-4. The item is immediately queryable via Vector Search without restarting the server or retraining a classifier
-
----
-
-## 5. Inference & Online Learning Formulation
-
-### Bayesian Filtering / Interactive Belief Update
-
-Maintain a belief state b_k(θ) = p(θ | D_{1:k}) updated sequentially over exploratory actions a_1, ..., a_K:
-
-```
-p(θ | D_{1:k}) ∝ p(D_k | a_k, θ) · p(θ | D_{1:k-1})
-```
-
-- **Likelihood p(D_k | a_k, θ):** Evaluated either via an analytical reduced-order model (mass-spring-dashpot slosh model) or a learned surrogate feature extractor
-
-### Feature Representation
-
-Trajectory rollouts are mapped to compact dynamic descriptors:
-
-- **Time domain:** Mean steady torque, variance/kurtosis of residual torque τ̃ = τ_meas − τ_nominal_empty, peak transient acceleration
-- **Frequency domain (FFT/PSD):** Dominant spectral frequencies, power spectral density in the 5–25 Hz rattle band, spectral phase difference between commanded input and force response
-
-### Online Adaptation / Few-Shot Incremental Learning
-
-Train a temporal backbone (1D-CNN or Mini-LSTM / Temporal Transformer) to map trajectory features z_k into an embedding space Z ⊂ R^d via contrastive loss.
-
-**Online Registration:** When introducing a new object θ_new during the live demo, execute the canonical motion suite, project the rollout embeddings into Z, and update class prototypes or append to a k-NN / Gaussian Process classifier without full network retraining.
-
-### Active Exploration Policy (Next-Best Action)
-
-Select the subsequent action a_{k+1} that maximizes expected information gain (mutual information) regarding θ:
-
-```
-a*_{k+1} = argmax_{a ∈ A} I(θ; D_{k+1} | a, b_k)
-           = argmax_{a ∈ A} [H(b_k(θ)) − E_{D_{k+1}}[H(b_{k+1}(θ))]]
-```
-
----
-
-## 6. Dynamic System Model
-
-The combined robot-container dynamics follow the manipulator equation:
-
-```
-M(q)q̈ + C(q,q̇)q̇ + G(q) + J^T(q) · w_ext(θ) = τ
-```
-
-Where the external wrench w_ext(θ) acting on the end-effector is governed by the internal contents:
-
-- **Rigid solid:** F_slosh = 0; wrench aligns strictly with rigid body acceleration a_tcp
-- **Loose items (candy/pencils):** Non-linear impulse spikes (chatter) in τ and w_t caused by internal impacts
-- **Liquid payload:** Frequency-dependent phase lag Δφ between commanded acceleration and measured torque τ, with amplitude attenuation scaling with viscosity μ
-
----
-
-## 7. Viam Agent Tool Definitions (Runtime Agent Loop)
-
-Structure the core identification logic as an **LLM/Agent Tool-Use loop**:
-
-### `execute_probing_motion(motion_type: "lift" | "tilt" | "sine_shake" | "fig8")`
-- Invokes the Viam Motion Service / Cartesian controller
-- Automatically coordinates joint trajectory streaming with background sensor buffering
-- Returns: `execution_status`, time-series duration, and raw stream handle
-
-### `extract_dynamic_signature(stream_handle)`
-- Calculates tare-subtracted steady-state gravity offset (mass estimate)
-- Computes FFT spectral resonance and phase lag Δφ between command and torque response
-- Calculates internal impulse chatter (rattle score in 5–25 Hz band)
-- Returns: Extracted feature summary + normalized d-dimensional embedding vector
-
-### `query_atlas_memory(embedding_vector, top_k=3)`
-- Runs a `$vectorSearch` query against the MongoDB Atlas cluster
-- Returns: Nearest matched object categories, confidence similarity scores, and historical physical parameters
-
-### `register_novel_item(embedding_vector, label, properties)`
-- Inserts the completed multi-probe embedding and metadata into Atlas for zero-shot dynamic memory
+When registering a new or updated item:
+1. Operator places the item on the taped square and inputs its label (e.g. `dish_soap_half`).
+2. Robot executes the single pick-up, swirl, and place routine.
+3. `feature_extractor.py` computes $e$.
+4. A single call to `atlas.teach(label, e, raw_samples)` inserts the new signature into the `signatures` collection.
+5. The item is **immediately indexable and queryable** by subsequent runs without retraining or downtime.

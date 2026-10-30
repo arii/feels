@@ -1,136 +1,78 @@
 # Formal Problem Definition
 
-## Interactive Multi-Modal Dynamic Identification of Enclosed Payloads via Non-Parametric Metric Retrieval
+## Dynamic Identification of Enclosed Payloads via Non-Parametric Metric Retrieval under Fixed Swirl Excitation
 
 ---
 
 ## 1. Problem Statement
 
-The goal is to determine the latent physical and categorical identity θ* ∈ Θ of an unobservable payload enclosed inside a sealed, rigid or semi-rigid container (a covered coffee cup). Because direct visual line-of-sight to the interior is occluded, the manipulator interacts physically with the container by executing a deterministic dynamic trajectory a ∈ A. The system logs multi-modal time-series telemetry D — chiefly high-frequency proprioception (joint kinematics, drive currents, torques, and wrist wrench) alongside grasp telemetry and visual stability constraints — and maps D to an embedding space Z ⊂ R^d to perform non-parametric nearest-neighbor classification and open-set incremental registration using a dynamic vector memory.
+The objective is to determine the latent categorical and physical identity $\theta^* \in \Theta$ of an unobservable payload enclosed within a sealed container (a covered cup). Because direct line-of-sight to the interior is occluded, the manipulator interacts with the container by executing a deterministic, repeatable dynamic trajectory:
+
+$$a^* = [a_{\text{approach}} \circ a_{\text{grasp}} \circ a_{\text{lift}} \circ a_{\text{swirl}} \circ a_{\text{place}} \circ a_{\text{release}}] \in \mathcal{A}$$
+
+The system logs high-frequency proprioceptive time-series telemetry $D = \{s_t\}_{t=0}^T$ (joint torques, actuator angles, and gripper state), maps $D$ via a deterministic feature extractor $\psi(D) \to z \in \mathbb{R}^{10}$, normalizes the vector to the unit hypersphere $e = z / \|z\|_2 \in \mathbb{S}^9$, and performs non-parametric k-NN retrieval via MongoDB Atlas Vector Search against an online signature database.
 
 ---
 
-## 2. Latent Parameter Space (Θ)
+## 2. Latent Parameter Space ($\Theta$)
 
-Each enclosed payload is parameterized by: θ = (y, φ) ∈ Θ
+Each enclosed payload is modeled as $\theta = (y, \phi) \in \Theta$:
 
-### Categorical Taxonomy (y ∈ Y)
-- Empty container
-- Discrete loose solids (e.g., candy, pencils, hardware fasteners)
-- Continuous low-viscosity Newtonian fluids (e.g., water)
-- Continuous high-viscosity non-Newtonian/viscous fluids (e.g., liquid soap)
-- Rigid lumped-mass solids (e.g., solid weights, dense tools)
+### Categorical Taxonomy ($y \in \mathcal{Y}$)
+- **`empty_cup`**: Baseline empty container ($\Delta \tau \approx 0$).
+- **`water_half`**: Low-viscosity Newtonian fluid exhibiting swirl vortex dynamics.
+- **`dish_soap_half`**: High-viscosity fluid exhibiting strong viscous swirl damping.
+- **`candy_mixed`**: Discrete loose solids exhibiting high-frequency impact rattle (5–25 Hz).
+- **`solid_weight`**: Rigid lumped-mass solid exhibiting zero swirl phase lag.
 
-### Continuous Intrinsic Properties (φ ∈ R^k)
-- Net payload mass: m ∈ [0, M_max]
-- Center of mass offset: r_com ∈ R³ relative to the container frame
-- Damping coefficient / viscous lag: μ ≥ 0
-- Internal chatter / impact index: σ_chatter ≥ 0 (quantifying internal collision impulses)
-- Container fill ratio: α ∈ [0, 1]
-
----
-
-## 3. State & Observation Formulations
-
-### System State (s_t ∈ S) at time t ∈ [0, T]
-
-```
-s_t = [q_t^T,  q̇_t^T,  τ_t^T,  w_t^T,  g_t,  ġ_t]^T
-```
-
-- q_t, q̇_t ∈ R^n — Manipulator joint positions and velocities
-- τ_t ∈ R^n — Measured joint actuator torques / motor drive currents
-- w_t = [f_t^T, τ_wrist,t^T]^T ∈ R^6 — End-effector 6-axis force-torque wrench
-- g_t, ġ_t ∈ R — Gripper aperture position and motor load current (monitoring container deformation or micro-slippage)
-
-### Observation Trajectory (D): For execution horizon of duration T sampled at frequency f_s
-
-```
-D = {s_t, I_t}_{t=0}^T
-```
-
-where I_t represents visual verification frames from the camera to monitor external container pose and slip boundaries.
+### Continuous Intrinsic Properties ($\phi \in \mathbb{R}^k$)
+- Net payload mass: $m \in [0, M_{\max}]$
+- Viscous damping / swirl phase lag: $\Delta \phi_{\text{lag}} \ge 0$
+- Granular chatter / rattle spectral power: $E_{\text{rattle}} \ge 0$
+- Dynamic swirl torque variance: $\sigma^2_{\tau} \ge 0$
 
 ---
 
-## 4. Action Space (A)
+## 3. Scoping Decisions & Action Formulation
 
-To ensure real-time determinism, the action space is formalized as a composite multi-phase excitation trajectory a_composite = [a_lift ∘ a_sine ∘ a_tilt] executed in Cartesian space:
+> [!IMPORTANT]
+> **Rejection of Pushing, Violent Shaking, and Dynamic Policy Iteration:**
+> 1. **No Pushing or Impedance Sliding:** Surface contact sliding introduces unpredictable Coulomb friction variations, micro-chatter, and table slippage.
+> 2. **No Violent Linear Shake or Tilt Sweeps:** Replaced with smooth horizontal orbital swirling $a_{\text{swirl}}$ which generates continuous centripetal and tangential excitation without risking fluid spills.
+> 3. **No Dynamic Bayesian Planning:** Trajectory decisions are not generated dynamically; the system executes a single, deterministic, certified routine $a^*$.
 
-### a_lift — Static Gravitational Excitation, t ∈ [0, T_1]
-Constant vertical hold at fixed height z_hold to isolate static gravity loading G(q, m).
+### Action Breakdown ($a^*$)
 
-### a_sine — Harmonic Kinematic Excitation, t ∈ (T_1, T_2)
-1D periodic horizontal oscillation x(t) = x_0 + A·sin(2πf_0·t)·ê_x designed to trigger fluid slosh phase lag and dry solid inertial rattling.
-
-### a_tilt — Quasi-Static Angular Sweep, t ∈ (T_2, T_3)
-Bounded angular tilt θ_pitch(t) ∈ [−θ_max, +θ_max] about the end-effector roll/pitch axis to measure center-of-mass migration and torsional hysteresis.
-
----
-
-## 5. Dynamic Interaction Model
-
-The manipulator-container-payload dynamic equations are governed by:
-
-```
-M(q)q̈ + C(q,q̇)q̇ + G(q) + J^T(q) · w_ext(t; θ) = τ(t)
-```
-
-The unmodeled external wrench w_ext(t; θ) transmits the signature of the hidden payload:
-
-- **Newtonian fluid:** F_int(t) exhibits a hydrodynamic slosh resonance with phase delay Δφ = ∠(a_tcp, w_ext) > 0 governed by fluid height α
-- **Viscous fluid:** Shows overdamped transient response with attenuated resonance amplitude and substantial viscous dissipation μ
-- **Loose dry objects:** Exhibit piecewise discontinuous contact collisions, injecting high-frequency transient power spectra into τ(t) and w_ext(t)
-- **Rigid mass:** Displays zero relative internal motion (F_int = 0, Δφ ≈ 0), acting strictly as a rigid parameter update to the manipulator's link inertia
+1. **$a_{\text{grasp}}$ (Fixed Taped-Square Acquisition):** Vertical alignment and gripper closure at calibrated coordinates.
+2. **$a_{\text{lift}}$ (Static Hold, $t \in [0, T_1]$):** Vertical translation to elevated transit height $z_{\text{travel}}$ and fixed dwell to isolate gravitational torque:
+   $$G(q, m) = \Delta \tau_{\text{gravity}}$$
+3. **$a_{\text{swirl}}$ (Orbital Excitation, $t \in (T_1, T_2)$):** Continuous planar circular orbit at constant elevation:
+   $$x(t) = x_0 + R \cos(2\pi f_{\text{swirl}} t), \quad y(t) = y_0 + R \sin(2\pi f_{\text{swirl}} t), \quad z(t) = z_{\text{travel}}$$
+4. **$a_{\text{place}}$ (Controlled Placement, $t \in (T_2, T_3)$):** Smooth descent back to table square, jaw release, and return to home staging.
 
 ---
 
-## 6. Feature Projection & Non-Parametric Metric Retrieval
+## 4. Feature Space & Metric Retrieval
 
-### Deterministic Feature Map (ψ: D → R^d)
+### Deterministic Feature Mapping
+$$\psi: \mathcal{D} \to \mathbb{R}^{10}$$
 
-The continuous rollout D is transformed into an explicit feature descriptor z:
+Extracts:
+1. $\Delta \tau_{\text{gravity}}$ (Static mass)
+2. $\text{Var}(\tau_{3,\text{swirl}})$ (Dynamic swirl variance)
+3. $f_{\text{peak}}$ (FFT peak frequency)
+4. $P_{\text{peak}}$ (FFT peak power)
+5. $E_{\text{rattle}}$ (5–25 Hz chatter energy)
+6. $\Delta \phi_{\text{lag}}$ (Swirl cross-correlation phase shift)
+7. $\tau_{\text{centripetal}}$ (Lateral/longitudinal coupling)
+8. $\Delta g_{\text{grip}}$ (Aperture deformation)
+9. $\Delta i_{\text{grip}}$ (Motor current load)
+10. $S_{\text{stability}}$ (Steady-state ratio)
 
-```
-z = [
-  Δτ_gravity,    # steady-state mass offset during static lift
-  Var(τ̃_shake),  # residual torque variance during sine shake
-  f_peak,         # dominant spectral frequency via FFT
-  P_peak,         # dominant spectral power via FFT
-  E_rattle,       # integrated spectral energy in 5–25 Hz band
-  Δφ_lag,         # cross-correlation phase shift between input and measured torque
-  Δτ_hyst,        # torque hysteresis loop area during tilt
-  Δg_grip,        # grip deformation metric
-  Δi_grip         # grip compliance stall metric
-]
-```
+### Normalized Metric Embedding & Atlas Vector Search
+$$e = \frac{\psi(D)}{\|\psi(D)\|_2} \in \mathbb{S}^9$$
 
-### Normalized Metric Embedding
+Predicted category:
+$$\hat{y} = \arg\max_{y \in \mathcal{Y}} \frac{1}{|\mathcal{N}_k(e, y)|} \sum_{e_i \in \mathcal{N}_k(e, y)} \cos(e, e_i)$$
 
-```
-e = Wz / ‖Wz‖₂  ∈ S^(d-1)
-```
-
-where W is an empirical scaling/whitening projection matrix.
-
-### Metric Retrieval & Classification Objective
-
-Given an indexed memory bank M = {(e_i, y_i, φ_i)}_{i=1}^N stored within MongoDB Atlas Vector Search:
-
-```
-ŷ = argmax_{y ∈ Y}  Σ_{i ∈ Top-k(e, M)}  I(y_i = y) · cos(e, e_i)
-
-Confidence(ŷ) = (1/k) · Σ_{i ∈ Top-k, y_i=ŷ}  cos(e, e_i)
-```
-
-where cos(u, v) = u^T·v denotes cosine similarity.
-
-### Open-Set Continual Registration
-
-If an operator submits an unobserved item label y_new during runtime:
-
-```
-M ← M ∪ {(e_new, y_new, φ_estimated)}
-```
-
-The item becomes instantaneously retrievable in subsequent identification cycles without retraining weights.
+where $\mathcal{N}_k(e)$ represents the top-$k$ nearest neighbors returned by MongoDB Atlas `$vectorSearch`.
