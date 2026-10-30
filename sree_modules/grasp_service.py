@@ -35,10 +35,11 @@ logger = getLogger("RepeatableGrasp")
 class RepeatableGrasp(GenericService, EasyResource):
     MODEL: ClassVar[Model] = Model(ModelFamily("feels", "grasp"), "repeatable")
 
-    def __init__(self, name: ResourceName, arm: Arm, gripper: Gripper):
+    def __init__(self, name: ResourceName, arm: Arm, gripper: Gripper, torque_svc=None):
         super().__init__(name)
         self.arm = arm
         self.gripper = gripper
+        self.torque_svc = torque_svc
         self._running = False
         # Waypoints (mm) — override via config attributes
         self.waypoints = {
@@ -58,7 +59,13 @@ class RepeatableGrasp(GenericService, EasyResource):
     def new(cls, config: ComponentConfig, dependencies: Mapping[ResourceName, ResourceBase]) -> Self:
         arm = dependencies[Arm.get_resource_name(config.attributes.fields["arm"].string_value)]
         gripper = dependencies[Gripper.get_resource_name(config.attributes.fields["gripper"].string_value)]
-        inst = cls(config.resource_name, arm, gripper)
+        # Torque service is optional — if present, we tag phases for the expert
+        torque_svc = None
+        for rn, dep in dependencies.items():
+            if "torque" in rn.name.lower() or "sensing" in str(rn.api):
+                torque_svc = dep
+                break
+        inst = cls(config.resource_name, arm, gripper, torque_svc)
         # Override waypoints from config if provided
         for k in inst.waypoints:
             if k in config.attributes.fields:
@@ -99,19 +106,25 @@ class RepeatableGrasp(GenericService, EasyResource):
 
         if action == "swirl":
             label = str(command.get("object", "mystery"))
+            async def phase(p):
+                if self.torque_svc:
+                    try:
+                        await self.torque_svc.do_command({"action": "set_phase", "phase": p})
+                    except Exception:
+                        pass
             try:
-                # Pick → swirl → place sequence
-                await self._move("home")
-                await self._move("approach")
-                await self._move("grasp")
+                # Pick → swirl → place sequence with phase tagging for the expert
+                await phase("APPROACH"); await self._move("home")
+                await phase("APPROACH"); await self._move("approach")
+                await phase("GRASP"); await self._move("grasp")
                 await self.gripper.close()
-                await self._move("lift")
-                await self._move("travel")
-                await self._swirl()  # The money move
-                await self._move("place")
+                await phase("LIFT"); await self._move("lift")
+                await phase("TRAVEL"); await self._move("travel")
+                await phase("SWIRL"); await self._swirl()  # The money move
+                await phase("PLACE"); await self._move("place")
                 await self.gripper.open()
-                await self._move("lift")
-                await self._move("home")
+                await phase("LIFT"); await self._move("lift")
+                await phase("HOME"); await self._move("home")
                 return {"status": "ok", "object": label}
             except Exception as e:
                 return {"status": "error", "message": f"{type(e).__name__}: {e}"}
