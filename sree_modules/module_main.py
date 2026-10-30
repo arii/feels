@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-"""Module entrypoint — serves all three feels models in one Viam module.
+"""Module entrypoint — serves the feels Viam models.
 
 Importing each EasyResource subclass auto-registers its model:
-  • braveorangerover:pick_logic:yolo3d-pick   (pick_service.ObjectPicker)
-  • braveorangerover:sensing:torque-features  (torque_service.TorqueFeatures)
-  • braveorangerover:content:classifier       (content_service.ContentClassifier)
+  • feels:sensing:torque-features  (torque_service.TorqueFeatures)  — 50 Hz torque polling
+  • feels:grasp:repeatable         (grasp_service.RepeatableGrasp)   — deterministic macro
 """
 import asyncio
 from viam.module.module import Module
 
-import pick_service      # noqa: F401  (registers ObjectPicker / yolo3d-pick)
-import torque_service    # noqa: F401  (registers TorqueFeatures)
-import content_service   # noqa: F401  (registers ContentClassifier)
+import torque_service  # noqa: F401  (registers TorqueFeatures)
+import grasp_service   # noqa: F401  (registers RepeatableGrasp)
 
 if __name__ == "__main__":
     asyncio.run(Module.run_from_registry())
