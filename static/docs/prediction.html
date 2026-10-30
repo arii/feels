@@ -72,23 +72,21 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   Chronos foundation-model embeddings (56% on swirl-only data, the best
   measured). Neither runs live — Chronos needs its own 2304-D index and
   torch on the venue machine.</p>
+  <h3>Encoding bake-off results</h3>
+  <table>
+    <tr><th>Encoding</th><th>Material accuracy (n=21)</th><th>Swirl-only (n=9)</th><th>Notes</th></tr>
+    <tr><td>Hand (10-D)</td><td>24&ndash;29%</td><td>22%</td><td>Deployed baseline; scales recalibrated swirl-only</td></tr>
+    <tr><td>PCA-10</td><td><strong>43%</strong></td><td>33%</td><td>Unsupervised, fit on train torque-deltas only</td></tr>
+    <tr><td>Chronos-2304</td><td>&mdash;</td><td><strong>56%</strong></td><td>Zero-shot time-series foundation model</td></tr>
+  </table>
+  <p style="font-size:0.85rem; color:#8b949e;">Held-out test via <code>atlas.identify</code> ranking (top-5, mean cosine per material).
+  The decision rule mattered more than the encoding: shrinkage-LDA on the hand features reaches
+  52% category / 43% material, roughly 2&times; the kNN retrieval rate on the same features.
+  Absolute accuracy stays near 40&ndash;50% for every method &mdash; the 3.5&nbsp;Hz sampling rate,
+  not the embedding choice, is the bottleneck.</p>
 
-  
-  <h3>Switching the live embedder</h3>
-  <p>The dashboard reads <code>FEELS_EMBEDDER</code> at startup (<code>hand</code> by default).
-  Switching needs a library rebuild — the Atlas index stores one embedding space at a time,
-  and the server refuses to query across spaces (HTTP 409) rather than silently mismatching.</p>
-  <p><strong>PCA</strong> (no new dependencies — scikit-learn is already required):</p>
-  <pre>FEELS_EMBEDDER=pca python teach_csv.py --force --require-swirl recordings/
-FEELS_EMBEDDER=pca python realtime_plot.py --port 8080</pre>
-  <p><strong>Chronos</strong> (needs torch, ~2GB — the heavy one):</p>
-  <pre>pip install torch chronos-forecasting
-python -c "import atlas; atlas.ensure_vector_indexes('chronos')"
-FEELS_EMBEDDER=chronos python teach_csv.py --force --require-swirl recordings/
-FEELS_EMBEDDER=chronos python realtime_plot.py --port 8080</pre>
-  <p>To go back: rebuild with <code>FEELS_EMBEDDER=hand</code> (or unset) and restart.</p>
 
-<h2>What a Prediction Looks Like</h2>
+  <h2>What a Prediction Looks Like</h2>
   <p>A fresh recording comes off the swirl macro. The extractor computes the
   10-D signature. <code>predict_lda</code> decides. The decision card shows
   the predicted category, the material, and the closest taught item — with
