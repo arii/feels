@@ -461,6 +461,15 @@ async def _mock_predict():
     matches.sort(key=lambda m: m["similarity"], reverse=True)
     margin = (matches[0]["similarity"] - matches[1]["similarity"]) if len(matches) > 1 else 1.0
     ambiguous = margin < 0.02
+    import atlas as _a
+    _mat = {}
+    for m in matches:
+        _mat.setdefault(_a.material_of(m["label"]), []).append(m["similarity"])
+    _mat_ranked = sorted(((k, sum(v) / len(v)) for k, v in _mat.items()),
+                         key=lambda t: t[1], reverse=True)
+    _best_mat, _best_mat_conf = _mat_ranked[0]
+    _mat_margin = _best_mat_conf - _mat_ranked[1][1] if len(_mat_ranked) > 1 else 1.0
+    _mat_ambiguous = _mat_margin < 0.02
     feats = feature_extractor.extract_features(df)
     ts = feature_extractor.swirl_window_series(df)
     return {
@@ -471,6 +480,12 @@ async def _mock_predict():
         "low_confidence": bool(float(conf) < 0.82) or ambiguous,
         "ambiguous": ambiguous,
         "margin": round(margin, 4),
+        "material": _best_mat,
+        "material_confidence": round(_best_mat_conf, 3),
+        "material_low_confidence": bool(_best_mat_conf < 0.82) or _mat_ambiguous,
+        "material_ambiguous": _mat_ambiguous,
+        "material_margin": round(_mat_margin, 4),
+        "material_matches": [{"material": k, "score": round(s, 4)} for k, s in _mat_ranked],
         "matches": matches,
         "features": {"names": feature_extractor.FEATURE_NAMES,
                      "z": [round(float(v), 4) for v in feats["z"]],
@@ -514,6 +529,12 @@ async def handle_cycle_predict(request):
                     "low_confidence": res["low_confidence"],
                     "ambiguous": res.get("ambiguous", False),
                     "margin": res.get("margin", 1.0),
+                    "material": res["material"],
+                    "material_confidence": round(res["material_confidence"], 3),
+                    "material_low_confidence": res["material_low_confidence"],
+                    "material_ambiguous": res.get("material_ambiguous", False),
+                    "material_margin": res.get("material_margin", 1.0),
+                    "material_matches": res.get("material_matches", []),
                     "matches": [{"label": m["label"], "similarity": round(m["score"], 3)}
                                 for m in res["matches"]],
                     "features": {"names": feature_extractor.FEATURE_NAMES,

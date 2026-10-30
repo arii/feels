@@ -9,6 +9,7 @@ Collections:
 
 import argparse
 import os
+import re
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -178,6 +179,40 @@ def teach(
 # identify() — k-NN vector search, returns label + confidence
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Material taxonomy: what matters is WHAT is inside, not how full the cup is.
+# Taught labels carry capacity suffixes (water_025pct, solid_150g,
+# dish_soap_half); material_of() strips them to the coarse material class.
+# New labels should follow the same <material>_<capacity> convention, or be
+# added to MATERIAL_STEMS.
+# ---------------------------------------------------------------------------
+
+MATERIAL_STEMS = {
+    "water": "water",
+    "soap": "soap",
+    "dish_soap": "soap",
+    "candy": "candy",
+    "solid": "solid",
+    "screws": "screws",
+    "screw": "screws",
+    "empty": "empty",
+    "empty_cup": "empty",
+}
+
+_CAPACITY_SUFFIX = re.compile(r"_(\d+(pct|g|ml|oz)|half|full|mixed|empty)$")
+
+
+def material_of(label: str) -> str:
+    """Coarse material class for a taught label.
+
+    water_025pct / water_150g / water_half -> water; solid_020g -> solid;
+    dish_soap_half -> soap; candy_mixed -> candy; empty_cup -> empty.
+    Unknown labels map to themselves (their own material class).
+    """
+    stem = _CAPACITY_SUFFIX.sub("", label.strip().lower())
+    return MATERIAL_STEMS.get(stem, stem)
+
+
 def identify(
     feature_vector: list[float],
     top_k: int = 5,
@@ -195,10 +230,14 @@ def identify(
 
     Returns:
         {
-          "label":      predicted label string,
+          "label":      predicted label string (finest taught granularity),
           "confidence": float 0–1,
           "matches":    list of top-k {label, score} dicts,
-          "low_confidence": bool
+          "low_confidence": bool,
+          "material":   predicted material class (capacity suffixes stripped),
+          "material_confidence": float 0–1,
+          "material_matches": list of {material, score} dicts,
+          "material_low_confidence": bool
         }
     """
     db = get_db()
@@ -248,8 +287,25 @@ def identify(
     ambiguous = margin < 0.02
     matches = [{"label": lbl, "score": round(score, 4)} for lbl, score in ranked]
 
+    # Material-level aggregation: capacity variants of one material vote
+    # together. water_025pct vs water_075pct is a fill question; water vs
+    # soap is the material question the demo actually asks.
+    mat_scores: dict[str, list[float]] = defaultdict(list)
+    for r in results:
+        mat_scores[material_of(r["label"])].append(r["score"])
+    mat_ranked = sorted(
+        {m: sum(s) / len(s) for m, s in mat_scores.items()}.items(),
+        key=lambda x: x[1], reverse=True,
+    )
+    best_mat, best_mat_conf = mat_ranked[0]
+    mat_margin = best_mat_conf - mat_ranked[1][1] if len(mat_ranked) > 1 else 1.0
+    mat_ambiguous = mat_margin < 0.02
+    mat_matches = [{"material": m, "score": round(s, 4)} for m, s in mat_ranked]
+
     print(f"[identify] → '{best_label}'  confidence={best_confidence:.3f}  margin={margin:.3f}"
           + ("  AMBIGUOUS" if ambiguous else ""))
+    print(f"           material '{best_mat}'  confidence={best_mat_conf:.3f}  margin={mat_margin:.3f}"
+          + ("  AMBIGUOUS" if mat_ambiguous else ""))
     for m in matches:
         print(f"           {m['label']:30s}  {m['score']:.4f}")
 
@@ -260,6 +316,12 @@ def identify(
         "margin": round(margin, 4),
         "ambiguous": ambiguous,
         "low_confidence": (best_confidence < confidence_threshold) or ambiguous,
+        "material": best_mat,
+        "material_confidence": best_mat_conf,
+        "material_matches": mat_matches,
+        "material_margin": round(mat_margin, 4),
+        "material_ambiguous": mat_ambiguous,
+        "material_low_confidence": (best_mat_conf < confidence_threshold) or mat_ambiguous,
     }
 
 

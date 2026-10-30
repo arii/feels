@@ -205,12 +205,13 @@
       <div class="kpi-label">Mode 1 &mdash; Identify mystery object</div>
       <button class="tare-btn" id="predict-btn" onclick="runPredict()" style="font-size:1rem; padding:10px 20px; margin:8px 0;">RUN SWIRL MACRO &amp; PREDICT</button>
       <div id="decision-card" style="display:none; margin-top:8px; border-top:1px solid var(--border); padding-top:8px;">
-        <div class="kpi-label">Predicted class</div>
-        <div class="kpi-val" id="pred-label" style="font-size:1.5rem;">—</div>
+        <div class="kpi-label">Predicted material</div>
+        <div class="kpi-val" id="pred-material" style="font-size:1.5rem;">—</div>
         <div style="background:#21262d; border-radius:6px; height:14px; margin:6px 0; overflow:hidden;">
           <div id="pred-conf-bar" style="height:100%; width:0%; background:#3fb950;"></div>
         </div>
         <div class="kpi-sub" id="pred-conf-text">confidence —</div>
+        <div class="kpi-sub" id="pred-fine" style="margin-top:4px; color:#6e7681;">closest taught item: —</div>
         <div class="kpi-label" style="margin-top:8px;">Nearest Atlas neighbors</div>
         <div id="pred-neighbors" style="font-size:0.85rem; margin-top:4px;"></div>
         <div class="kpi-label" style="margin-top:8px;">Wrong? Teach the correction</div>
@@ -684,16 +685,23 @@
 
     function renderDecision(data) {
       document.getElementById('decision-card').style.display = 'block';
-      document.getElementById('pred-label').innerText = data.prediction || 'unknown';
-      const pct = Math.round((data.confidence || 0) * 100);
-      document.getElementById('pred-conf-bar').style.width = pct + '%';
-      document.getElementById('pred-conf-bar').style.background = data.low_confidence ? '#d29922' : '#3fb950';
+      // Material is the primary prediction; the fine-grained taught label is secondary.
+      const mat = data.material || data.prediction || 'unknown';
+      document.getElementById('pred-material').innerText = mat;
+      const mpct = Math.round(((data.material_confidence ?? data.confidence) || 0) * 100);
+      const mLow = data.material_low_confidence ?? data.low_confidence;
+      document.getElementById('pred-conf-bar').style.width = mpct + '%';
+      document.getElementById('pred-conf-bar').style.background = mLow ? '#d29922' : '#3fb950';
       document.getElementById('pred-conf-text').innerText =
-        `confidence ${pct}%` +
-        (data.ambiguous && data.matches && data.matches[1]
-          ? ` — AMBIGUOUS, ${data.matches[1].label} within ${(data.margin * 100).toFixed(1)}% — teach more examples of both`
-          : (data.low_confidence ? ' — LOW, consider teaching this item' : '')) +
+        `material confidence ${mpct}%` +
+        (data.material_ambiguous && data.material_matches && data.material_matches[1]
+          ? ` — AMBIGUOUS, ${data.material_matches[1].material} within ${(data.material_margin * 100).toFixed(1)}% — teach more examples of both`
+          : (mLow ? ' — LOW, consider teaching this item' : '')) +
         (data.mock ? '  (MOCK)' : '');
+      document.getElementById('pred-fine').innerText =
+        `closest taught item: ${data.prediction || '—'}` +
+        (data.ambiguous && data.matches && data.matches[1]
+          ? ` (fill-level ambiguous with ${data.matches[1].label})` : '');
       setNeighbors(document.getElementById('pred-neighbors'), data.matches || []);
       renderFeatureSpace(data);
       renderWhy(data);
