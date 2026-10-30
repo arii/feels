@@ -76,6 +76,48 @@ def _atlas():
     return _a
 
 
+def _vspace_2d(items):
+    """2-D PCA projection of (label, 10-D vector) items via SVD. JSON-safe."""
+    import numpy as np
+    if not items:
+        return []
+    X = np.array([v for _, v in items], dtype=float)
+    X = X - X.mean(axis=0)
+    if len(items) < 2 or np.allclose(X, 0):
+        return [{"label": l, "x": 0.0, "y": 0.0} for l, _ in items]
+    U, S, _ = np.linalg.svd(X, full_matrices=False)
+    coords = U[:, :2] * S[:2]
+    if coords.shape[1] < 2:
+        coords = np.pad(coords, ((0, 0), (0, 2 - coords.shape[1])))
+    return [{"label": l, "x": round(float(p[0]), 4), "y": round(float(p[1]), 4)}
+            for (l, _), p in zip(items, coords)]
+
+
+async def handle_vspace(request):
+    """2-D PCA of the Atlas signature library, optionally with the query
+    vector projected in the same basis (POST {"query": [10 floats]})."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    query = data.get("query")
+    try:
+        a = _atlas()
+        docs = list(a.get_db().signatures.find({}, {"label": 1, "feature_vector": 1}))
+        items = [(d.get("label", "?"), d["feature_vector"])
+                 for d in docs if d.get("feature_vector")]
+        qidx = -1
+        if isinstance(query, list) and len(query) == 10:
+            items.append(("QUERY", [float(v) for v in query]))
+            qidx = len(items) - 1
+        return web.json_response({
+            "ok": True, "points": _vspace_2d(items),
+            "query_index": qidx, "n": len(items) - (1 if qidx >= 0 else 0),
+        })
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)[:300]}, status=500)
+
+
 def _newest_recording(after_ts: float) -> Optional[str]:
     cands = [p for p in glob.glob(os.path.join(RECORDINGS_DIR, "recording_*.csv"))
              if os.path.getmtime(p) >= after_ts - 2]
@@ -551,6 +593,13 @@ HTML_PAGE = """<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- Vector space (2-D PCA of the Atlas signature library) -->
+  <div style="background:#161b22; border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
+    <div class="kpi-label">Vector space — 2-D PCA of the Atlas 10-D signature library</div>
+    <canvas id="vspace-canvas" class="why-canvas" style="height:220px;"></canvas>
+    <div class="kpi-sub" id="vspace-note" style="margin-top:6px;"></div>
+  </div>
+
   <!-- Live joint torques (native canvas sparklines) -->
   <div class="section-title">
     <span>Live Joint Torques (10s Rolling Windows)</span>
@@ -867,6 +916,70 @@ HTML_PAGE = """<!DOCTYPE html>
         `observable 0–${fmax.toFixed(1)} Hz at ${fs.toFixed(1)} Hz sampling · 5–25 Hz rattle band needs 100 Hz on-robot sampling`;
     }
 
+    const VSPACE_COLORS = ['#3fb950', '#d29922', '#39c5cf', '#f0883e', '#bc8cff', '#58a6ff', '#ff7b72', '#a371f7'];
+    function labelColor(label) {
+      let h = 0;
+      for (const ch of String(label)) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
+      return VSPACE_COLORS[h % VSPACE_COLORS.length];
+    }
+    let lastQueryE = null;
+
+    async function refreshVSpace() {
+      const note = document.getElementById('vspace-note');
+      try {
+        const res = await fetch('/api/vectorspace', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(lastQueryE ? {query: lastQueryE} : {}),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'vectorspace failed');
+        renderVSpace(data);
+      } catch (e) {
+        note.innerText = 'vector space unavailable: ' + e.message;
+      }
+    }
+
+    function renderVSpace(data) {
+      const c = document.getElementById('vspace-canvas');
+      const note = document.getElementById('vspace-note');
+      const { ctx, w, h, dpr } = sizeCanvas(c);
+      ctx.clearRect(0, 0, w, h);
+      const pts = data.points || [];
+      if (!pts.length) {
+        note.innerText = 'no signatures in Atlas yet — teach an item in Mode 2';
+        return;
+      }
+      let minX = 1e18, maxX = -1e18, minY = 1e18, maxY = -1e18;
+      pts.forEach(p => {
+        minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+        minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+      });
+      if (maxX - minX < 1e-9) { minX -= 0.5; maxX += 0.5; }
+      if (maxY - minY < 1e-9) { minY -= 0.5; maxY += 0.5; }
+      const pad = 24 * dpr;
+      const X = x => pad + ((x - minX) / (maxX - minX)) * (w - 2 * pad);
+      const Y = y => h - pad - ((y - minY) / (maxY - minY)) * (h - 2 * pad);
+      pts.forEach((p, i) => {
+        const isQ = i === data.query_index;
+        const x = X(p.x), y = Y(p.y);
+        ctx.fillStyle = isQ ? '#ffffff' : labelColor(p.label);
+        ctx.beginPath(); ctx.arc(x, y, (isQ ? 5 : 3.5) * dpr, 0, 2 * Math.PI); ctx.fill();
+        if (isQ) {
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5 * dpr;
+          ctx.beginPath(); ctx.arc(x, y, 9 * dpr, 0, 2 * Math.PI); ctx.stroke();
+          const r = 4 * dpr;
+          ctx.beginPath();
+          ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r);
+          ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r);
+          ctx.stroke();
+        }
+      });
+      const labels = [...new Set(pts.filter((_, i) => i !== data.query_index).map(p => p.label))];
+      note.innerHTML = labels.map(l =>
+        `<span style="display:inline-block; margin:2px 10px 2px 0; color:#8b949e;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${labelColor(l)}; margin-right:5px;"></span>${l}</span>`
+      ).join('') + `<span style="color:#6e7681;">${data.n} signature${data.n === 1 ? '' : 's'} · 2-D PCA of cosine space · × = current query</span>`;
+    }
+
     function renderDecision(data) {
       document.getElementById('decision-card').style.display = 'block';
       document.getElementById('pred-label').innerText = data.prediction || 'unknown';
@@ -879,6 +992,8 @@ HTML_PAGE = """<!DOCTYPE html>
       setNeighbors(document.getElementById('pred-neighbors'), data.matches || []);
       renderFeatureSpace(data);
       renderWhy(data);
+      lastQueryE = (data.e && data.e.length === 10) ? data.e : null;
+      refreshVSpace();
       const dq = data.diagnostics || {};
       document.getElementById('predict-status').innerText = `Done — ${data.csv}` +
         (data.mock ? '  (MOCK data, not live hardware)' : '') +
@@ -894,6 +1009,7 @@ HTML_PAGE = """<!DOCTYPE html>
         b.style.background = s.atlas_configured ? '#238636' : '#da3633';
         document.getElementById('mock-badge').style.display = s.mock ? 'inline-block' : 'none';
         document.getElementById('build-info').innerText = 'build ' + (s.git_sha || 'unknown');
+        refreshVSpace();
         if (s.last_prediction && s.last_prediction.ok) renderDecision(s.last_prediction);
         const busy = s.cycle_busy;
         for (const id of ['predict-btn', 'teach-btn']) {
@@ -950,6 +1066,7 @@ HTML_PAGE = """<!DOCTYPE html>
           ? `✓ (MOCK) "${data.label}" recorded — not saved to Atlas.`
           : `✓ Signature saved! "${data.label}" indexed in MongoDB (sig ${String(data.sig_id).slice(-6)}).`;
         input.value = '';
+        refreshVSpace();
       } catch (e) {
         status.innerText = 'Error: ' + e.message;
       } finally {
@@ -1046,6 +1163,7 @@ async def _mock_predict():
         "features": {"names": feature_extractor.FEATURE_NAMES,
                      "z": [round(float(v), 4) for v in feats["z"]],
                      "descriptions": feature_extractor.FEATURE_DESCRIPTIONS},
+        "e": [float(v) for v in feats["e"]],
         "timeseries": ts,
         "diagnostics": feats["diagnostics"],
     }
@@ -1087,6 +1205,7 @@ async def handle_cycle_predict(request):
                     "features": {"names": feature_extractor.FEATURE_NAMES,
                                  "z": [round(float(v), 4) for v in feats["z"]],
                                  "descriptions": feature_extractor.FEATURE_DESCRIPTIONS},
+                    "e": [float(v) for v in feats["e"]],
                     "timeseries": ts,
                     "diagnostics": feats["diagnostics"],
                 }
@@ -1195,6 +1314,7 @@ async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_post("/api/cycle/teach", handle_cycle_teach)
     app.router.add_post("/api/cycle/abort", handle_cycle_abort)
     app.router.add_get("/api/status", handle_api_status)
+    app.router.add_post("/api/vectorspace", handle_vspace)
 
     runner = web.AppRunner(app)
     await runner.setup()
