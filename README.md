@@ -5,6 +5,17 @@ A 6-DOF arm holding a sealed cup uses proprioception to classify its contents
 system maps joint-torque dynamics to a 10-D signature and retrieves the nearest
 taught example from MongoDB Atlas.
 
+## TL;DR
+
+```bash
+git clone https://github.com/arii/feels && cd feels
+bash setup.sh && source .venv/bin/activate
+FEELS_MOCK=1 python realtime_plot.py --port 8080   # open http://localhost:8080
+```
+
+No hardware needed — mock mode runs the full UI on bundled recordings.
+For the robot + Atlas, fill in `.env` (see Setup) and drop `FEELS_MOCK=1`.
+
 ## Setup
 
 ```bash
