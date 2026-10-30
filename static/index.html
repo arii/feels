@@ -213,6 +213,12 @@
         <div class="kpi-sub" id="pred-conf-text">confidence —</div>
         <div class="kpi-label" style="margin-top:8px;">Nearest Atlas neighbors</div>
         <div id="pred-neighbors" style="font-size:0.85rem; margin-top:4px;"></div>
+        <div class="kpi-label" style="margin-top:8px;">Wrong? Teach the correction</div>
+        <div style="display:flex; gap:8px; margin:6px 0;">
+          <input type="text" id="correct-label-input" placeholder="Actual item, e.g. water_025pct" style="flex:1; background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem;" />
+          <button class="tare-btn" id="correct-btn" onclick="correctPrediction()">TEACH CORRECTION</button>
+        </div>
+        <div class="kpi-sub" id="correct-status"></div>
         <div class="kpi-label" style="margin-top:8px;">10-D swirl signature — feature space</div>
         <div id="pred-features"></div>
         <div class="kpi-sub" id="pred-data" style="margin-top:6px;"></div>
@@ -782,6 +788,34 @@
         status.innerText = 'Error: ' + e.message;
       } finally {
         clearInterval(timer);
+        btn.disabled = false;
+      }
+    }
+
+    async function correctPrediction() {
+      const input = document.getElementById('correct-label-input');
+      const btn = document.getElementById('correct-btn');
+      const status = document.getElementById('correct-status');
+      const name = input.value.trim();
+      if (!name) { status.innerText = 'Enter the actual item name first.'; return; }
+      btn.disabled = true;
+      status.innerText = `Teaching correction "${name}" — no macro re-run, reusing the last recording…`;
+      try {
+        const res = await fetch('/api/cycle/correct', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ true_label: name }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'correction failed');
+        status.innerText = data.mock
+          ? `✓ (MOCK) correction "${data.label}" recorded — not saved to Atlas.`
+          : `✓ Correction saved: "${data.label}" (was "${data.was}", ${data.csv}). Re-run prediction to verify.`;
+        input.value = '';
+        refreshVSpace();
+      } catch (e) {
+        status.innerText = 'Error: ' + e.message;
+      } finally {
         btn.disabled = false;
       }
     }

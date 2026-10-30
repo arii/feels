@@ -561,6 +561,63 @@ async def handle_cycle_teach(request):
             return web.json_response({"ok": False, "error": str(e)[:500]}, status=500)
 
 
+async def _mock_correct(label: str):
+    """Mock correction: pretend to save the true label (nothing touches Atlas)."""
+    import uuid
+    await asyncio.sleep(MOCK_DELAY_SEC)
+    return {"ok": True, "mock": True, "label": label, "was": None,
+            "csv": None, "sig_id": f"mock-{uuid.uuid4().hex[:8]}",
+            "note": "mock mode — not saved to Atlas"}
+
+
+async def handle_cycle_correct(request):
+    """Teach the true label for the most recent prediction's recording.
+
+    A wrong prediction is the most valuable teaching signal: instead of
+    re-running the macro, reuse the just-recorded mystery CSV and store it
+    under the true label. Recorded as a correction (correction_of) so
+    confusions can be audited later.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    label = _sanitize_label(str(data.get("true_label", "")))
+    if not label or label == "item":
+        return web.json_response({"ok": False, "error": "provide true_label"}, status=400)
+    if _cycle_lock.locked():
+        return web.json_response({"ok": False, "error": "a cycle is already running"}, status=409)
+    async with _cycle_lock:
+        try:
+            if MOCK_MODE:
+                return web.json_response(await _mock_correct(label))
+            last = _last_prediction or {}
+            csv_name = last.get("csv")
+            if not csv_name:
+                return web.json_response(
+                    {"ok": False, "error": "no prediction yet — run Mode 1 first"}, status=400)
+            csv_path = os.path.join(RECORDINGS_DIR, os.path.basename(csv_name))
+            if not os.path.isfile(csv_path):
+                return web.json_response(
+                    {"ok": False, "error": f"recording not found: {csv_name}"}, status=404)
+            feats = feature_extractor.extract_features(pd.read_csv(csv_path))
+            a = _atlas()
+            saved = a.teach(
+                label, feats["e"], motion_type="swirl_macro", session="thu",
+                properties={"tare_flags": feats["diagnostics"]["tare_flags"],
+                            "phase_source": feats["diagnostics"]["phase_source"],
+                            "csv": os.path.basename(csv_path),
+                            "correction_of": last.get("prediction")})
+            return web.json_response({
+                "ok": True, "label": label, "was": last.get("prediction"),
+                "csv": os.path.basename(csv_path),
+                "sig_id": saved.get("sig_id"),
+                "diagnostics": feats["diagnostics"],
+            })
+        except Exception as e:
+            return web.json_response({"ok": False, "error": str(e)[:500]}, status=500)
+
+
 async def handle_cycle_abort(request):
     """Stop the running macro subprocess (physical e-stop remains at the venue)."""
     global _cycle_proc, _cycle_status
@@ -640,6 +697,7 @@ async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_post("/api/cycle/predict", handle_cycle_predict)
     app.router.add_post("/api/cycle/teach", handle_cycle_teach)
     app.router.add_post("/api/cycle/abort", handle_cycle_abort)
+    app.router.add_post("/api/cycle/correct", handle_cycle_correct)
     app.router.add_get("/api/status", handle_api_status)
     app.router.add_post("/api/vectorspace", handle_vspace)
 
