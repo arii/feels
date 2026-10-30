@@ -78,3 +78,6 @@ desktop.ini
 !recordings/*.png
 !docs/**/*.png
 !docs/*.png
+
+# Viam module venv (created by run.sh)
+.venv-module/
