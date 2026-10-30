@@ -265,7 +265,7 @@
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #39c5cf;">Joint 1 — Base (Yaw)</span>
-        <span class="joint-val" id="val-j1" style="color: #39c5cf;">0.000</span><span class="joint-range">±5 N·m</span>
+        <span class="joint-val" id="val-j1" style="color: #39c5cf;">0.000</span><span class="joint-range">±25 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j1" class="sparkline"></canvas></div>
     </div>
@@ -281,7 +281,7 @@
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #d29922;">Joint 3 — Elbow (Pitch)</span>
-        <span class="joint-val" id="val-j3" style="color: #d29922;">-16.82</span><span class="joint-range">±20 N·m</span>
+        <span class="joint-val" id="val-j3" style="color: #d29922;">-16.82</span><span class="joint-range">±10 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j3" class="sparkline"></canvas></div>
     </div>
@@ -297,7 +297,7 @@
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #bc8cff;">Joint 5 — Wrist (Pitch)</span>
-        <span class="joint-val" id="val-j5" style="color: #bc8cff;">0.373</span><span class="joint-range">±5 N·m</span>
+        <span class="joint-val" id="val-j5" style="color: #bc8cff;">0.373</span><span class="joint-range">±2 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j5" class="sparkline"></canvas></div>
     </div>
@@ -305,7 +305,7 @@
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #58a6ff;">Joint 6 — Flange (Roll)</span>
-        <span class="joint-val" id="val-j6" style="color: #58a6ff;">0.001</span><span class="joint-range">±5 N·m</span>
+        <span class="joint-val" id="val-j6" style="color: #58a6ff;">0.001</span><span class="joint-range">±2 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j6" class="sparkline"></canvas></div>
     </div>
@@ -342,7 +342,8 @@
     // Fixed y-axis half-ranges (N·m) per joint for the delta view: the axis never
     // gets narrower than ±this around 0, so a still joint draws a flat line
     // instead of stretching sensor noise full-height. Expands if data exceeds it.
-    const SPARK_HALF_RANGES = [5, 25, 20, 5, 5, 5];
+    // Calibrated 2026-10-29 from the true-SWIRL recording's raw delta ranges.
+    const SPARK_HALF_RANGES = [25, 25, 10, 5, 2, 2];
 
     function resizeCanvases() {
       sparkCanvases.forEach(c => {
