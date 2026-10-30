@@ -180,12 +180,10 @@ figcaption strong { color:var(--text); }
 <text x="28" y="410" font-size="10" fill="#8b949e">mm</text>
 <text x="730" y="512" font-size="10" fill="#8b949e">s</text>
 </svg></div>
-    <figcaption><strong>One real run, three stages.</strong> Drawn from
-    <code>recording_20261029_190400_water_075pct.csv</code> (water_075pct, 35.3 s).
-    Top row: gripper position seen from above per stage — faint trace is the full
-    path, blue is the stage. Bottom: gripper height over the whole run with the
-    stages shaded. Stage boundaries come straight from the CSV's
-    <code>phase</code> column; there is no other motion in the system.</figcaption>
+    <figcaption><strong>One real run, three stages.</strong>
+    <code>recording_20261029_190400_water_075pct.csv</code> (35.3 s).
+    Top: TCP path per stage (faint = full path, blue = stage). Bottom: TCP
+    height with stages shaded. Boundaries from the CSV <code>phase</code> column.</figcaption>
   </figure>
 
   <h2>What the torques look like</h2>
@@ -211,11 +209,9 @@ figcaption strong { color:var(--text); }
 <text x="712" y="298" text-anchor="end" font-size="11" fill="#8b949e">elapsed s</text>
 <text x="20" y="320" font-size="10" fill="#8b949e">The extractor measures slosh/variance inside the shaded SWIRL window only.</text>
 </svg></div>
-    <figcaption><strong>Shoulder (J2) and elbow (J3) torques, same recording.</strong>
-    The shaded band is the <code>SWIRL</code> phase (18.9–22.5 s) — the only samples
-    the extractor's swirl features (<code>swirl_var_j2</code>,
-    <code>swirl_var_j3</code>, <code>swirl_ptp_j3</code>, <code>rattle_e</code>)
-    ever see. Everything outside the band is transport, not signal.</figcaption>
+    <figcaption><strong>Shoulder (J2) and elbow (J3) torques, same run.</strong>
+    Shaded = <code>SWIRL</code> phase (18.9–22.5 s). The swirl features read
+    only this window.</figcaption>
   </figure>
 
   <h2>Two real signatures</h2>

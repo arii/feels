@@ -66,33 +66,26 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   small ones (variances ~1–5), and three entries are zero &mdash; the static
   mass offsets and swirl speed are excluded from matching (see above), so the
   unit embedding lives in the 7 informative dimensions.</p>
-  <p><strong>Retrieval proposes, a supervised head disposes.</strong> Atlas
-  <code>$vectorSearch</code> finds the neighborhood (and powers the vector-space
-  plot), but the actual call is made by a shrinkage-LDA classifier fit in
-  milliseconds on the whole labeled library &mdash; every prediction refits,
-  so teaching a new item takes effect immediately with no training step and
-  no deployment. On 21 held-out cups the LDA head gets the category right
-  52% of the time, vs 24% for pure nearest-neighbor retrieval on the same
-  features. Its per-prediction probabilities are uncalibrated, so the
-  dashboard shows the <em>measured</em> accuracy instead of a made-up
-  confidence score. Predictions are reported at three levels &mdash;
-  <strong>category</strong> (liquid / solid / empty),
-  <strong>material</strong> (water, screws, &hellip;), and the closest taught
-  item &mdash; so the headline claim stays within what the signal can
-  actually support.</p>
+  <p>Atlas <code>$vectorSearch</code> finds the neighborhood (and powers the
+  vector-space plot), but the call is made by a shrinkage-LDA classifier refit
+  on the whole library at every prediction &mdash; teaching a new item takes
+  effect immediately, no training step. On 21 held-out cups: category right
+  52% of the time, vs 24% for pure nearest-neighbor on the same features.
+  LDA probabilities are uncalibrated, so the dashboard shows the
+  <em>measured</em> accuracy, not a per-prediction score. Predictions come at
+  three levels &mdash; <strong>category</strong> (liquid / solid / empty),
+  <strong>material</strong> (water, screws, &hellip;), closest taught item
+  &mdash; so the headline stays inside what the signal supports.</p>
 
   <h2>4. Teach without training</h2>
-  <p>A new item is learned by storing one embedding — <code>atlas.teach(label,
-  e)</code>. The next query searches it immediately. There is no model to
-  retrain and no deployment step, which is the whole point of the non-parametric
-  design.</p>
+  <p>A new item is one stored embedding &mdash; <code>atlas.teach(label,
+  e)</code>. The next query searches it. No retraining, no deployment.</p>
 
   <h2>5. Keep the protocol fixed</h2>
-  <p>We measured this: the same cup scores ~0.4 cosine similarity across
-  swirl/non-swirl protocols, while <em>different</em> items within one protocol
-  reach ~0.9. The embedding encodes the motion as much as the contents — so the
-  library admits swirl-protocol recordings only, and the dashboard always records
-  with the swirl macro.</p>
+  <p>Same cup, ~0.4 cosine across swirl/non-swirl protocols; <em>different</em>
+  items within one protocol reach ~0.9. The embedding encodes the motion as
+  much as the contents &mdash; the library admits swirl-protocol recordings
+  only.</p>
 
   <div class="honest"><strong>What we don't do.</strong> No deep learning, no
   learned encoder, no FFT peak-picking (there isn't enough bandwidth for it at

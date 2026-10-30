@@ -35,23 +35,20 @@ code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em;
   <h1>Why it matters</h1>
 
   <h2>Sealed containers are everywhere</h2>
-  <p>Food, pharma, chemicals, parcels — the world is full of containers whose
-  contents matter and whose lids vision can't penetrate. A robot that can only
-  <em>look</em> is blind to all of them. Haptic probing turns the arm itself
+  <p>Food, pharma, chemicals, parcels — containers whose contents matter and
+  whose lids vision can't penetrate. Haptic probing turns the arm itself
   into the sensor.</p>
 
   <h2>No new hardware</h2>
-  <p>The sensing channel already exists on every torque-reporting arm. No $5k
-  wrist sensor, no wiring, no extra calibration step. The method is software:
-  a fixed probing motion plus a feature map. That makes it deployable on arms
-  that are already in the field.</p>
+  <p>The channel already exists on every torque-reporting arm. No $5k
+  wrist sensor, no wiring, no extra calibration. The method is software:
+  a fixed probing motion plus a feature map.</p>
 
   <h2>Any arm can play</h2>
-  <p>The pipeline's only contract with the robot is a CSV schema — timestamped
-  joint angles and torques with phase tags. Any builder can point their own
+  <p>The pipeline's only contract is a CSV schema — timestamped
+  joint angles and torques with phase tags. Point your own
   macro at it (<code>FEELS_MACRO_CMD</code>), keep the extractor and vector
-  memory untouched, and teach their own library. Modularity isn't a slide here;
-  it's the interface.</p>
+  memory, teach your own library.</p>
 
   <h2>Beyond the coffee cup</h2>
   <ul>
@@ -64,11 +61,9 @@ code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em;
   </ul>
 
   <h2>The research angle</h2>
-  <p>Most robot perception is vision-first. Humans do something different with a
-  wrapped gift: they shake it. feels is a small, concrete instance of that
-  idea — <em>active haptic perception</em> as a complement to vision, using the
-  excitation-and-listen pattern that works even when the thing you care about
-  is hidden. The cup is the demo; the pattern generalizes.</p>
+  <p>Most robot perception is vision-first. With a wrapped gift, humans shake
+  it. This is that idea made concrete: active haptic perception — excite and
+  listen — for when the thing you care about is hidden.</p>
 </main>
 </body>
 </html>

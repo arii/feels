@@ -70,8 +70,7 @@ e = Wz / ‖Wz‖₂      (per-feature scaling + L2 normalization)
   <h2>What makes it hard</h2>
   <ul>
     <li><strong>Coarse sensing:</strong> 4–5 Hz torque telemetry. The true 5–25 Hz
-      rattle band is below the Nyquist limit — we work with what the channel
-      actually carries.</li>
+      rattle band is above Nyquist — we use what the channel carries.</li>
     <li><strong>Tare drift:</strong> joint-torque baselines wander with pose and
       temperature; static offsets are unreliable, so the signal must come from
       motion.</li>
@@ -80,9 +79,8 @@ e = Wz / ‖Wz‖₂      (per-feature scaling + L2 normalization)
   </ul>
 
   <div class="honest"><strong>Honest limits.</strong> Static hold torques carry no
-  payload signal at our operating pose (verified identical across contents).
-  Everything discriminative comes from the swirl dynamics — which is exactly why
-  the fixed-protocol swirl, not the static lift, is the measurement.</div>
+  payload signal at our pose (verified identical across contents).
+  Everything discriminative comes from the swirl dynamics.</div>
 </main>
 </body>
 </html>
