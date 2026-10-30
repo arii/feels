@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="400" viewBox="0 0 780 400" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<rect width="780" height="400" fill="#0d1117" rx="8"/>
+<text x="20" y="28" font-size="15" font-weight="bold" fill="#e6edf3">Two real 10-D signatures, side by side</text>
+<text x="20" y="48" font-size="11" fill="#8b949e">bar = z / FEATURE_SCALES (the relative magnitudes the matcher compares) · raw z under each name</text>
+<rect x="60" y="80" width="660" height="230" rx="8" fill="#161b22" stroke="#2d333b"/>
+<line x1="60" y1="195.0" x2="720" y2="195.0" stroke="#2d333b"/>
+<rect x="74.5" y="195.0" width="18.5" height="73.4" fill="#58a6ff" rx="2"/>
+<rect x="93.0" y="195.0" width="18.5" height="72.4" fill="#f0883e" rx="2"/>
+<text x="93.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">mass_j2</text>
+<text x="93.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">-13.9/-13.7</text>
+<rect x="140.5" y="195.0" width="18.5" height="42.6" fill="#58a6ff" rx="2"/>
+<rect x="159.0" y="195.0" width="18.5" height="20.2" fill="#f0883e" rx="2"/>
+<text x="159.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">mass_j3</text>
+<text x="159.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">-2.1/-1.0</text>
+<rect x="206.5" y="195.0" width="18.5" height="0.0" fill="#58a6ff" rx="2"/>
+<rect x="225.0" y="90.5" width="18.5" height="104.5" fill="#f0883e" rx="2"/>
+<text x="225.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">swirl_var_j2</text>
+<text x="225.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">0.0/8.6</text>
+<rect x="272.5" y="195.0" width="18.5" height="0.0" fill="#58a6ff" rx="2"/>
+<rect x="291.0" y="135.1" width="18.5" height="59.9" fill="#f0883e" rx="2"/>
+<text x="291.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">swirl_var_j3</text>
+<text x="291.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">0.0/1.8</text>
+<rect x="338.5" y="151.7" width="18.5" height="43.3" fill="#58a6ff" rx="2"/>
+<rect x="357.0" y="154.0" width="18.5" height="41.0" fill="#f0883e" rx="2"/>
+<text x="357.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">swirl_ptp_j3</text>
+<text x="357.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">10.2/9.6</text>
+<rect x="404.5" y="195.0" width="18.5" height="0.0" fill="#58a6ff" rx="2"/>
+<rect x="423.0" y="195.0" width="18.5" height="0.0" fill="#f0883e" rx="2"/>
+<text x="423.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">phase_lag_s</text>
+<text x="423.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">0.0/0.0</text>
+<rect x="470.5" y="195.0" width="18.5" height="0.0" fill="#58a6ff" rx="2"/>
+<rect x="489.0" y="170.7" width="18.5" height="24.3" fill="#f0883e" rx="2"/>
+<text x="489.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">rattle_e</text>
+<text x="489.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">0.0/86.2</text>
+<rect x="536.5" y="155.1" width="18.5" height="39.9" fill="#58a6ff" rx="2"/>
+<rect x="555.0" y="165.8" width="18.5" height="29.2" fill="#f0883e" rx="2"/>
+<text x="555.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">grip_comp</text>
+<text x="555.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">0.6/0.5</text>
+<rect x="602.5" y="147.0" width="18.5" height="48.0" fill="#58a6ff" rx="2"/>
+<rect x="621.0" y="167.8" width="18.5" height="27.2" fill="#f0883e" rx="2"/>
+<text x="621.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">lift_dyn_j3</text>
+<text x="621.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">3.2/1.8</text>
+<rect x="668.5" y="106.0" width="18.5" height="89.0" fill="#58a6ff" rx="2"/>
+<rect x="687.0" y="99.7" width="18.5" height="95.3" fill="#f0883e" rx="2"/>
+<text x="687.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">swirl_speed</text>
+<text x="687.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">158.0/169.2</text>
+<text x="52" y="314.0" text-anchor="end" font-size="10" fill="#8b949e">-2.5</text>
+<text x="52" y="256.5" text-anchor="end" font-size="10" fill="#8b949e">-1.2</text>
+<text x="52" y="199.0" text-anchor="end" font-size="10" fill="#8b949e">0.0</text>
+<text x="52" y="141.5" text-anchor="end" font-size="10" fill="#8b949e">1.2</text>
+<text x="52" y="84.0" text-anchor="end" font-size="10" fill="#8b949e">2.5</text>
+<rect x="72" y="92" width="10" height="10" fill="#58a6ff"/>
+<text x="88" y="101" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_075pct</text>
+<rect x="210" y="92" width="10" height="10" fill="#f0883e"/>
+<text x="226" y="101" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">solid_020g</text>
+<text x="20" y="390" font-size="10" fill="#8b949e">from feature_extractor.extract_features on the two recordings named above</text>
+</svg>

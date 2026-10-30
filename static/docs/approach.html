@@ -32,6 +32,8 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
     <a class="active" href="/docs/approach">Approach</a>
     <a href="/docs/force">Force without a sensor</a>
     <a href="/docs/relevance">Why it matters</a>
+    <a href="/docs/figures">Figures</a>
+    <a href="/docs/recording">Recording</a>
     <a href="/">← Dashboard</a>
   </span>
 </nav>
@@ -39,7 +41,7 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   <h1>Approach</h1>
 
   <h2>1. One fixed macro</h2>
-  <p>Pick up → swirl → place. A single smooth horizontal orbit at travel height —
+  <p>Pick up → swirl → place → back-off. A single smooth horizontal orbit at travel height —
   no fragile multi-part choreography, no vision, no per-item tuning. The macro is
   deterministic, so every recording is comparable. (It's locked in for the
   hackathon: <code>repeatable_grasp.py --swirl-smooth</code>.)</p>
@@ -63,9 +65,21 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   largest-magnitude raw feature (swirl speed, ~160 mm/s) from drowning the
   small ones (variances ~1–5), and three entries are zero &mdash; the static
   mass offsets and swirl speed are excluded from matching (see above), so the
-  unit embedding lives in the 7 informative dimensions. Retrieval averages
-  similarity per label over the top-k hits; below 0.82 the UI flags
-  low confidence instead of guessing.</p>
+  unit embedding lives in the 7 informative dimensions.</p>
+  <p><strong>Retrieval proposes, a supervised head disposes.</strong> Atlas
+  <code>$vectorSearch</code> finds the neighborhood (and powers the vector-space
+  plot), but the actual call is made by a shrinkage-LDA classifier fit in
+  milliseconds on the whole labeled library &mdash; every prediction refits,
+  so teaching a new item takes effect immediately with no training step and
+  no deployment. On 21 held-out cups the LDA head gets the category right
+  52% of the time, vs 24% for pure nearest-neighbor retrieval on the same
+  features. Its per-prediction probabilities are uncalibrated, so the
+  dashboard shows the <em>measured</em> accuracy instead of a made-up
+  confidence score. Predictions are reported at three levels &mdash;
+  <strong>category</strong> (liquid / solid / empty),
+  <strong>material</strong> (water, screws, &hellip;), and the closest taught
+  item &mdash; so the headline claim stays within what the signal can
+  actually support.</p>
 
   <h2>4. Teach without training</h2>
   <p>A new item is learned by storing one embedding — <code>atlas.teach(label,

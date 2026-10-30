@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>feels docs — figures</title>
+<style>
+:root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
+body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
+.docnav { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); position:sticky; top:0; flex-wrap:wrap; gap:8px; }
+.docnav a { color:var(--muted); text-decoration:none; margin-left:18px; font-size:0.9rem; }
+.docnav a:hover, .docnav a.active { color:var(--text); }
+.docnav a.brand { margin-left:0; color:var(--text); font-weight:700; }
+main { max-width:780px; margin:0 auto; padding:36px 24px 80px; }
+h1 { font-size:2rem; margin-bottom:0.3em; }
+h2 { font-size:1.3rem; margin-top:2em; border-bottom:1px solid var(--border); padding-bottom:0.3em; }
+p, li { color:#c9d1d9; }
+code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em; }
+pre { background:#161b22; border:1px solid var(--border); border-radius:8px; padding:16px; overflow-x:auto; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:0.88rem; }
+th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; vertical-align:top; }
+th { background:#161b22; color:var(--muted); font-weight:600; }
+.honest { background:rgba(210,153,34,0.08); border:1px solid #9e6a03; border-radius:8px; padding:12px 16px; margin:1.5em 0; }
+.honest strong { color:#d29922; }
+
+figure { margin:2.5em 0; }
+figure .figwrap { border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+figure .figwrap svg { display:block; width:100%; height:auto; }
+figcaption { color:var(--muted); font-size:0.85rem; margin-top:0.8em; line-height:1.6; }
+figcaption code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.85em; }
+figcaption strong { color:var(--text); }
+</style>
+</head>
+<body>
+<nav class="docnav">
+  <a class="brand" href="/docs">feels · docs</a>
+  <span>
+    <a href="/docs/problem">Problem</a>
+    <a href="/docs/approach">Approach</a>
+    <a href="/docs/force">Force without a sensor</a>
+    <a href="/docs/relevance">Why it matters</a>
+    <a class="active" href="/docs/figures">Figures</a>
+    <a href="/docs/recording">Recording</a>
+    <a href="/">← Dashboard</a>
+  </span>
+</nav>
+<main>
+  <h1>Figures</h1>
+  <p>Every figure below is built from the real system — actual code paths and
+  actual recordings. Nothing here is a mockup.</p>
+
+  <h2>System data flow</h2>
+  <figure>
+    <div class="figwrap"><svg xmlns="http://www.w3.org/2000/svg" width="780" height="560" viewBox="0 0 780 560" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<rect width="780" height="560" fill="#0d1117" rx="8"/>
+<text x="20" y="28" font-size="15" font-weight="bold" fill="#e6edf3">System data flow — what actually runs</text>
+<rect x="20" y="50" width="190" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="115.0" y="72" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">repeatable_grasp.py</text>
+<text x="115.0" y="92" text-anchor="middle" font-size="11" fill="#8b949e">--object &lt;label&gt; --record</text>
+<text x="115.0" y="108" text-anchor="middle" font-size="11" fill="#8b949e">--cycles 1 --swirl-smooth</text>
+<rect x="240" y="50" width="170" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="325.0" y="72" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">recordings/*.csv</text>
+<text x="325.0" y="92" text-anchor="middle" font-size="11" fill="#8b949e">joint torques ~4 Hz</text>
+<text x="325.0" y="108" text-anchor="middle" font-size="11" fill="#8b949e">tau1..6_nm, q1..6, tcp_*</text>
+<rect x="440" y="50" width="200" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="540.0" y="72" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">feature_extractor</text>
+<text x="540.0" y="92" text-anchor="middle" font-size="11" fill="#8b949e">extract_features(df)</text>
+<text x="540.0" y="108" text-anchor="middle" font-size="11" fill="#8b949e">→ z (10-D), e (unit)</text>
+<defs><marker id="ah_58a6ff" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker></defs>
+<line x1="210" y1="83" x2="240" y2="83" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<text x="225.0" y="77.0" text-anchor="middle" font-size="10" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">subprocess</text>
+<defs><marker id="ah_58a6ff" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker></defs>
+<line x1="410" y1="83" x2="440" y2="83" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<text x="425.0" y="77.0" text-anchor="middle" font-size="10" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">pandas</text>
+<rect x="120" y="160" width="170" height="60" rx="8" fill="#0d1117" stroke="#2d333b"/>
+<text x="205.0" y="182" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">z — 10-D features</text>
+<text x="205.0" y="202" text-anchor="middle" font-size="11" fill="#8b949e">raw physical quantities</text>
+<rect x="470" y="160" width="170" height="60" rx="8" fill="#0d1117" stroke="#2d333b"/>
+<text x="555.0" y="182" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">e — unit embedding</text>
+<text x="555.0" y="202" text-anchor="middle" font-size="11" fill="#8b949e">e = Wz·w / ‖Wz·w‖</text>
+<defs><marker id="ah_58a6ff" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker></defs>
+<line x1="540" y1="116" x2="540" y2="160" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<defs><marker id="ah_58a6ff" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker></defs>
+<line x1="540" y1="116" x2="205" y2="160" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<rect x="110" y="270" width="190" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="205.0" y="292" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">atlas.predict_lda(z)</text>
+<text x="205.0" y="312" text-anchor="middle" font-size="11" fill="#8b949e">shrinkage LDA, refit/predict</text>
+<text x="205.0" y="328" text-anchor="middle" font-size="11" fill="#8b949e">fallback: atlas.identify(e)</text>
+<rect x="460" y="270" width="190" height="66" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="555.0" y="292" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">Atlas $vectorSearch</text>
+<text x="555.0" y="312" text-anchor="middle" font-size="11" fill="#8b949e">cosine over signatures</text>
+<text x="555.0" y="328" text-anchor="middle" font-size="11" fill="#8b949e">cup_dynamics_index</text>
+<defs><marker id="ah_58a6ff" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker></defs>
+<line x1="205" y1="220" x2="205" y2="270" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<defs><marker id="ah_58a6ff" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker></defs>
+<line x1="555" y1="220" x2="555" y2="270" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<rect x="260" y="380" width="260" height="70" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="390.0" y="402" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">decision card</text>
+<text x="390.0" y="422" text-anchor="middle" font-size="11" fill="#8b949e">Predicted category</text>
+<text x="390.0" y="438" text-anchor="middle" font-size="11" fill="#8b949e">material · closest taught item</text>
+<defs><marker id="ah_58a6ff" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker></defs>
+<line x1="205" y1="336" x2="330" y2="380" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<defs><marker id="ah_58a6ff" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker></defs>
+<line x1="555" y1="336" x2="450" y2="380" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<line x1="20" y1="472" x2="760" y2="472" stroke="#2d333b"/>
+<text x="20" y="466" font-size="11" fill="#8b949e">TEACH PATH</text>
+<rect x="20" y="486" width="210" height="56" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="125.0" y="508" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">Mode 2 dashboard</text>
+<text x="125.0" y="528" text-anchor="middle" font-size="11" fill="#8b949e">teach_csv.py --require-swirl</text>
+<rect x="260" y="486" width="220" height="56" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="370.0" y="508" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">atlas.teach(...)</text>
+<text x="370.0" y="528" text-anchor="middle" font-size="11" fill="#8b949e">e + properties.z → signatures</text>
+<rect x="510" y="486" width="230" height="56" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="625.0" y="508" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" font-weight="bold" fill="#e6edf3">MongoDB Atlas</text>
+<text x="625.0" y="528" text-anchor="middle" font-size="11" fill="#8b949e">signatures collection</text>
+<text x="625.0" y="544" text-anchor="middle" font-size="11" fill="#8b949e">+ $vectorSearch index</text>
+<defs><marker id="ah_58a6ff" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker></defs>
+<line x1="230" y1="514" x2="260" y2="514" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<defs><marker id="ah_58a6ff" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker></defs>
+<line x1="480" y1="514" x2="510" y2="514" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ah_58a6ff)"/>
+<defs><marker id="ah_58a6ff" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#58a6ff" stroke-width="1.5"/></marker></defs>
+<line x1="625" y1="486" x2="590" y2="336" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#ah_58a6ff)"/>
+<text x="607.5" y="405.0" text-anchor="middle" font-size="10" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">queries</text>
+<text x="20" y="552" font-size="10" fill="#8b949e">Mode 1 runs the top loop · Mode 2 / teach_csv.py feed the bottom lane · no sine-shake, no tilt — one swirl macro</text>
+</svg></div>
+    <figcaption><strong>What actually runs.</strong> The top loop is Mode 1
+    (Identify): <code>realtime_plot.py</code> shells out to
+    <code>repeatable_grasp.py --object &lt;label&gt; --record --cycles 1 --swirl-smooth</code>,
+    reads the fresh <code>recordings/*.csv</code>, and calls
+    <code>feature_extractor.extract_features</code>. The 10-D <code>z</code> goes to
+    <code>atlas.predict_lda</code> (fallback: <code>atlas.identify</code> on the unit
+    embedding <code>e</code>); Atlas <code>$vectorSearch</code> supplies the neighbor
+    list and the vector-space plot. The bottom lane is teaching: Mode 2 and
+    <code>teach_csv.py</code> write signatures (embedding <code>e</code> plus the raw
+    <code>z</code> in properties) into the <code>signatures</code> collection.</figcaption>
+  </figure>
+
+  <h2>The macro: pick → swirl → place → back-off</h2>
+  <figure>
+    <div class="figwrap"><svg xmlns="http://www.w3.org/2000/svg" width="780" height="560" viewBox="0 0 780 560" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<rect width="780" height="560" fill="#0d1117" rx="8"/>
+<text x="20" y="28" font-size="15" font-weight="bold" fill="#e6edf3">The macro, illustrated with a real run</text>
+<text x="20" y="48" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">recording_20261029_190400_water_075pct.csv · top view = tcp_x / tcp_y (mm)</text>
+<rect x="20" y="70" width="230" height="250" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="32" y="94" font-size="13" font-weight="bold" fill="#e6edf3">1 · PICK</text>
+<text x="32" y="112" font-size="10" fill="#8b949e">reach → grasp → lift</text>
+<text x="32" y="128" font-size="10" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">6.7–12.2 s</text>
+<polyline points="61.8,293.4 61.8,293.4 61.8,293.4 61.8,293.4 61.8,293.4 61.8,293.4 61.8,293.4 61.8,293.4 61.8,293.4 61.8,293.4 61.8,293.4 61.8,293.4 61.8,293.4 61.3,291.5 53.9,266.0 46.6,247.4 41.3,235.9 41.3,235.9 41.3,235.9 41.3,235.9 70.0,206.6 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 115.5,203.6 153.1,234.4 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 162.6,242.5 164.8,242.8 211.3,284.9 112.2,282.3 100.0,250.8 135.4,183.3 184.1,180.5 207.0,195.8 225.0,231.4 226.0,242.5 227.6,233.2 228.7,194.2 222.1,165.1 216.4,151.6 216.4,151.6 216.4,151.6 216.4,151.6 216.4,151.6 216.4,151.6 216.4,151.6 216.4,151.6 216.4,151.6 216.4,151.6 216.4,151.6 216.4,151.6 216.4,151.6 208.7,166.1 175.2,216.7 175.2,216.7 175.2,216.7 175.2,216.7 175.0,219.7 170.8,231.1 162.8,242.5 162.8,242.5 162.8,242.5 152.3,249.7 105.3,276.0 65.0,292.3 61.8,293.4 61.8,293.4 61.8,293.4" fill="none" stroke="#2d333b" stroke-width="1.5"/>
+<polyline points="41.3,235.9 70.0,206.6 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 89.1,182.3 115.5,203.6 153.1,234.4 162.6,242.5" fill="none" stroke="#58a6ff" stroke-width="2.5"/>
+<circle cx="41.3" cy="235.9" r="4" fill="#3fb950"/>
+<circle cx="162.6" cy="242.5" r="4" fill="#f0883e"/>
+<text x="32" y="310" font-size="10" fill="#8b949e"><tspan fill="#3fb950">●</tspan> start <tspan fill="#f0883e">●</tspan> end</text>
+<rect x="275" y="70" width="230" height="250" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="287" y="94" font-size="13" font-weight="bold" fill="#e6edf3">2 · SWIRL</text>
+<text x="287" y="112" font-size="10" fill="#8b949e">settle → hold → swirl</text>
+<text x="287" y="128" font-size="10" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">12.6–22.5 s</text>
+<polyline points="316.8,293.4 316.8,293.4 316.8,293.4 316.8,293.4 316.8,293.4 316.8,293.4 316.8,293.4 316.8,293.4 316.8,293.4 316.8,293.4 316.8,293.4 316.8,293.4 316.8,293.4 316.3,291.5 308.9,266.0 301.6,247.4 296.3,235.9 296.3,235.9 296.3,235.9 296.3,235.9 325.0,206.6 344.1,182.3 344.1,182.3 344.1,182.3 344.1,182.3 344.1,182.3 344.1,182.3 344.1,182.3 344.1,182.3 344.1,182.3 344.1,182.3 344.1,182.3 344.1,182.3 370.5,203.6 408.1,234.4 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 419.8,242.8 466.3,284.9 367.2,282.3 355.0,250.8 390.4,183.3 439.1,180.5 462.0,195.8 480.0,231.4 481.0,242.5 482.6,233.2 483.7,194.2 477.1,165.1 471.4,151.6 471.4,151.6 471.4,151.6 471.4,151.6 471.4,151.6 471.4,151.6 471.4,151.6 471.4,151.6 471.4,151.6 471.4,151.6 471.4,151.6 471.4,151.6 471.4,151.6 463.7,166.1 430.2,216.7 430.2,216.7 430.2,216.7 430.2,216.7 430.0,219.7 425.8,231.1 417.8,242.5 417.8,242.5 417.8,242.5 407.3,249.7 360.3,276.0 320.0,292.3 316.8,293.4 316.8,293.4 316.8,293.4" fill="none" stroke="#2d333b" stroke-width="1.5"/>
+<polyline points="417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 417.6,242.5 419.8,242.8 466.3,284.9 367.2,282.3 355.0,250.8 390.4,183.3 439.1,180.5 462.0,195.8 480.0,231.4" fill="none" stroke="#58a6ff" stroke-width="2.5"/>
+<circle cx="417.6" cy="242.5" r="4" fill="#3fb950"/>
+<circle cx="480.0" cy="231.4" r="4" fill="#f0883e"/>
+<text x="287" y="310" font-size="10" fill="#8b949e"><tspan fill="#3fb950">●</tspan> start <tspan fill="#f0883e">●</tspan> end</text>
+<rect x="530" y="70" width="230" height="250" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="542" y="94" font-size="13" font-weight="bold" fill="#e6edf3">3 · PLACE</text>
+<text x="542" y="112" font-size="10" fill="#8b949e">descend → release → retreat</text>
+<text x="542" y="128" font-size="10" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">22.8–35.3 s</text>
+<polyline points="571.8,293.4 571.8,293.4 571.8,293.4 571.8,293.4 571.8,293.4 571.8,293.4 571.8,293.4 571.8,293.4 571.8,293.4 571.8,293.4 571.8,293.4 571.8,293.4 571.8,293.4 571.3,291.5 563.9,266.0 556.6,247.4 551.3,235.9 551.3,235.9 551.3,235.9 551.3,235.9 580.0,206.6 599.1,182.3 599.1,182.3 599.1,182.3 599.1,182.3 599.1,182.3 599.1,182.3 599.1,182.3 599.1,182.3 599.1,182.3 599.1,182.3 599.1,182.3 599.1,182.3 625.5,203.6 663.1,234.4 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 672.6,242.5 674.8,242.8 721.3,284.9 622.2,282.3 610.0,250.8 645.4,183.3 694.1,180.5 717.0,195.8 735.0,231.4 736.0,242.5 737.6,233.2 738.7,194.2 732.1,165.1 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 718.7,166.1 685.2,216.7 685.2,216.7 685.2,216.7 685.2,216.7 685.0,219.7 680.8,231.1 672.8,242.5 672.8,242.5 672.8,242.5 662.3,249.7 615.3,276.0 575.0,292.3 571.8,293.4 571.8,293.4 571.8,293.4" fill="none" stroke="#2d333b" stroke-width="1.5"/>
+<polyline points="736.0,242.5 737.6,233.2 738.7,194.2 732.1,165.1 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 726.4,151.6 718.7,166.1 685.2,216.7 685.2,216.7 685.2,216.7 685.2,216.7 685.0,219.7 680.8,231.1 672.8,242.5 672.8,242.5 672.8,242.5 662.3,249.7 615.3,276.0 575.0,292.3 571.8,293.4 571.8,293.4 571.8,293.4" fill="none" stroke="#58a6ff" stroke-width="2.5"/>
+<circle cx="736.0" cy="242.5" r="4" fill="#3fb950"/>
+<circle cx="571.8" cy="293.4" r="4" fill="#f0883e"/>
+<text x="542" y="310" font-size="10" fill="#8b949e"><tspan fill="#3fb950">●</tspan> start <tspan fill="#f0883e">●</tspan> end</text>
+<rect x="20" y="350" width="740" height="170" rx="8" fill="#161b22" stroke="#2d333b"/>
+<text x="32" y="372" font-size="12" font-weight="bold" fill="#e6edf3">tcp_z over the full run (mm)</text>
+<rect x="197.6" y="380" width="104.8" height="120" fill="##3fb95022"/>
+<text x="249.9" y="512" text-anchor="middle" font-size="10" fill="#8b949e">1 · PICK</text>
+<rect x="309.4" y="380" width="187.0" height="120" fill="#58a6ff33"/>
+<text x="402.9" y="512" text-anchor="middle" font-size="10" fill="#8b949e">2 · SWIRL</text>
+<rect x="501.9" y="380" width="238.1" height="120" fill="#f0883e22"/>
+<text x="621.0" y="512" text-anchor="middle" font-size="10" fill="#8b949e">3 · PLACE</text>
+<polyline points="70.0,404.1 78.1,404.1 83.6,404.1 90.4,404.1 98.0,404.1 103.3,404.1 109.9,404.1 117.9,404.1 123.2,404.1 129.9,404.1 137.9,404.1 143.1,404.1 150.0,404.1 157.6,407.5 163.3,449.2 169.8,476.5 177.7,492.3 183.1,492.3 189.9,492.3 197.6,492.3 202.9,490.7 210.0,489.4 217.6,489.4 222.9,489.4 229.4,489.4 237.3,489.4 243.2,489.4 249.4,489.4 257.2,489.4 262.6,489.4 269.5,489.4 277.3,489.4 282.9,489.4 289.7,463.9 297.2,411.0 302.3,392.9 309.4,392.9 317.1,392.9 322.2,392.9 329.3,392.9 337.0,392.9 342.4,392.9 348.9,392.9 356.9,392.9 362.3,392.9 369.3,392.9 377.4,392.9 383.0,392.9 388.8,392.9 396.7,392.9 402.4,392.9 408.7,392.9 416.5,392.9 421.7,392.9 428.6,393.0 441.5,392.7 457.6,392.7 468.7,392.7 476.3,392.7 481.4,392.7 488.4,392.7 496.3,392.7 501.9,392.7 508.4,400.1 516.6,432.1 521.8,457.4 528.3,469.5 536.0,469.5 541.0,469.5 548.4,469.5 558.8,469.5 566.0,469.5 571.1,469.5 578.0,469.5 585.9,469.5 591.0,469.5 598.0,469.5 605.7,469.5 611.1,469.5 618.2,473.9 625.7,490.2 630.7,490.2 637.6,490.2 645.6,490.2 655.4,477.9 661.1,433.3 678.8,392.8 695.3,392.8 701.0,392.8 707.5,394.4 715.4,400.3 720.6,403.9 727.4,404.1 735.1,404.1 740.0,404.1" fill="none" stroke="#e6edf3" stroke-width="1.5"/>
+<text x="28" y="410" font-size="10" fill="#8b949e">mm</text>
+<text x="730" y="512" font-size="10" fill="#8b949e">s</text>
+</svg></div>
+    <figcaption><strong>One real run, three stages.</strong> Drawn from
+    <code>recording_20261029_190400_water_075pct.csv</code> (water_075pct, 35.3 s).
+    Top row: gripper position seen from above per stage — faint trace is the full
+    path, blue is the stage. Bottom: gripper height over the whole run with the
+    stages shaded. Stage boundaries come straight from the CSV's
+    <code>phase</code> column; there is no other motion in the system.</figcaption>
+  </figure>
+
+  <h2>What the torques look like</h2>
+  <figure>
+    <div class="figwrap"><svg xmlns="http://www.w3.org/2000/svg" width="780" height="330" viewBox="0 0 780 330" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<rect width="780" height="330" fill="#0d1117" rx="8"/>
+<text x="20" y="28" font-size="15" font-weight="bold" fill="#e6edf3">Joint torques during the same run</text>
+<text x="20" y="48" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">recording_20261029_190400_water_075pct.csv</text>
+<rect x="60" y="70" width="660" height="200" rx="8" fill="#161b22" stroke="#2d333b"/>
+<rect x="413.2" y="70" width="66.7" height="200" fill="#58a6ff" opacity="0.12"/>
+<text x="446.6" y="86" text-anchor="middle" font-size="10" fill="#58a6ff">SWIRL</text>
+<polyline points="60.0,97.0 68.0,96.8 73.4,96.5 80.0,96.5 87.6,96.2 92.8,96.1 99.3,96.0 107.2,95.8 112.4,95.5 119.0,95.5 126.9,95.4 132.0,95.4 138.8,95.1 146.3,132.9 151.9,136.3 158.3,133.2 166.1,122.5 171.4,138.5 178.1,138.5 185.7,138.5 190.9,137.8 197.9,138.4 205.4,137.4 210.6,137.4 217.0,137.4 224.8,137.4 230.6,137.4 236.7,137.4 244.4,137.4 249.7,137.4 256.5,137.4 264.2,137.4 269.7,137.4 276.4,104.7 283.8,99.7 288.9,128.7 295.8,126.4 303.4,126.4 308.5,126.4 315.4,126.4 323.0,126.4 328.3,126.4 334.8,126.4 342.6,126.4 347.9,126.4 354.9,126.4 362.8,126.4 368.4,126.4 374.1,126.4 381.8,126.4 387.5,126.4 393.6,126.4 401.4,126.4 406.5,126.4 413.2,124.5 426.0,106.8 441.8,100.3 452.7,110.2 460.2,129.9 465.2,126.3 472.1,117.9 480.0,113.5 485.5,115.9 491.8,74.4 500.0,85.8 505.1,89.9 511.4,75.7 519.1,76.4 524.0,82.9 531.2,88.2 541.5,97.8 548.6,127.1 553.6,127.1 560.4,127.1 568.2,127.1 573.3,127.1 580.1,127.1 587.7,127.1 593.0,127.1 600.0,138.3 607.4,110.9 612.4,127.4 619.1,127.4 627.0,127.4 636.7,77.1 642.2,92.6 659.7,79.8 675.9,78.8 681.6,79.0 687.9,87.2 695.8,104.7 700.8,105.7 707.5,105.1 715.2,84.9 720.0,86.5" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
+<polyline points="60.0,248.6 68.0,248.6 73.4,248.6 80.0,248.6 87.6,248.6 92.8,248.6 99.3,248.6 107.2,248.6 112.4,248.6 119.0,248.6 126.9,248.6 132.0,248.6 138.8,248.6 146.3,244.1 151.9,245.4 158.3,242.9 166.1,241.5 171.4,237.4 178.1,237.4 185.7,237.4 190.9,238.3 197.9,237.2 205.4,238.5 210.6,238.5 217.0,238.5 224.8,238.5 230.6,238.5 236.7,238.5 244.4,238.5 249.7,238.5 256.5,238.5 264.2,238.5 269.7,238.5 276.4,252.9 283.8,251.4 288.9,252.6 295.8,260.1 303.4,259.9 308.5,259.7 315.4,259.5 323.0,259.4 328.3,250.8 334.8,250.8 342.6,250.8 347.9,250.8 354.9,250.8 362.8,250.8 368.4,250.8 374.1,250.8 381.8,250.8 387.5,250.8 393.6,250.8 401.4,250.8 406.5,250.8 413.2,263.2 426.0,260.4 441.8,264.2 452.7,257.7 460.2,241.9 465.2,253.9 472.1,257.0 480.0,258.5 485.5,263.0 491.8,255.3 500.0,260.3 505.1,258.5 511.4,265.6 519.1,247.3 524.0,247.3 531.2,247.3 541.5,247.3 548.6,247.3 553.6,247.3 560.4,247.3 568.2,247.3 573.3,247.3 580.1,247.3 587.7,247.3 593.0,247.3 600.0,249.3 607.4,249.5 612.4,246.0 619.1,246.0 627.0,246.0 636.7,255.6 642.2,253.7 659.7,260.3 675.9,260.1 681.6,260.0 687.9,250.1 695.8,255.1 700.8,250.0 707.5,249.7 715.2,248.6 720.0,248.6" fill="none" stroke="#f0883e" stroke-width="1.5"/>
+<circle cx="72" cy="294" r="4" fill="#58a6ff"/>
+<text x="82" y="298" font-size="11" fill="#8b949e">tau2 (shoulder)</text>
+<circle cx="210" cy="294" r="4" fill="#f0883e"/>
+<text x="220" y="298" font-size="11" fill="#8b949e">tau3 (elbow)</text>
+<text x="14" y="82" font-size="11" fill="#8b949e">N·m</text>
+<text x="60.0" y="284" text-anchor="middle" font-size="10" fill="#8b949e">0</text>
+<text x="247.0" y="284" text-anchor="middle" font-size="10" fill="#8b949e">10</text>
+<text x="434.0" y="284" text-anchor="middle" font-size="10" fill="#8b949e">20</text>
+<text x="621.0" y="284" text-anchor="middle" font-size="10" fill="#8b949e">30</text>
+<text x="712" y="298" text-anchor="end" font-size="11" fill="#8b949e">elapsed s</text>
+<text x="20" y="320" font-size="10" fill="#8b949e">The extractor measures slosh/variance inside the shaded SWIRL window only.</text>
+</svg></div>
+    <figcaption><strong>Shoulder (J2) and elbow (J3) torques, same recording.</strong>
+    The shaded band is the <code>SWIRL</code> phase (18.9–22.5 s) — the only samples
+    the extractor's swirl features (<code>swirl_var_j2</code>,
+    <code>swirl_var_j3</code>, <code>swirl_ptp_j3</code>, <code>rattle_e</code>)
+    ever see. Everything outside the band is transport, not signal.</figcaption>
+  </figure>
+
+  <h2>Two real signatures</h2>
+  <figure>
+    <div class="figwrap"><svg xmlns="http://www.w3.org/2000/svg" width="780" height="400" viewBox="0 0 780 400" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<rect width="780" height="400" fill="#0d1117" rx="8"/>
+<text x="20" y="28" font-size="15" font-weight="bold" fill="#e6edf3">Two real 10-D signatures, side by side</text>
+<text x="20" y="48" font-size="11" fill="#8b949e">bar = z / FEATURE_SCALES (the relative magnitudes the matcher compares) · raw z under each name</text>
+<rect x="60" y="80" width="660" height="230" rx="8" fill="#161b22" stroke="#2d333b"/>
+<line x1="60" y1="195.0" x2="720" y2="195.0" stroke="#2d333b"/>
+<rect x="74.5" y="195.0" width="18.5" height="73.4" fill="#58a6ff" rx="2"/>
+<rect x="93.0" y="195.0" width="18.5" height="72.4" fill="#f0883e" rx="2"/>
+<text x="93.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">mass_j2</text>
+<text x="93.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">-13.9/-13.7</text>
+<rect x="140.5" y="195.0" width="18.5" height="42.6" fill="#58a6ff" rx="2"/>
+<rect x="159.0" y="195.0" width="18.5" height="20.2" fill="#f0883e" rx="2"/>
+<text x="159.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">mass_j3</text>
+<text x="159.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">-2.1/-1.0</text>
+<rect x="206.5" y="195.0" width="18.5" height="0.0" fill="#58a6ff" rx="2"/>
+<rect x="225.0" y="90.5" width="18.5" height="104.5" fill="#f0883e" rx="2"/>
+<text x="225.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">swirl_var_j2</text>
+<text x="225.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">0.0/8.6</text>
+<rect x="272.5" y="195.0" width="18.5" height="0.0" fill="#58a6ff" rx="2"/>
+<rect x="291.0" y="135.1" width="18.5" height="59.9" fill="#f0883e" rx="2"/>
+<text x="291.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">swirl_var_j3</text>
+<text x="291.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">0.0/1.8</text>
+<rect x="338.5" y="151.7" width="18.5" height="43.3" fill="#58a6ff" rx="2"/>
+<rect x="357.0" y="154.0" width="18.5" height="41.0" fill="#f0883e" rx="2"/>
+<text x="357.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">swirl_ptp_j3</text>
+<text x="357.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">10.2/9.6</text>
+<rect x="404.5" y="195.0" width="18.5" height="0.0" fill="#58a6ff" rx="2"/>
+<rect x="423.0" y="195.0" width="18.5" height="0.0" fill="#f0883e" rx="2"/>
+<text x="423.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">phase_lag_s</text>
+<text x="423.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">0.0/0.0</text>
+<rect x="470.5" y="195.0" width="18.5" height="0.0" fill="#58a6ff" rx="2"/>
+<rect x="489.0" y="170.7" width="18.5" height="24.3" fill="#f0883e" rx="2"/>
+<text x="489.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">rattle_e</text>
+<text x="489.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">0.0/86.2</text>
+<rect x="536.5" y="155.1" width="18.5" height="39.9" fill="#58a6ff" rx="2"/>
+<rect x="555.0" y="165.8" width="18.5" height="29.2" fill="#f0883e" rx="2"/>
+<text x="555.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">grip_comp</text>
+<text x="555.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">0.6/0.5</text>
+<rect x="602.5" y="147.0" width="18.5" height="48.0" fill="#58a6ff" rx="2"/>
+<rect x="621.0" y="167.8" width="18.5" height="27.2" fill="#f0883e" rx="2"/>
+<text x="621.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">lift_dyn_j3</text>
+<text x="621.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">3.2/1.8</text>
+<rect x="668.5" y="106.0" width="18.5" height="89.0" fill="#58a6ff" rx="2"/>
+<rect x="687.0" y="99.7" width="18.5" height="95.3" fill="#f0883e" rx="2"/>
+<text x="687.0" y="326" text-anchor="middle" font-size="9" fill="#e6edf3" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">swirl_speed</text>
+<text x="687.0" y="340" text-anchor="middle" font-size="8" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">158.0/169.2</text>
+<text x="52" y="314.0" text-anchor="end" font-size="10" fill="#8b949e">-2.5</text>
+<text x="52" y="256.5" text-anchor="end" font-size="10" fill="#8b949e">-1.2</text>
+<text x="52" y="199.0" text-anchor="end" font-size="10" fill="#8b949e">0.0</text>
+<text x="52" y="141.5" text-anchor="end" font-size="10" fill="#8b949e">1.2</text>
+<text x="52" y="84.0" text-anchor="end" font-size="10" fill="#8b949e">2.5</text>
+<rect x="72" y="92" width="10" height="10" fill="#58a6ff"/>
+<text x="88" y="101" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_075pct</text>
+<rect x="210" y="92" width="10" height="10" fill="#f0883e"/>
+<text x="226" y="101" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">solid_020g</text>
+<text x="20" y="390" font-size="10" fill="#8b949e">from feature_extractor.extract_features on the two recordings named above</text>
+</svg></div>
+    <figcaption><strong>Actual 10-D feature vectors</strong> from
+    <code>feature_extractor.extract_features</code>:
+    <code>recording_20261029_190400_water_075pct.csv</code> vs
+    <code>recording_20261029_192027_solid_020g.csv</code>. Bars show
+    <code>z / FEATURE_SCALES</code> — the relative magnitudes the matcher compares;
+    raw <code>z</code> values are printed under each feature name. Honest footnote:
+    this run's <code>SWIRL</code> window holds only 8 samples, so the detrended
+    variances read exactly 0.0 (the lowpass guard returns short signals unchanged —
+    see <code>_lowpass</code> in <code>feature_extractor.py</code>).</figcaption>
+  </figure>
+
+  <h2>The signature space</h2>
+  <figure>
+    <div class="figwrap"><svg xmlns="http://www.w3.org/2000/svg" width="780" height="460" viewBox="0 0 780 460" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<rect width="780" height="460" fill="#0d1117" rx="8"/>
+<text x="20" y="28" font-size="15" font-weight="bold" fill="#e6edf3">Signature space — 2-D PCA of 113 recorded embeddings</text>
+<text x="20" y="48" font-size="11" fill="#8b949e">same projection as the dashboard vector-space card (realtime_plot._vspace_2d: center, SVD, U·S)</text>
+<rect x="20" y="70" width="520" height="350" rx="8" fill="#161b22" stroke="#2d333b"/>
+<line x1="287.7" y1="70" x2="287.7" y2="420" stroke="#2d333b"/>
+<line x1="20" y1="259.6" x2="540" y2="259.6" stroke="#2d333b"/>
+<circle cx="235.3" cy="282.0" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="365.4" cy="228.0" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="327.8" cy="258.1" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="312.2" cy="156.9" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="276.2" cy="347.9" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="154.7" cy="333.0" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="147.2" cy="331.5" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="277.2" cy="210.5" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="162.6" cy="339.0" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="204.9" cy="247.2" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="284.5" cy="215.5" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="263.2" cy="339.5" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="302.6" cy="332.0" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="428.5" cy="225.6" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="490.1" cy="282.7" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="478.6" cy="329.2" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="439.4" cy="216.6" r="4.5" fill="#8b949e" opacity="0.9"><title>empty_cup</title></circle>
+<circle cx="182.4" cy="235.0" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="165.2" cy="195.5" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="186.7" cy="170.4" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="184.8" cy="307.2" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="217.3" cy="190.2" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="353.1" cy="204.8" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="104.7" cy="249.6" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="221.8" cy="368.2" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="202.0" cy="96.8" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="333.0" cy="207.4" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="225.4" cy="258.8" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="184.3" cy="119.0" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="124.4" cy="243.7" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="128.9" cy="314.3" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="127.5" cy="246.5" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="408.8" cy="212.2" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="112.8" cy="320.2" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="260.9" cy="244.3" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="313.1" cy="203.9" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="305.6" cy="330.2" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="211.1" cy="257.2" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="125.7" cy="382.9" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="193.9" cy="220.5" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="167.9" cy="227.1" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="169.2" cy="317.8" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="297.5" cy="270.1" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="198.8" cy="234.9" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="283.5" cy="145.7" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="86.6" cy="319.6" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="102.3" cy="247.9" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="256.9" cy="246.6" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="255.2" cy="191.5" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="277.3" cy="215.3" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="201.8" cy="217.4" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="247.6" cy="345.3" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="239.1" cy="133.9" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="126.8" cy="347.7" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="149.2" cy="317.9" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="306.3" cy="167.2" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="126.6" cy="240.5" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="175.5" cy="259.5" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="471.5" cy="291.3" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="343.1" cy="226.6" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="54.9" cy="309.6" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="445.2" cy="265.6" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="198.1" cy="218.0" r="4.5" fill="#79c0ff" opacity="0.9"><title>water_050pct</title></circle>
+<circle cx="423.6" cy="274.5" r="4.5" fill="#8b949e" opacity="0.9"><title>water_half</title></circle>
+<circle cx="291.0" cy="382.3" r="4.5" fill="#8b949e" opacity="0.9"><title>water_half</title></circle>
+<circle cx="299.5" cy="234.5" r="4.5" fill="#58a6ff" opacity="0.9"><title>water_075pct</title></circle>
+<circle cx="54.5" cy="308.2" r="4.5" fill="#58a6ff" opacity="0.9"><title>water_075pct</title></circle>
+<circle cx="431.1" cy="293.3" r="4.5" fill="#58a6ff" opacity="0.9"><title>water_075pct</title></circle>
+<circle cx="349.2" cy="285.4" r="4.5" fill="#58a6ff" opacity="0.9"><title>water_075pct</title></circle>
+<circle cx="485.6" cy="287.3" r="4.5" fill="#58a6ff" opacity="0.9"><title>water_075pct</title></circle>
+<circle cx="326.7" cy="350.1" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="199.6" cy="343.9" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="218.0" cy="248.1" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="217.6" cy="140.6" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="250.2" cy="322.7" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="453.5" cy="340.8" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="346.4" cy="301.7" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="414.2" cy="264.4" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="285.0" cy="245.4" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="317.7" cy="236.4" r="4.5" fill="#1f6feb" opacity="0.9"><title>water_100pct</title></circle>
+<circle cx="161.6" cy="253.0" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="206.6" cy="323.4" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="227.6" cy="136.6" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="161.3" cy="268.6" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="169.3" cy="287.3" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="505.5" cy="308.9" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="456.7" cy="331.8" r="4.5" fill="#a371f7" opacity="0.9"><title>screws_100g</title></circle>
+<circle cx="423.4" cy="286.6" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="468.4" cy="308.9" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="379.0" cy="229.7" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="313.6" cy="271.0" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="305.4" cy="229.6" r="4.5" fill="#f0883e" opacity="0.9"><title>solid_020g</title></circle>
+<circle cx="326.0" cy="135.7" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="457.9" cy="206.0" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="396.8" cy="227.3" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="337.5" cy="258.3" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="440.9" cy="280.7" r="4.5" fill="#d29922" opacity="0.9"><title>solid_050g</title></circle>
+<circle cx="475.3" cy="353.4" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="349.7" cy="143.8" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="456.4" cy="225.2" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="366.0" cy="260.9" r="4.5" fill="#3fb950" opacity="0.9"><title>solid_100g</title></circle>
+<circle cx="385.2" cy="216.3" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="440.4" cy="393.2" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="64.8" cy="305.6" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="322.4" cy="125.7" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="386.3" cy="230.1" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="447.1" cy="298.1" r="4.5" fill="#a5d6ff" opacity="0.9"><title>water_025pct</title></circle>
+<circle cx="428.8" cy="252.4" r="4.5" fill="#8b949e" opacity="0.9"><title>mystery</title></circle>
+<circle cx="458.5" cy="216.1" r="4.5" fill="#8b949e" opacity="0.9"><title>water_25pct</title></circle>
+<circle cx="258.0" cy="242.8" r="4.5" fill="#8b949e" opacity="0.9"><title>mystery</title></circle>
+<circle cx="425.0" cy="282.8" r="4.5" fill="#8b949e" opacity="0.9"><title>candy_mixed</title></circle>
+<circle cx="468.6" cy="291.2" r="4.5" fill="#58a6ff" opacity="0.9"><title>water_075pct</title></circle>
+<circle cx="470.2" cy="287.6" r="4.5" fill="#8b949e" opacity="0.9"><title>mystery</title></circle>
+<text x="530" y="410" text-anchor="end" font-size="10" fill="#8b949e">PC1 →</text>
+<text x="30" y="88" font-size="10" fill="#8b949e">↑ PC2</text>
+<text x="560" y="70" font-size="12" font-weight="bold" fill="#e6edf3">labels (n=113)</text>
+<circle cx="566" cy="88" r="5" fill="#8b949e"/>
+<text x="580" y="92" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">empty_cup ×17</text>
+<circle cx="566" cy="110" r="5" fill="#a5d6ff"/>
+<text x="580" y="114" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_025pct ×17</text>
+<circle cx="566" cy="132" r="5" fill="#f0883e"/>
+<text x="580" y="136" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">solid_020g ×15</text>
+<circle cx="566" cy="154" r="5" fill="#d29922"/>
+<text x="580" y="158" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">solid_050g ×15</text>
+<circle cx="566" cy="176" r="5" fill="#79c0ff"/>
+<text x="580" y="180" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_050pct ×10</text>
+<circle cx="566" cy="198" r="5" fill="#1f6feb"/>
+<text x="580" y="202" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_100pct ×10</text>
+<circle cx="566" cy="220" r="5" fill="#3fb950"/>
+<text x="580" y="224" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">solid_100g ×9</text>
+<circle cx="566" cy="242" r="5" fill="#a371f7"/>
+<text x="580" y="246" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">screws_100g ×7</text>
+<circle cx="566" cy="264" r="5" fill="#58a6ff"/>
+<text x="580" y="268" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_075pct ×6</text>
+<circle cx="566" cy="286" r="5" fill="#8b949e"/>
+<text x="580" y="290" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">mystery ×3</text>
+<circle cx="566" cy="308" r="5" fill="#8b949e"/>
+<text x="580" y="312" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_half ×2</text>
+<circle cx="566" cy="330" r="5" fill="#8b949e"/>
+<text x="580" y="334" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">water_25pct ×1</text>
+<circle cx="566" cy="352" r="5" fill="#8b949e"/>
+<text x="580" y="356" font-size="11" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">candy_mixed ×1</text>
+<text x="560" y="384" font-size="10" fill="#8b949e">1 files failed extraction</text>
+</svg></div>
+    <figcaption><strong>2-D PCA of 113 recorded embeddings</strong> (<code>e</code>-vectors),
+    computed with the exact <code>_vspace_2d</code> routine the dashboard's vector-space
+    card uses: center, SVD, coordinates <code>U[:, :2] · S[:2]</code>. Points are colored
+    by label with per-label counts; labels come from
+    <code>recordings/split_manifest.csv</code> (falling back to the CSV's
+    <code>object_label</code>). One file failed feature extraction and was skipped.
+    This is the space <code>$vectorSearch</code> ranks in.</figcaption>
+  </figure>
+</main>
+</body>
+</html>

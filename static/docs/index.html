@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>feels — docs</title>
+<style>
+:root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
+body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
+.docnav { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); position:sticky; top:0; flex-wrap:wrap; gap:8px; }
+.docnav a { color:var(--muted); text-decoration:none; margin-left:18px; font-size:0.9rem; }
+.docnav a:hover, .docnav a.active { color:var(--text); }
+.docnav a.brand { margin-left:0; color:var(--text); font-weight:700; }
+main { max-width:780px; margin:0 auto; padding:36px 24px 80px; }
+h1 { font-size:2rem; margin-bottom:0.3em; }
+h2 { font-size:1.3rem; margin-top:2em; border-bottom:1px solid var(--border); padding-bottom:0.3em; }
+p, li { color:#c9d1d9; }
+code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em; }
+pre { background:#161b22; border:1px solid var(--border); border-radius:8px; padding:16px; overflow-x:auto; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:0.9rem; }
+th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; vertical-align:top; }
+th { background:#161b22; color:var(--muted); font-weight:600; }
+.honest { background:rgba(210,153,34,0.08); border:1px solid #9e6a03; border-radius:8px; padding:12px 16px; margin:1.5em 0; }
+.honest strong { color:#d29922; }
+.cards { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:1.5em; }
+.card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:18px; text-decoration:none; display:block; }
+.card:hover { border-color:var(--accent); }
+.card h3 { margin:0 0 0.4em; color:var(--text); font-size:1.05rem; }
+.card p { margin:0; font-size:0.88rem; color:var(--muted); }
+@media (max-width:600px) { .cards { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<nav class="docnav">
+  <a class="brand" href="/docs">feels · docs</a>
+  <span>
+    <a href="/docs/problem">Problem</a>
+    <a href="/docs/approach">Approach</a>
+    <a href="/docs/force">Force without a sensor</a>
+    <a href="/docs/relevance">Why it matters</a>
+    <a href="/docs/figures">Figures</a>
+    <a href="/docs/recording">Recording</a>
+    <a href="/">← Dashboard</a>
+  </span>
+</nav>
+<main>
+  <h1>Can a robot feel what's inside a sealed cup?</h1>
+  <p><strong>feels</strong> is a haptic perception system: a robot arm picks up a lidded
+  coffee cup it cannot see into, swirls it once, and identifies the contents —
+  water, soap, candy, a solid weight, or nothing — from joint-torque telemetry
+  alone. No camera looks inside. No force-torque sensor. The swirl becomes a
+  10-dimensional physical signature, matched by vector search in MongoDB Atlas.</p>
+
+  <div class="cards">
+    <a class="card" href="/docs/problem">
+      <h3>The formal problem</h3>
+      <p>Hidden contents, partial observations, and why neither vision nor a scale can solve it.</p>
+    </a>
+    <a class="card" href="/docs/approach">
+      <h3>Our approach</h3>
+      <p>One fixed macro, ten explicit physical features, and non-parametric vector retrieval.</p>
+    </a>
+    <a class="card" href="/docs/force">
+      <h3>Force without a force sensor</h3>
+      <p>How joint torques stand in for a $5k F/T sensor — and what we honestly don't claim.</p>
+    </a>
+    <a class="card" href="/docs/relevance">
+      <h3>Why it matters</h3>
+      <p>Sealed containers, cheap sensing, and a pipeline any torque-sensing arm can reuse.</p>
+    </a>
+    <a class="card" href="/docs/figures">
+      <h3>Figures</h3>
+      <p>System diagram, the swirl macro, real torque traces and feature vectors — every figure built from actual recordings.</p>
+    </a>
+    <a class="card" href="/docs/recording">
+      <h3>How to record</h3>
+      <p>The data-collection protocol: what to record, what good data looks like, and what the pipeline rejects.</p>
+    </a>
+  </div>
+
+  <h2>The 30-second version</h2>
+  <ol>
+    <li><strong>Probe:</strong> pick up → swirl → place → back-off. One fixed, repeatable motion.</li>
+    <li><strong>Encode:</strong> the torque time series becomes a 10-D signature
+      (mass offsets, swirl variances, phase lag, rattle energy…), scaled and
+      L2-normalized to a unit embedding.</li>
+    <li><strong>Retrieve:</strong> MongoDB Atlas <code>$vectorSearch</code> finds the
+      nearest taught signatures by cosine similarity. New items are taught live —
+      no retraining.</li>
+  </ol>
+  <p>Try it: <a href="/" style="color:var(--accent);">open the dashboard</a>,
+  teach a few items in Mode 2, then identify a mystery cup in Mode 1.</p>
+</main>
+</body>
+</html>
