@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>feels docs — API reference</title>
+<style>
+:root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
+body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
+.docnav { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); position:sticky; top:0; flex-wrap:wrap; gap:8px; }
+.docnav a { color:var(--muted); text-decoration:none; margin-left:18px; font-size:0.9rem; }
+.docnav a:hover, .docnav a.active { color:var(--text); }
+.docnav a.brand { margin-left:0; color:var(--text); font-weight:700; }
+main { max-width:900px; margin:0 auto; padding:36px 24px 80px; }
+h1 { font-size:2rem; margin-bottom:0.3em; }
+h2 { font-size:1.3rem; margin-top:2.2em; border-bottom:1px solid var(--border); padding-bottom:0.3em; }
+h3 { font-size:1.05rem; margin:1.4em 0 0.4em; }
+p, li, td { color:#c9d1d9; font-size:0.92rem; }
+code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em; }
+pre { background:#161b22; border:1px solid var(--border); border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:0.85rem; }
+pre.doc { color:var(--muted); }
+.fn { margin-bottom:1.2em; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:0.9rem; }
+th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; vertical-align:top; }
+th { background:#161b22; color:var(--muted); font-weight:600; }
+</style>
+</head>
+<body>
+<nav class="docnav">
+  <a class="brand" href="/docs">feels · docs</a>
+  <span>
+    <a href="/docs/problem">Problem</a>
+    <a href="/docs/approach">Approach</a>
+    <a href="/docs/force">Extracting Force</a>
+    <a href="/docs/figures">Figures</a>
+    <a href="/docs/recording">Recording</a>
+    <a class="active" href="/docs/api">API</a>
+    <a href="/">← Dashboard</a>
+  </span>
+</nav>
+<main>
+  <h1>API reference</h1>
+  <p>Generated from the code's docstrings. The technical surface: vector memory,
+  feature extraction, HTTP endpoints, and the teaching CLI.</p>
+<h2>atlas.py — vector memory</h2>
+<div class="fn"><h3><code>teach</code></h3>
+<pre>def teach(label: str, feature_vector: list[float], raw_data: list[float] | None, motion_type: str, properties: dict | None, session: str) -&gt; dict:</pre>
+<p>Insert a labeled run into Atlas.</p>
+<pre class="doc">Args:
+    label:          e.g. &quot;dish_soap_half_full&quot;
+    feature_vector: normalized embedding list[float] (10-D hand/pca or 2304-D chronos)
+    raw_data:       optional raw joint torque time-series
+    motion_type:    &quot;3in1_macro&quot; | &quot;sine_shake&quot; | &quot;tilt&quot; | &quot;fig8&quot;
+    properties:     optional dict {&quot;estimated_mass_g&quot;: 185, &quot;fill_ratio&quot;: 0.5}
+    session:        &quot;thu&quot; or &quot;fri&quot; — used to filter vector search by day
+Returns:
+    dict with inserted run_id and sig_id</pre>
+</div>
+<div class="fn"><h3><code>identify</code></h3>
+<pre>def identify(feature_vector: list[float], top_k: int, session: str | None, confidence_threshold: float) -&gt; dict:</pre>
+<p>Query Atlas Vector Search to identify what&#x27;s in the cup.</p>
+<pre class="doc">Args:
+    feature_vector:        normalized query embedding — 10-D (hand/pca) or
+                           2304-D (chronos); the vector index is picked by dim
+    top_k:                 number of neighbours to retrieve
+    session:               if set, filter to this session tag (&quot;thu&quot;/&quot;fri&quot;)
+    confidence_threshold:  below this score, flag as low-confidence
+Returns:
+    {
+      &quot;label&quot;:      predicted label string (finest taught granularity),
+      &quot;confidence&quot;: float 0–1,
+      &quot;matches&quot;:    list of top-k {label, score} dicts,
+      &quot;low_confidence&quot;: bool,
+      &quot;material&quot;:   predicted material class (capacity suffixes stripped),
+      &quot;material_confidence&quot;: float 0–1,
+      &quot;material_matches&quot;: list of {material, score} dicts,
+      &quot;material_low_confidence&quot;: bool,
+      &quot;category&quot;:   predicted category (liquid / solid / empty),
+      &quot;category_confidence&quot;: float 0–1,
+      &quot;category_matches&quot;: list of {category, score} dicts,
+      &quot;category_low_confidence&quot;: bool
+    }</pre>
+</div>
+<div class="fn"><h3><code>predict_lda</code></h3>
+<pre>def predict_lda(query_z, confidence_threshold):</pre>
+<p>Supervised decision head: shrinkage-LDA on standardized z.</p>
+<pre class="doc">Fetches the whole labeled library, fits StandardScaler + LDA in
+milliseconds (no training step, no deployment — refit on every predict,
+so a teach is effective immediately), and returns the same dict shape
+as identify() so the dashboard works unchanged.
+Measured accuracy (held-out): category 52%, material 43%, empty/nonempty
+86% — roughly 2x the vector-search retrieval rule on the same features.
+Raises ValueError when the library can&#x27;t support it; callers fall back
+to identify().</pre>
+</div>
+<div class="fn"><h3><code>material_of</code></h3>
+<pre>def material_of(label: str) -&gt; str:</pre>
+<p>Coarse material class for a taught label.</p>
+<pre class="doc">water_025pct / water_150g / water_half -&gt; water; solid_020g -&gt; solid;
+dish_soap_half -&gt; soap; candy_mixed -&gt; candy; empty_cup -&gt; empty.
+Unknown labels map to themselves (their own material class).</pre>
+</div>
+<div class="fn"><h3><code>category_of</code></h3>
+<pre>def category_of(label: str) -&gt; str:</pre>
+<p>Coarse category for a taught label: liquid / solid / empty.</p>
+<pre class="doc">Unknown materials map to themselves (their own category).</pre>
+</div>
+<div class="fn"><h3><code>get_db</code></h3>
+<pre>def get_db():</pre>
+</div>
+<div class="fn"><h3><code>setup_collections</code></h3>
+<pre>def setup_collections():</pre>
+<p>Create the three collections and their scalar indexes.<br>The vector search index on signatures.feature_vector must be created<br>in the Atlas UI (see instructions below).<br>Run this once at the start of the hackathon.</p>
+</div>
+<div class="fn"><h3><code>ensure_vector_indexes</code></h3>
+<pre>def ensure_vector_indexes(which):</pre>
+<p>Create Atlas vector search indexes. Idempotent — safe to re-run.</p>
+<pre class="doc">Run once before first use of an embedder whose index doesn&#x27;t exist yet:
+    python -c &quot;import atlas; atlas.ensure_vector_indexes(&#x27;chronos&#x27;)&quot;
+which: &quot;all&quot; | &quot;index_10d&quot; | &quot;chronos&quot;</pre>
+</div>
+<h2>feature_extractor.py — 10-D signatures</h2>
+<div class="fn"><h3><code>extract_features</code></h3>
+<pre>def extract_features(df):</pre>
+</div>
+<div class="fn"><h3><code>swirl_window_series</code></h3>
+<pre>def swirl_window_series(df):</pre>
+<p>Detrended torque residuals over the dynamic (swirl) window, for the<br>dashboard &#x27;why&#x27; charts. Returns a JSON-safe dict.</p>
+</div>
+<h2>FEATURE_NAMES</h2><pre>[&#x27;mass_j2&#x27;, &#x27;mass_j3&#x27;, &#x27;swirl_var_j2&#x27;, &#x27;swirl_var_j3&#x27;, &#x27;swirl_ptp_j3&#x27;, &#x27;phase_lag_s&#x27;, &#x27;rattle_e&#x27;, &#x27;grip_comp&#x27;, &#x27;lift_dyn_j3&#x27;, &#x27;swirl_speed&#x27;]</pre>
+<h2>HTTP API — realtime_plot.py</h2><table><tr><th>Method</th><th>Path</th><th>Handler</th><th>What it does</th></tr>
+<tr><td><code>GET</code></td><td><code>/</code></td><td><code>handle_index</code></td><td></td></tr>
+<tr><td><code>GET</code></td><td><code>/docs</code></td><td><code>handle_docs</code></td><td>Serve the built-in docs pages (the presentation). /docs and /docs/{page}.</td></tr>
+<tr><td><code>GET</code></td><td><code>/docs/{page}</code></td><td><code>handle_docs</code></td><td>Serve the built-in docs pages (the presentation). /docs and /docs/{page}.</td></tr>
+<tr><td><code>GET</code></td><td><code>/stream</code></td><td><code>handle_stream</code></td><td></td></tr>
+<tr><td><code>POST</code></td><td><code>/tare</code></td><td><code>handle_tare</code></td><td></td></tr>
+<tr><td><code>POST</code></td><td><code>/record/start</code></td><td><code>handle_record_start</code></td><td></td></tr>
+<tr><td><code>POST</code></td><td><code>/record/stop</code></td><td><code>handle_record_stop</code></td><td></td></tr>
+<tr><td><code>GET</code></td><td><code>/record/download</code></td><td><code>handle_record_download</code></td><td></td></tr>
+<tr><td><code>POST</code></td><td><code>/api/cycle/predict</code></td><td><code>handle_cycle_predict</code></td><td>Mode 1: run the swirl macro on a mystery cup → features → Atlas $vectorSearch.</td></tr>
+<tr><td><code>POST</code></td><td><code>/api/cycle/teach</code></td><td><code>handle_cycle_teach</code></td><td>Mode 2: run the swirl macro on a labeled item → save signature to Atlas.</td></tr>
+<tr><td><code>POST</code></td><td><code>/api/cycle/abort</code></td><td><code>handle_cycle_abort</code></td><td>Stop the running macro subprocess (physical e-stop remains at the venue).</td></tr>
+<tr><td><code>POST</code></td><td><code>/api/cycle/correct</code></td><td><code>handle_cycle_correct</code></td><td>Teach the true label for the most recent prediction&#x27;s recording.</td></tr>
+<tr><td><code>GET</code></td><td><code>/api/status</code></td><td><code>handle_api_status</code></td><td></td></tr>
+<tr><td><code>POST</code></td><td><code>/api/vectorspace</code></td><td><code>handle_vspace</code></td><td>2-D PCA of the Atlas signature library, optionally with the query</td></tr>
+</table>
+<h2>teach_csv.py — CLI</h2><pre>python teach_csv.py [paths] [flags]</pre><table>
+<tr><th>Flag</th><th>What it does</th></tr>
+<tr><td><code>paths</code></td><td>CSV files</td></tr>
+<tr><td><code>--session</code></td><td>session tag (default: thu</td></tr>
+<tr><td><code>--label</code></td><td>force one label for all files&quot;</td></tr>
+<tr><td><code>--dry-run</code></td><td>show what would be taught&quot;</td></tr>
+<tr><td><code>--force</code></td><td>re-teach files already in Atlas&quot;</td></tr>
+<tr><td><code>--include-mystery</code></td><td></td></tr>
+<tr><td><code>--require-swirl</code></td><td></td></tr>
+<tr><td><code>--list</code></td><td>show signature counts per label&quot;</td></tr>
+</table>
+</main>
+</body>
+</html>

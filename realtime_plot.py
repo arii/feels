@@ -806,7 +806,7 @@ async def handle_stream(request):
     return response
 
 
-_DOC_PAGES = {"index", "problem", "approach", "force", "relevance", "figures", "recording"}
+_DOC_PAGES = {"index", "problem", "approach", "force", "figures", "recording", "api"}
 
 
 async def handle_docs(request):
