@@ -540,6 +540,9 @@ HTML_PAGE = """<!DOCTYPE html>
     .feat-bar-wrap { background:#21262d; border-radius:3px; height:8px; overflow:hidden; }
     .feat-bar { display:block; height:100%; background:#1f6feb; }
     .why-canvas { width:100%; height:110px; background:#0d1117; border:1px solid var(--border); border-radius:6px; margin-top:4px; }
+    .chip { background:#21262d; border:1px solid var(--border); color:#8b949e; border-radius:20px; padding:4px 12px; font-size:0.75rem; cursor:pointer; font-family:monospace; }
+    .chip:hover { color:#e6edf3; border-color:#58a6ff; }
+    .chip-label { color:#6e7681; font-size:0.72rem; align-self:center; }
   </style>
 </head>
 <body>
@@ -588,6 +591,18 @@ HTML_PAGE = """<!DOCTYPE html>
       <div style="display:flex; gap:8px; margin:8px 0;">
         <input type="text" id="teach-label-input" placeholder="Item name, e.g. Loose Pens" style="flex:1; background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem;" />
         <button class="rec-start" id="teach-btn" onclick="teachItem()" style="font-size:0.9rem; padding:10px 16px;">RUN SWIRL &amp; SAVE TO ATLAS</button>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px; margin:8px 0;">
+        <span class="chip-label">confound set:</span>
+        <button class="chip" onclick="setTeachLabel('solid_150g')">solid_150g</button>
+        <button class="chip" onclick="setTeachLabel('water_150g')">water_150g</button>
+        <button class="chip" onclick="setTeachLabel('candy_150g')">candy_150g</button>
+        <button class="chip" onclick="setTeachLabel('soap_150g')">soap_150g</button>
+        <span class="chip-label" style="margin-left:8px;">basics:</span>
+        <button class="chip" onclick="setTeachLabel('empty_cup')">empty_cup</button>
+        <button class="chip" onclick="setTeachLabel('water_half')">water_half</button>
+        <button class="chip" onclick="setTeachLabel('candy_mixed')">candy_mixed</button>
+        <button class="chip" onclick="setTeachLabel('dish_soap_half')">dish_soap_half</button>
       </div>
       <div class="kpi-sub" id="teach-status">Signature saved → vector indexed in MongoDB, instantly queryable.</div>
     </div>
@@ -1033,7 +1048,10 @@ HTML_PAGE = """<!DOCTYPE html>
       const status = document.getElementById('predict-status');
       btn.disabled = true;
       document.getElementById('decision-card').style.display = 'none';
-      status.innerText = 'Running pick-up → swirl → place… (this takes ~1 min)';
+      const t0 = Date.now();
+      const tick = () => { status.innerText = `Running pick-up → swirl → place… ${Math.round((Date.now() - t0) / 1000)}s elapsed`; };
+      tick();
+      const timer = setInterval(tick, 1000);
       try {
         const res = await fetch('/api/cycle/predict', { method: 'POST' });
         const data = await res.json();
@@ -1042,8 +1060,13 @@ HTML_PAGE = """<!DOCTYPE html>
       } catch (e) {
         status.innerText = 'Error: ' + e.message;
       } finally {
+        clearInterval(timer);
         btn.disabled = false;
       }
+    }
+
+    function setTeachLabel(name) {
+      document.getElementById('teach-label-input').value = name;
     }
 
     async function teachItem() {
@@ -1053,7 +1076,10 @@ HTML_PAGE = """<!DOCTYPE html>
       const name = input.value.trim();
       if (!name) { status.innerText = 'Enter an item name first.'; return; }
       btn.disabled = true;
-      status.innerText = `Teaching "${name}" — running swirl macro…`;
+      const t0 = Date.now();
+      const tick = () => { status.innerText = `Teaching "${name}" — running swirl macro… ${Math.round((Date.now() - t0) / 1000)}s elapsed`; };
+      tick();
+      const timer = setInterval(tick, 1000);
       try {
         const res = await fetch('/api/cycle/teach', {
           method: 'POST',
@@ -1070,6 +1096,7 @@ HTML_PAGE = """<!DOCTYPE html>
       } catch (e) {
         status.innerText = 'Error: ' + e.message;
       } finally {
+        clearInterval(timer);
         btn.disabled = false;
       }
     }
