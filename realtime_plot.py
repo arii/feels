@@ -814,7 +814,14 @@ GET /api/status, POST /api/vectorspace.""",
     args = parser.parse_args()
 
     await start_web_server(port=args.port)
-    await robot_polling_loop(target_delay_ms=args.delay_ms)
+    if MOCK_MODE:
+        # Non-connected mode: no Viam, no Atlas. The dashboard serves the
+        # full UI from bundled recordings (predict/teach/correct/docs);
+        # live telemetry sparklines stay empty.
+        print("MOCK mode: skipping robot telemetry loop (no Viam connection).")
+        await asyncio.Event().wait()
+    else:
+        await robot_polling_loop(target_delay_ms=args.delay_ms)
 
 
 if __name__ == "__main__":
