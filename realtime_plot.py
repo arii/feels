@@ -487,6 +487,7 @@ HTML_PAGE = """<!DOCTYPE html>
     .feat-val { color:#e6edf3; text-align:right; }
     .feat-bar-wrap { background:#21262d; border-radius:3px; height:8px; overflow:hidden; }
     .feat-bar { display:block; height:100%; background:#1f6feb; }
+    .why-canvas { width:100%; height:110px; background:#0d1117; border:1px solid var(--border); border-radius:6px; margin-top:4px; }
   </style>
 </head>
 <body>
@@ -521,6 +522,12 @@ HTML_PAGE = """<!DOCTYPE html>
         <div class="kpi-label" style="margin-top:8px;">10-D swirl signature — feature space</div>
         <div id="pred-features"></div>
         <div class="kpi-sub" id="pred-data" style="margin-top:6px;"></div>
+        <div class="kpi-label" style="margin-top:8px;">Why — torque residuals from this run</div>
+        <canvas id="ts-canvas" class="why-canvas"></canvas>
+        <div class="kpi-sub" id="ts-lag"></div>
+        <div class="kpi-label" style="margin-top:8px;">Power spectrum</div>
+        <canvas id="psd-canvas" class="why-canvas"></canvas>
+        <div class="kpi-sub" id="psd-note"></div>
       </div>
       <div class="kpi-sub" id="predict-status"></div>
     </div>
@@ -770,6 +777,86 @@ HTML_PAGE = """<!DOCTYPE html>
         ` · phase src: ${dq.phase_source ?? '?'} · ${tf}`;
     }
 
+    function sizeCanvas(c) {
+      const dpr = window.devicePixelRatio || 1;
+      c.width = Math.max(1, c.clientWidth * dpr);
+      c.height = Math.max(1, c.clientHeight * dpr);
+      return { ctx: c.getContext('2d'), w: c.width, h: c.height, dpr };
+    }
+
+    function renderWhy(data) {
+      const ts = data.timeseries;
+      const tsc = document.getElementById('ts-canvas');
+      const psc = document.getElementById('psd-canvas');
+      const lagEl = document.getElementById('ts-lag');
+      const noteEl = document.getElementById('psd-note');
+      if (!ts || !ts.t || ts.t.length < 4) {
+        tsc.style.display = 'none'; psc.style.display = 'none';
+        lagEl.innerText = ''; noteEl.innerText = '';
+        return;
+      }
+      tsc.style.display = 'block'; psc.style.display = 'block';
+
+      // --- torque residuals (J2 green, J3 amber), symmetric axis ---
+      let { ctx, w, h, dpr } = sizeCanvas(tsc);
+      const pad = 8 * dpr;
+      const tEnd = Math.max(1e-9, ts.t[ts.t.length - 1]);
+      let mx = Math.max(1e-6, ...ts.r2.concat(ts.r3).map(v => Math.abs(v))) * 1.1;
+      const X = i => pad + (ts.t[i] / tEnd) * (w - 2 * pad);
+      const Y = v => h / 2 - (v / mx) * (h / 2 - pad);
+      ctx.clearRect(0, 0, w, h);
+      ctx.strokeStyle = '#2d333b'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+      for (const [vals, color] of [[ts.r2, '#3fb950'], [ts.r3, '#d29922']]) {
+        ctx.strokeStyle = color; ctx.lineWidth = 1.6 * dpr;
+        ctx.beginPath();
+        vals.forEach((v, i) => { i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)); });
+        ctx.stroke();
+      }
+      ctx.font = `${10 * dpr}px monospace`;
+      ctx.fillStyle = '#3fb950'; ctx.fillText('J2', pad + 3, pad + 10 * dpr);
+      ctx.fillStyle = '#d29922'; ctx.fillText('J3', pad + 3, pad + 22 * dpr);
+      const lagMs = Math.round((ts.phase_lag_s || 0) * 1000);
+      lagEl.innerText = `detrended torque residuals during swirl — phase lag ${lagMs} ms (torque vs TCP motion)`;
+
+      // --- power spectrum of r3, 0..Nyquist only; the 5-25 Hz rattle band
+      //     is NOT observable at 4-5 Hz sampling, so we label that honestly ---
+      const N = ts.r3.length, fs = ts.fs_hz, fmax = fs / 2;
+      const spec = [];
+      for (let k = 0; k <= Math.floor(N / 2); k++) {
+        let re = 0, im = 0;
+        for (let n = 0; n < N; n++) {
+          const a = 2 * Math.PI * k * n / N;
+          re += ts.r3[n] * Math.cos(a); im -= ts.r3[n] * Math.sin(a);
+        }
+        spec.push({ f: k * fs / N, m: Math.hypot(re, im) });
+      }
+      ({ ctx, w, h, dpr } = sizeCanvas(psc));
+      const pad2 = 8 * dpr;
+      const mmax = Math.max(1e-9, ...spec.map(s => s.m));
+      const BX = f => pad2 + (f / fmax) * (w - 2 * pad2);
+      const BY = m => h - pad2 - (m / mmax) * (h - 2 * pad2);
+      ctx.clearRect(0, 0, w, h);
+      ctx.strokeStyle = '#2d333b'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pad2, h - pad2); ctx.lineTo(w - pad2, h - pad2); ctx.stroke();
+      ctx.fillStyle = '#1f6feb';
+      const bw = Math.max(1, (w - 2 * pad2) / spec.length * 0.7);
+      let peak = spec[0];
+      for (const s of spec) {
+        if (s.m > peak.m) peak = s;
+        ctx.fillRect(BX(s.f) - bw / 2, BY(s.m), bw, h - pad2 - BY(s.m));
+      }
+      ctx.fillStyle = '#f0883e';
+      ctx.beginPath(); ctx.arc(BX(peak.f), BY(peak.m), 3 * dpr, 0, 2 * Math.PI); ctx.fill();
+      ctx.fillStyle = '#8b949e'; ctx.font = `${10 * dpr}px monospace`;
+      ctx.fillText(`peak ${peak.f.toFixed(2)} Hz`, Math.min(BX(peak.f) + 6 * dpr, w - 92 * dpr), Math.max(BY(peak.m) - 6 * dpr, 10 * dpr));
+      ctx.fillText('0', pad2, h - 2);
+      const nx = `${fmax.toFixed(1)} Hz Nyquist`;
+      ctx.fillText(nx, w - pad2 - ctx.measureText(nx).width, h - 2);
+      noteEl.innerText =
+        `observable 0–${fmax.toFixed(1)} Hz at ${fs.toFixed(1)} Hz sampling · 5–25 Hz rattle band needs 100 Hz on-robot sampling`;
+    }
+
     function renderDecision(data) {
       document.getElementById('decision-card').style.display = 'block';
       document.getElementById('pred-label').innerText = data.prediction || 'unknown';
@@ -781,6 +868,7 @@ HTML_PAGE = """<!DOCTYPE html>
         (data.mock ? '  (MOCK)' : '');
       setNeighbors(document.getElementById('pred-neighbors'), data.matches || []);
       renderFeatureSpace(data);
+      renderWhy(data);
       const dq = data.diagnostics || {};
       document.getElementById('predict-status').innerText = `Done — ${data.csv}` +
         (data.mock ? '  (MOCK data, not live hardware)' : '') +
@@ -935,6 +1023,7 @@ async def _mock_predict():
         matches.append({"label": row["label"], "similarity": round(max(0.0, sim), 3)})
     matches.sort(key=lambda m: m["similarity"], reverse=True)
     feats = feature_extractor.extract_features(df)
+    ts = feature_extractor.swirl_window_series(df)
     return {
         "ok": True, "mock": True,
         "csv": os.path.basename(name),
@@ -945,6 +1034,7 @@ async def _mock_predict():
         "features": {"names": feature_extractor.FEATURE_NAMES,
                      "z": [round(float(v), 4) for v in feats["z"]],
                      "descriptions": feature_extractor.FEATURE_DESCRIPTIONS},
+        "timeseries": ts,
         "diagnostics": feats["diagnostics"],
     }
 
@@ -969,7 +1059,9 @@ async def handle_cycle_predict(request):
                 result = await _mock_predict()
             else:
                 csv_path = await _run_swirl_macro("mystery")
-                feats = feature_extractor.extract_features(pd.read_csv(csv_path))
+                df = pd.read_csv(csv_path)
+                feats = feature_extractor.extract_features(df)
+                ts = feature_extractor.swirl_window_series(df)
                 a = _atlas()
                 res = a.identify(feats["e"], top_k=3)
                 result = {
@@ -983,6 +1075,7 @@ async def handle_cycle_predict(request):
                     "features": {"names": feature_extractor.FEATURE_NAMES,
                                  "z": [round(float(v), 4) for v in feats["z"]],
                                  "descriptions": feature_extractor.FEATURE_DESCRIPTIONS},
+                    "timeseries": ts,
                     "diagnostics": feats["diagnostics"],
                 }
             _last_prediction = result

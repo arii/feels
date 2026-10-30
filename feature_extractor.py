@@ -124,6 +124,20 @@ def _tcp_speed(df):
     return np.concatenate([[0.0], np.hypot(np.diff(x), np.diff(y)) / dt])
 
 
+def _phase_lag(x, y, fs, max_lag_s=2.0):
+    """Lag of max |cross-correlation| between x and y, in seconds."""
+    a = np.asarray(x, dtype=float)
+    b = np.asarray(y, dtype=float)
+    a = a - a.mean()
+    b = b - b.mean()
+    if np.std(a) < 1e-9 or np.std(b) < 1e-9:
+        return 0.0
+    corr = np.correlate(a / (np.std(a) + 1e-12), b / (np.std(b) + 1e-12), mode="full")
+    lags = (np.arange(len(corr)) - (len(a) - 1)) / fs
+    m = np.abs(lags) <= max_lag_s
+    return float(lags[m][np.argmax(np.abs(corr[m]))]) if m.any() else 0.0
+
+
 # ── main extraction ─────────────────────────────────────────────────────
 def extract_features(df):
     if not {"phase", "elapsed_sec", "tcp_x_mm", "tcp_y_mm", "tau2_nm", "tau3_nm"}.issubset(df.columns):
@@ -159,15 +173,7 @@ def extract_features(df):
     swirl_ptp_j3 = float(np.ptp(dtau3[idx]))
 
     # 6. phase lag: xcorr(TCP speed, τ3 residual), lag of max |corr| within ±2 s
-    a = v - v.mean()
-    b = r3 - r3.mean()
-    if np.std(a) < 1e-9 or np.std(b) < 1e-9:
-        phase_lag_s = 0.0
-    else:
-        corr = np.correlate(a / (np.std(a) + 1e-12), b / (np.std(b) + 1e-12), mode="full")
-        lags = (np.arange(len(corr)) - (len(a) - 1)) / fs
-        m = np.abs(lags) <= 2.0
-        phase_lag_s = float(lags[m][np.argmax(np.abs(corr[m]))]) if m.any() else 0.0
+    phase_lag_s = _phase_lag(v, r3, fs)
 
     # 7. rattle energy: observable high band only (honest about Nyquist)
     nyq = fs / 2.0
@@ -215,6 +221,34 @@ def extract_features(df):
         "label": str(df["object_label"].iloc[0]) if "object_label" in df else None,
     }
     return {"z": z.tolist(), "e": e, "diagnostics": diagnostics}
+
+
+def swirl_window_series(df):
+    """Detrended torque residuals over the dynamic (swirl) window, for the
+    dashboard 'why' charts. Returns a JSON-safe dict."""
+    if not {"phase", "elapsed_sec", "tau2_nm", "tau3_nm"}.issubset(df.columns):
+        raise ValueError("CSV missing required columns (phase, elapsed_sec, tau2/3_nm)")
+    fs = _fs(df)
+    tares, _ = _tare_with_qc(df)
+    dtau2 = df["tau2_nm"].values - tares[2]
+    dtau3 = df["tau3_nm"].values - tares[3]
+    speed = _tcp_speed(df) if {"tcp_x_mm", "tcp_y_mm"}.issubset(df.columns) else np.zeros(len(df))
+    sw = df[df["phase"] == SWIRL_PHASE]
+    if len(sw) < 4:
+        sw = df[df["phase"].isin(FALLBACK_DYN_PHASES)]
+    if len(sw) < 4:
+        raise ValueError("No SWIRL (or fallback dynamic) phase samples in recording")
+    idx = sw.index.values
+    t0 = float(df["elapsed_sec"].values[idx[0]])
+    r2 = dtau2[idx] - _lowpass(dtau2[idx], fs)
+    r3 = dtau3[idx] - _lowpass(dtau3[idx], fs)
+    return {
+        "t": [round(float(x) - t0, 3) for x in df["elapsed_sec"].values[idx]],
+        "r2": [round(float(x), 4) for x in r2],
+        "r3": [round(float(x), 4) for x in r3],
+        "phase_lag_s": round(_phase_lag(speed[idx], r3, fs), 3),
+        "fs_hz": round(float(fs), 2),
+    }
 
 
 def _calibrate():
