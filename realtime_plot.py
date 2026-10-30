@@ -705,9 +705,162 @@ async def handle_docs(request):
     return web.FileResponse(os.path.join(HERE, "static", "docs", f"{page}.html"))
 
 
+# ---------------------------------------------------------------------------
+# Classify / Teach — file-based (works offline, no robot needed)
+#   coarse cascade (empty -> solid/liquid)  +  fine-grained Atlas retrieval
+# ---------------------------------------------------------------------------
+_CASCADE = None
+
+
+def _cascade():
+    global _CASCADE
+    if _CASCADE is None:
+        import joblib
+        _CASCADE = joblib.load(os.path.join(HERE, "models", "cascade.joblib"))
+    return _CASCADE
+
+
+def _safe_recording(name: str) -> str:
+    """Resolve a recordings/*.csv basename safely (no path traversal)."""
+    base = os.path.basename(str(name))
+    p = os.path.join(HERE, "recordings", base)
+    if not os.path.isfile(p):
+        raise FileNotFoundError(base)
+    return p
+
+
+async def handle_recordings(request):
+    """List available recordings for the picker (basename + true label)."""
+    import re
+    items = []
+    for p in sorted(glob.glob(os.path.join(HERE, "recordings", "recording_*.csv"))):
+        b = os.path.basename(p)
+        m = re.search(r"_\d{6}_(.*)\.csv", b)
+        items.append({"file": b, "label": m.group(1) if m else "?"})
+    return web.json_response({"recordings": items})
+
+
+async def handle_classes(request):
+    """Existing classes currently in the Atlas memory (signature label -> count),
+    grouped by coarse state (empty / solid / liquid)."""
+    try:
+        import atlas as _a
+        db = _a.get_db()
+        from collections import Counter
+        labels = Counter(s["label"] for s in db.signatures.find({}, {"label": 1, "_id": 0}))
+
+        def state_of(label):
+            m = _a.material_of(label)
+            return "empty" if m == "empty" else ("solid" if m in ("solid", "screws", "candy") else "liquid")
+        groups = {"empty": {}, "solid": {}, "liquid": {}}
+        for lbl, n in labels.items():
+            groups.setdefault(state_of(lbl), {})[lbl] = n
+        return web.json_response({"ok": True, "total": sum(labels.values()),
+                                  "n_labels": len(labels), "groups": groups})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)[:300]}, status=500)
+
+
+async def handle_classify(request):
+    """Coarse cascade on a recording → state spectrum (loadedness × rigidity),
+    the J3 torque signal, and the top classifier features."""
+    try:
+        import numpy as np
+        import train_classifier as tc
+        body = await request.json()
+        path = _safe_recording(body.get("file", ""))
+        df = pd.read_csv(path)
+        c = _cascade()
+        order = c["feature_order"]
+        feats = tc.features(df)
+        x = np.array([[feats[k] for k in order]])
+
+        def pconf(pipe, cls):
+            return float(dict(zip(pipe.classes_, pipe.predict_proba(x)[0])).get(cls, 0.0))
+        loadedness = pconf(c["stage1"], "loaded")
+        rigidity = pconf(c["stage2_all"], "solid")
+        has_swirl = bool((df["phase"] == feature_extractor.SWIRL_PHASE).any())
+        coarse = "empty" if loadedness < 0.5 else ("solid" if rigidity >= 0.5 else "liquid")
+
+        # classifier input signal: detrended swirl torque if present, else raw J3
+        try:
+            sig = feature_extractor.swirl_window_series(df)
+            signal = {"t": sig["t"], "j3": sig["r3"], "kind": "swirl residual τ3"}
+        except Exception:
+            sub = df[df["phase"].astype(str).str.contains("TRAVEL", na=False)]
+            if len(sub) < 4:
+                sub = df
+            t0 = float(sub["elapsed_sec"].iloc[0])
+            signal = {"t": [round(float(v) - t0, 2) for v in sub["elapsed_sec"]],
+                      "j3": [round(float(v), 3) for v in sub["tau3_nm"]], "kind": "τ3 (hold)"}
+
+        # a few human-readable discriminative features
+        show = ["hold_j3", "swstd_j3", "swptp_j3", "phaselag", "settle", "effF"]
+        fbars = [{"name": k, "val": round(float(feats.get(k, 0.0)), 3)} for k in show if k in feats]
+
+        return web.json_response({
+            "ok": True, "file": os.path.basename(path),
+            "true_label": str(df["object_label"].iloc[0]) if "object_label" in df else None,
+            "has_swirl": has_swirl, "coarse": coarse,
+            "loadedness": round(loadedness, 3), "rigidity": round(rigidity, 3),
+            "signal": signal, "features": fbars,
+        })
+    except FileNotFoundError as e:
+        return web.json_response({"ok": False, "error": f"recording not found: {e}"}, status=404)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)[:400]}, status=500)
+
+
+async def handle_finegrained(request):
+    """Fine-grained: Atlas vector search, filtered to the coarse class."""
+    try:
+        import numpy as np
+        import atlas as _a
+        body = await request.json()
+        path = _safe_recording(body.get("file", ""))
+        coarse = str(body.get("coarse", "")).lower()
+        df = pd.read_csv(path)
+        e = feature_extractor.extract_features(df)["e"]
+        res = _a.identify(e, top_k=8)
+
+        def state_of(label):
+            m = _a.material_of(label)
+            return "empty" if m == "empty" else ("solid" if m in ("solid", "screws", "candy") else "liquid")
+        same = [m for m in res["matches"] if state_of(m["label"]) == coarse] if coarse else res["matches"]
+        pool = same if same else res["matches"]
+        out = [{"label": m["label"], "similarity": round(m["score"], 3)} for m in pool[:5]]
+        return web.json_response({"ok": True, "coarse": coarse, "filtered": bool(same),
+                                  "matches": out, "best": out[0] if out else None})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)[:400]}, status=500)
+
+
+async def handle_teach_file(request):
+    """Add a new item: embed a recording and store it in Atlas (one-shot teach)."""
+    try:
+        import atlas as _a
+        body = await request.json()
+        path = _safe_recording(body.get("file", ""))
+        label = _sanitize_label(str(body.get("label", "")))
+        if not label or label == "item":
+            return web.json_response({"ok": False, "error": "provide a label"}, status=400)
+        df = pd.read_csv(path)
+        feats = feature_extractor.extract_features(df)
+        ids = _a.teach(label=label, feature_vector=feats["e"], raw_data=feats.get("raw_j3"),
+                       motion_type="swirl_macro", properties={"source": "ui_teach"}, session="live")
+        return web.json_response({"ok": True, "label": label, "sig_id": ids.get("sig_id")})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)[:400]}, status=500)
+
+
 async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
     app = web.Application()
     app.router.add_get("/", handle_index)
+    app.router.add_get("/api/recordings", handle_recordings)
+    app.router.add_get("/api/classes", handle_classes)
+    app.router.add_post("/api/classify", handle_classify)
+    app.router.add_post("/api/finegrained", handle_finegrained)
+    app.router.add_post("/api/teach_file", handle_teach_file)
     app.router.add_get("/docs", handle_docs)
     app.router.add_get("/docs/{page}", handle_docs)
     app.router.add_get("/stream", handle_stream)

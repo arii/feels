@@ -2,47 +2,63 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Viam xArm850 — 10s Rolling Real-Time Visualizer</title>
+  <title>🎃 feels — What's in the cup?</title>
   <style>
     :root {
-      --bg: #0d1117;
-      --card-bg: #161b22;
-      --border: #30363d;
-      --text: #c9d1d9;
-      --text-bright: #ffffff;
-      --accent: #58a6ff;
-      --red: #ff7b72;
-      --green: #3fb950;
-      --yellow: #d29922;
-      --purple: #bc8cff;
-      --orange: #f0883e;
+      /* 🎃 Halloween palette — pumpkin orange + witchy purple on near-black */
+      --bg: #0a0710;
+      --card-bg: #17101f;
+      --border: #3a2850;
+      --text: #cbb8d9;
+      --text-bright: #fff6ee;
+      --accent: #ff7518;      /* pumpkin orange */
+      --red: #ff4d6d;
+      --green: #6fe36f;       /* slime green */
+      --yellow: #ffc24b;
+      --purple: #b14aff;      /* witch purple */
+      --orange: #ff7518;
       --cyan: #39c5cf;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: var(--bg);
       color: var(--text);
-      padding: 20px;
+      padding: 10px 14px;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 500px at 12% -5%, rgba(255,117,24,0.10), transparent 60%),
+        radial-gradient(1000px 600px at 95% 0%, rgba(177,74,255,0.12), transparent 55%),
+        linear-gradient(180deg, #0c0814 0%, #0a0710 100%);
+      background-attachment: fixed;
     }
     header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 16px;
-      padding-bottom: 14px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
       border-bottom: 1px solid var(--border);
+      box-shadow: 0 1px 0 rgba(255,117,24,0.25);
     }
-    h1 { font-size: 1.35rem; color: var(--text-bright); display: flex; align-items: center; gap: 10px; }
+    h1 {
+      font-size: 1.2rem;
+      color: var(--text-bright);
+      display: flex; align-items: center; gap: 10px;
+      letter-spacing: 0.5px;
+      text-shadow: 0 0 12px rgba(255,117,24,0.55), 0 0 2px rgba(255,117,24,0.9);
+    }
+    h1 .pumpkin { font-size: 1.6rem; filter: drop-shadow(0 0 8px rgba(255,117,24,0.8)); animation: bob 3s ease-in-out infinite; }
+    @keyframes bob { 0%,100% { transform: translateY(0) rotate(-3deg);} 50% { transform: translateY(-3px) rotate(3deg);} }
     .badge {
       font-size: 0.75rem;
-      background: #238636;
-      color: #fff;
-      padding: 3px 8px;
+      background: linear-gradient(135deg, #ff7518, #ff9a3c);
+      color: #1a0e00;
+      padding: 3px 9px;
       border-radius: 12px;
       font-weight: bold;
+      box-shadow: 0 0 10px rgba(255,117,24,0.5);
     }
-    .badge.disconnected { background: #da3633; }
+    .badge.disconnected { background: #da3633; color:#fff; box-shadow: 0 0 10px rgba(218,54,51,0.5); }
     .badge-rec {
       font-size: 0.75rem;
       background: var(--red);
@@ -65,13 +81,14 @@
       margin-bottom: 18px;
     }
     .kpi-card {
-      background: var(--card-bg);
+      background: linear-gradient(160deg, rgba(177,74,255,0.06), var(--card-bg) 60%);
       border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 12px 16px;
+      border-radius: 10px;
+      padding: 9px 12px;
+      box-shadow: 0 2px 14px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,117,24,0.04);
     }
-    .kpi-label { font-size: 0.75rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
-    .kpi-val { font-size: 1.8rem; font-weight: 700; color: var(--text-bright); margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .kpi-label { font-size: 0.75rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.6px; }
+    .kpi-val { font-size: 1.3rem; font-weight: 700; color: var(--text-bright); margin-top: 2px; font-variant-numeric: tabular-nums; }
     .kpi-sub { font-size: 0.75rem; color: #8b949e; margin-top: 2px; }
     .highlight-red { color: var(--red); }
     .highlight-blue { color: var(--accent); }
@@ -94,8 +111,8 @@
       transition: all 0.15s ease;
     }
     button:hover { background: #30363d; border-color: #8b949e; }
-    button.tare-btn { background: #1f6feb; border-color: #388bfd; }
-    button.tare-btn:hover { background: #388bfd; }
+    button.tare-btn { background: linear-gradient(135deg, #ff7518, #ff9a3c); border-color: #ff7518; color:#1a0e00; box-shadow: 0 0 12px rgba(255,117,24,0.35); }
+    button.tare-btn:hover { background: linear-gradient(135deg, #ff9a3c, #ffb366); box-shadow: 0 0 18px rgba(255,117,24,0.6); }
     button.rec-start { background: #da3633; border-color: #f85149; }
     button.rec-start:hover { background: #f85149; }
     button.rec-stop { background: #6e7681; border-color: #8b949e; }
@@ -119,9 +136,11 @@
       color: var(--text-bright);
     }
     .section-title {
-      font-size: 1.05rem;
+      font-size: 0.92rem;
       color: var(--text-bright);
-      margin: 20px 0 12px 0;
+      margin: 10px 0 6px 0;
+      padding-left: 10px;
+      border-left: 3px solid var(--accent);
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -178,16 +197,39 @@
     .feat-bar { display:block; height:100%; background:#1f6feb; }
     .why-canvas { width:100%; height:110px; background:#0d1117; border:1px solid var(--border); border-radius:6px; margin-top:4px; }
     #vspace-tip { display:none; position:absolute; background:#161b22; border:1px solid var(--border); border-radius:4px; padding:3px 8px; font-size:0.72rem; font-family:monospace; color:#e6edf3; pointer-events:none; z-index:5; }
-    .chip { background:#21262d; border:1px solid var(--border); color:#8b949e; border-radius:20px; padding:4px 12px; font-size:0.75rem; cursor:pointer; font-family:monospace; }
-    .chip:hover { color:#e6edf3; border-color:#58a6ff; }
-    .chip-label { color:#6e7681; font-size:0.72rem; align-self:center; }
+    .chip { background:#21152d; border:1px solid var(--border); color:#cbb8d9; border-radius:20px; padding:4px 12px; font-size:0.75rem; cursor:pointer; font-family:monospace; }
+    .chip:hover { color:#fff6ee; border-color:var(--accent); box-shadow:0 0 8px rgba(255,117,24,0.35); }
+    .chip-label { color:#8a74a0; font-size:0.72rem; align-self:center; }
+    .feat-bar { background: var(--accent) !important; }
+    .jleg { font-size:0.78rem; color:var(--jc); display:inline-flex; align-items:center; gap:5px; font-weight:600;
+            border-left:3px solid var(--jc); padding-left:7px; }
+    .jleg b { font-variant-numeric:tabular-nums; }
+    .jr { color:#6e7681; font-size:0.65rem; font-weight:400; }
+    .modetog { background:transparent; border:none; border-radius:0; color:#8a74a0; padding:9px 16px; font-size:0.82rem; }
+    .modetog.active { background:linear-gradient(135deg,#ff7518,#ff9a3c); color:#1a0e00; box-shadow:0 0 12px rgba(255,117,24,0.4); }
+    .spec-track { background:#1a0f26; border:1px solid var(--border); border-radius:6px; height:16px; overflow:hidden; margin-top:3px; }
+    .spec-fill { height:100%; width:0%; background:linear-gradient(90deg,#3a2850,#ff7518); transition:width 0.5s ease; }
+    .cls-pill { display:inline-block; background:#21152d; border:1px solid var(--border); border-radius:14px; padding:4px 11px; margin:3px; font-size:0.78rem; font-family:monospace; color:#cbb8d9; }
+    .cls-pill b { color:var(--accent); }
+    .cls-group { margin:6px 0; }
+    .cls-group .ghdr { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.5px; color:#8a74a0; margin-bottom:2px; }
+    /* 🦇 spooky floating decorations — purely cosmetic, never block clicks */
+    .spooky { position: fixed; pointer-events: none; z-index: -1; opacity: 0.16; user-select: none; }
+    .spooky.b1 { top: 8%;  right: 4%;  font-size: 3rem; animation: float1 9s ease-in-out infinite; }
+    .spooky.b2 { bottom: 10%; left: 3%; font-size: 2.6rem; animation: float2 11s ease-in-out infinite; }
+    .spooky.b3 { top: 45%; right: 2%; font-size: 2.2rem; animation: float1 13s ease-in-out infinite; }
+    @keyframes float1 { 0%,100%{transform:translateY(0) rotate(-6deg);} 50%{transform:translateY(-18px) rotate(6deg);} }
+    @keyframes float2 { 0%,100%{transform:translateY(0) rotate(5deg);}  50%{transform:translateY(14px) rotate(-5deg);} }
   </style>
 </head>
 <body>
+  <div class="spooky b1">🦇</div>
+  <div class="spooky b2">🕸️</div>
+  <div class="spooky b3">👻</div>
   <header>
     <div>
       <h1>
-        PHYSICAL AI CUP INSPECTOR
+        <span class="pumpkin">🎃</span> FEELS &mdash; WHAT&rsquo;S IN THE CUP? <span class="pumpkin" style="animation-delay:1.5s;">👻</span>
         <span class="badge" id="status-badge">CONNECTING...</span>
         <span class="badge" id="atlas-badge" style="background:#6e7681;">ATLAS: ...</span>
         <span class="badge" id="mock-badge" style="background:#8957e5; display:none;">MOCK</span>
@@ -200,121 +242,127 @@
     </div>
   </header>
 
-  <div class="grid-kpi" style="grid-template-columns: 1fr 1fr;">
-    <div class="kpi-card">
-      <div class="kpi-label">Mode 1 &mdash; Identify mystery object</div>
-      <button class="tare-btn" id="predict-btn" onclick="runPredict()" style="font-size:1rem; padding:10px 20px; margin:8px 0;">RUN SWIRL MACRO &amp; PREDICT</button>
-      <div id="decision-card" style="display:none; margin-top:8px; border-top:1px solid var(--border); padding-top:8px;">
-        <div class="kpi-label">Predicted material</div>
-        <div class="kpi-val" id="pred-material" style="font-size:1.5rem;">—</div>
-        <div style="background:#21262d; border-radius:6px; height:14px; margin:6px 0; overflow:hidden;">
-          <div id="pred-conf-bar" style="height:100%; width:0%; background:#3fb950;"></div>
+  <!-- 🔮 Classify / Teach on a recording (coarse → fine) -->
+  <div class="kpi-card" style="margin-bottom:10px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+      <div class="kpi-label" style="font-size:0.95rem;">🔮 Classify a cup &mdash; coarse → fine</div>
+      <div style="display:flex; gap:0; background:#1a0f26; border:1px solid var(--border); border-radius:8px; overflow:hidden;">
+        <button id="mode-infer" class="modetog active" onclick="setMode('infer')">🔎 Infer existing</button>
+        <button id="mode-teach" class="modetog" onclick="setMode('teach')">✨ Teach new item</button>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;">
+      <select id="rec-select" style="flex:1; min-width:240px; background:#1a0f26; border:1px solid var(--border); color:var(--text-bright); padding:7px; border-radius:8px; font-size:0.85rem;"></select>
+      <div id="infer-actions">
+        <button class="tare-btn" id="classify-btn" onclick="runClassify()" style="padding:7px 14px;">CLASSIFY</button>
+      </div>
+      <div id="teach-actions" style="display:none; gap:8px;">
+        <input type="text" id="teach-file-label" placeholder="new class name" style="background:#1a0f26; border:1px solid var(--border); color:#fff; padding:10px; border-radius:8px; font-size:0.9rem;" />
+        <button class="tare-btn" id="teach-file-btn" onclick="teachFile()" style="padding:7px 14px;">✨ ADD TO ATLAS</button>
+      </div>
+    </div>
+
+    <!-- coarse verdict + state spectrum -->
+    <div id="classify-result" style="display:none; margin-top:6px; border-top:1px solid var(--border); padding-top:12px;">
+      <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+        <div id="verdict-emoji" style="font-size:2.6rem;">🥤</div>
+        <div>
+          <div class="kpi-label">coarse verdict</div>
+          <div class="kpi-val" id="verdict-text" style="font-size:1.7rem;">—</div>
+          <div class="kpi-sub" id="verdict-sub"></div>
         </div>
-        <div class="kpi-sub" id="pred-conf-text">confidence —</div>
-        <div class="kpi-sub" id="pred-fine" style="margin-top:4px; color:#6e7681;">closest taught item: —</div>
-        <div class="kpi-label" style="margin-top:8px;">Nearest Atlas neighbors</div>
-        <div id="pred-neighbors" style="font-size:0.85rem; margin-top:4px;"></div>
-        <div class="kpi-label" style="margin-top:8px;">Wrong? Teach the correction</div>
-        <div style="display:flex; gap:8px; margin:6px 0;">
-          <input type="text" id="correct-label-input" placeholder="Actual item, e.g. water_025pct" style="flex:1; background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem;" />
-          <button class="tare-btn" id="correct-btn" onclick="correctPrediction()">TEACH CORRECTION</button>
+      </div>
+      <div style="margin-top:12px; max-width:560px;">
+        <div class="kpi-sub" style="display:flex; justify-content:space-between;"><span>empty</span><span>loadedness</span><span>full</span></div>
+        <div class="spec-track"><div id="bar-loaded" class="spec-fill"></div></div>
+        <div class="kpi-sub" id="row-rigidity" style="display:flex; justify-content:space-between; margin-top:10px;"><span>liquid</span><span>rigidity</span><span>solid</span></div>
+        <div class="spec-track" id="track-rigidity"><div id="bar-rigid" class="spec-fill" style="background:linear-gradient(90deg,#39c5cf,#ff7518);"></div></div>
+      </div>
+      <div class="kpi-label" style="margin-top:14px;">classifier input signal (τ₃)</div>
+      <canvas id="sig-canvas" class="why-canvas"></canvas>
+      <div class="kpi-label" style="margin-top:10px;">discriminative features</div>
+      <div id="feat-bars" style="margin-top:4px;"></div>
+      <div style="margin-top:14px;">
+        <button class="tare-btn" id="fine-btn" onclick="runFine()" style="padding:9px 16px; font-size:0.85rem;">🔬 Go fine-grained (Atlas)</button>
+        <div id="fine-result" style="margin-top:8px;"></div>
+      </div>
+    </div>
+    <div class="kpi-sub" id="classify-status" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="kpi-card" style="margin-bottom:10px;">
+    <div class="kpi-label" style="font-size:0.95rem;">🤖 Robot — live swirl: identify or teach</div>
+    <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; margin-top:8px;">
+      <!-- identify -->
+      <div style="flex:1; min-width:240px;">
+        <button class="tare-btn" id="predict-btn" onclick="runPredict()" style="font-size:0.85rem; padding:7px 14px;">🔎 RUN SWIRL &amp; IDENTIFY</button>
+        <div class="kpi-sub" id="predict-status" style="margin-top:4px;"></div>
+      </div>
+      <!-- teach -->
+      <div style="flex:1.4; min-width:300px;">
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="teach-label-input" placeholder="New item name" style="flex:1; background:#1a0f26; border:1px solid var(--border); color:#fff; padding:7px 10px; border-radius:6px; font-size:0.85rem;" />
+          <button class="rec-start" id="teach-btn" onclick="teachItem()" style="font-size:0.82rem; padding:7px 14px;">✨ SWIRL &amp; SAVE</button>
         </div>
-        <div class="kpi-sub" id="correct-status"></div>
-        <div class="kpi-label" style="margin-top:8px;">10-D swirl signature — feature space</div>
-        <div id="pred-features"></div>
-        <div class="kpi-sub" id="pred-data" style="margin-top:6px;"></div>
-        <div class="kpi-label" style="margin-top:8px;">Why — torque residuals from this run</div>
-        <canvas id="ts-canvas" class="why-canvas"></canvas>
-        <div class="kpi-sub" id="ts-lag"></div>
-        <div class="kpi-label" style="margin-top:8px;">Power spectrum</div>
-        <canvas id="psd-canvas" class="why-canvas"></canvas>
-        <div class="kpi-sub" id="psd-note"></div>
+        <div class="kpi-sub" id="teach-status" style="margin-top:5px;">Signature → vector indexed in MongoDB, instantly queryable.</div>
+        <!-- existing classes (reference: what's in Atlas) -->
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; border-top:1px solid var(--border); padding-top:7px;">
+          <div class="kpi-label">📚 Existing classes in Atlas memory</div>
+          <button onclick="loadClasses()" style="font-size:0.72rem; padding:3px 9px;">↻</button>
+        </div>
+        <div id="classes-box" style="margin-top:6px;"></div>
       </div>
-      <div class="kpi-sub" id="predict-status"></div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Mode 2 &mdash; Teach new item (online dataset builder)</div>
-      <div style="display:flex; gap:8px; margin:8px 0;">
-        <input type="text" id="teach-label-input" placeholder="Item name, e.g. Loose Pens" style="flex:1; background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem;" />
-        <button class="rec-start" id="teach-btn" onclick="teachItem()" style="font-size:0.9rem; padding:10px 16px;">RUN SWIRL &amp; SAVE TO ATLAS</button>
+
+    <!-- predict decision card (expands after identify) -->
+    <div id="decision-card" style="display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:8px;">
+      <div class="kpi-label">Predicted material</div>
+      <div class="kpi-val" id="pred-material" style="font-size:1.5rem;">—</div>
+      <div style="background:#21262d; border-radius:6px; height:14px; margin:6px 0; overflow:hidden;">
+        <div id="pred-conf-bar" style="height:100%; width:0%; background:#3fb950;"></div>
       </div>
-      <div style="display:flex; flex-wrap:wrap; gap:6px; margin:8px 0;">
-        <span class="chip-label">confound set:</span>
-        <button class="chip" onclick="setTeachLabel('solid_150g')">solid_150g</button>
-        <button class="chip" onclick="setTeachLabel('water_150g')">water_150g</button>
-        <button class="chip" onclick="setTeachLabel('candy_150g')">candy_150g</button>
-        <button class="chip" onclick="setTeachLabel('soap_150g')">soap_150g</button>
-        <span class="chip-label" style="margin-left:8px;">basics:</span>
-        <button class="chip" onclick="setTeachLabel('empty_cup')">empty_cup</button>
-        <button class="chip" onclick="setTeachLabel('water_half')">water_half</button>
-        <button class="chip" onclick="setTeachLabel('candy_mixed')">candy_mixed</button>
-        <button class="chip" onclick="setTeachLabel('dish_soap_half')">dish_soap_half</button>
+      <div class="kpi-sub" id="pred-conf-text">confidence —</div>
+      <div class="kpi-sub" id="pred-fine" style="margin-top:4px; color:#6e7681;">closest taught item: —</div>
+      <div class="kpi-label" style="margin-top:8px;">Nearest Atlas neighbors</div>
+      <div id="pred-neighbors" style="font-size:0.85rem; margin-top:4px;"></div>
+      <div class="kpi-label" style="margin-top:8px;">Wrong? Teach the correction</div>
+      <div style="display:flex; gap:8px; margin:6px 0;">
+        <input type="text" id="correct-label-input" placeholder="Actual item, e.g. water_025pct" style="flex:1; background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem;" />
+        <button class="tare-btn" id="correct-btn" onclick="correctPrediction()">TEACH CORRECTION</button>
       </div>
-      <div class="kpi-sub" id="teach-status">Signature saved → vector indexed in MongoDB, instantly queryable.</div>
+      <div class="kpi-sub" id="correct-status"></div>
+      <div class="kpi-label" style="margin-top:8px;">10-D swirl signature — feature space</div>
+      <div id="pred-features"></div>
+      <div class="kpi-sub" id="pred-data" style="margin-top:6px;"></div>
+      <div class="kpi-label" style="margin-top:8px;">Why — torque residuals from this run</div>
+      <canvas id="ts-canvas" class="why-canvas"></canvas>
+      <div class="kpi-sub" id="ts-lag"></div>
+      <div class="kpi-label" style="margin-top:8px;">Power spectrum</div>
+      <canvas id="psd-canvas" class="why-canvas"></canvas>
+      <div class="kpi-sub" id="psd-note"></div>
     </div>
   </div>
 
-  <!-- Vector space (2-D PCA of the Atlas signature library) -->
-  <div style="background:#161b22; border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px; position:relative;">
-    <div class="kpi-label">Vector space — 2-D PCA of the Atlas 10-D signature library</div>
-    <canvas id="vspace-canvas" class="why-canvas" style="height:220px;"></canvas>
-    <div id="vspace-tip"></div>
-    <div class="kpi-sub" id="vspace-note" style="margin-top:6px;"></div>
-  </div>
-
-  <!-- Live joint torques (native canvas sparklines) -->
-  <div class="section-title">
-    <span>Live Joint Torques (10s Rolling Windows)</span>
-    <span style="font-size: 0.8rem; color: #8b949e;">Ultra-fast native canvas (&lt;0.1ms render)</span>
-  </div>
-
-  <div class="grid-joints">
+  <!-- Signals (left) + Atlas feature space (right), side by side -->
+  <div class="grid-kpi" style="grid-template-columns: 1.5fr 1fr; margin-bottom:10px;">
     <div class="joint-card">
-      <div class="joint-header">
-        <span class="joint-name" style="color: #39c5cf;">Joint 1 — Base (Yaw)</span>
-        <span class="joint-val" id="val-j1" style="color: #39c5cf;">0.000</span><span class="joint-range">±25 N·m</span>
+      <div class="kpi-label" style="margin-bottom:5px;">🕸️ Live Joint Torques — all 6 signals (10s)</div>
+      <div id="joint-legend" style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:6px;">
+        <span class="jleg" style="--jc:#39c5cf;">J1 <b id="val-j1">0.000</b></span>
+        <span class="jleg" style="--jc:#6fe36f;">J2 <b id="val-j2">-16.05</b></span>
+        <span class="jleg" style="--jc:#ffc24b;">J3 <b id="val-j3">-16.82</b></span>
+        <span class="jleg" style="--jc:#ff7518;">J4 <b id="val-j4">0.778</b></span>
+        <span class="jleg" style="--jc:#b14aff;">J5 <b id="val-j5">0.373</b></span>
+        <span class="jleg" style="--jc:#58a6ff;">J6 <b id="val-j6">0.001</b></span>
       </div>
-      <div class="canvas-wrap"><canvas id="c-j1" class="sparkline"></canvas></div>
+      <div style="height:150px;"><canvas id="c-joints-all" class="sparkline" style="height:150px;"></canvas></div>
     </div>
-
-    <div class="joint-card">
-      <div class="joint-header">
-        <span class="joint-name" style="color: #3fb950;">Joint 2 — Shoulder (Pitch)</span>
-        <span class="joint-val" id="val-j2" style="color: #3fb950;">-16.05</span><span class="joint-range">±25 N·m</span>
-      </div>
-      <div class="canvas-wrap"><canvas id="c-j2" class="sparkline"></canvas></div>
-    </div>
-
-    <div class="joint-card">
-      <div class="joint-header">
-        <span class="joint-name" style="color: #d29922;">Joint 3 — Elbow (Pitch)</span>
-        <span class="joint-val" id="val-j3" style="color: #d29922;">-16.82</span><span class="joint-range">±10 N·m</span>
-      </div>
-      <div class="canvas-wrap"><canvas id="c-j3" class="sparkline"></canvas></div>
-    </div>
-
-    <div class="joint-card">
-      <div class="joint-header">
-        <span class="joint-name" style="color: #f0883e;">Joint 4 — Forearm (Roll)</span>
-        <span class="joint-val" id="val-j4" style="color: #f0883e;">0.778</span><span class="joint-range">±5 N·m</span>
-      </div>
-      <div class="canvas-wrap"><canvas id="c-j4" class="sparkline"></canvas></div>
-    </div>
-
-    <div class="joint-card">
-      <div class="joint-header">
-        <span class="joint-name" style="color: #bc8cff;">Joint 5 — Wrist (Pitch)</span>
-        <span class="joint-val" id="val-j5" style="color: #bc8cff;">0.373</span><span class="joint-range">±2 N·m</span>
-      </div>
-      <div class="canvas-wrap"><canvas id="c-j5" class="sparkline"></canvas></div>
-    </div>
-
-    <div class="joint-card">
-      <div class="joint-header">
-        <span class="joint-name" style="color: #58a6ff;">Joint 6 — Flange (Roll)</span>
-        <span class="joint-val" id="val-j6" style="color: #58a6ff;">0.001</span><span class="joint-range">±2 N·m</span>
-      </div>
-      <div class="canvas-wrap"><canvas id="c-j6" class="sparkline"></canvas></div>
+    <div class="joint-card" style="position:relative;">
+      <div class="kpi-label" style="margin-bottom:5px;">🔮 Atlas feature space — 2-D PCA of signatures</div>
+      <canvas id="vspace-canvas" class="why-canvas" style="height:150px;"></canvas>
+      <div id="vspace-tip"></div>
+      <div class="kpi-sub" id="vspace-note" style="margin-top:4px;"></div>
     </div>
   </div>
 
@@ -336,16 +384,9 @@
 
     // (force/weight chart removed — derived mass was tare-contaminated; see BASELINE_FINDINGS.md)
 
-    // Native High-Performance Sparkline Renderer (<0.1ms per canvas)
-    const sparkCanvases = [
-      document.getElementById('c-j1'),
-      document.getElementById('c-j2'),
-      document.getElementById('c-j3'),
-      document.getElementById('c-j4'),
-      document.getElementById('c-j5'),
-      document.getElementById('c-j6')
-    ];
-    const jointColors = ['#39c5cf', '#3fb950', '#d29922', '#f0883e', '#bc8cff', '#58a6ff'];
+    // Native High-Performance Renderer — all 6 joints on ONE canvas
+    const jointsCanvas = document.getElementById('c-joints-all');
+    const jointColors = ['#39c5cf', '#6fe36f', '#ffc24b', '#ff7518', '#b14aff', '#58a6ff'];
     // Fixed y-axis half-ranges (N·m) per joint for the delta view: the axis never
     // gets narrower than ±this around 0, so a still joint draws a flat line
     // instead of stretching sensor noise full-height. Expands if data exceeds it.
@@ -353,13 +394,40 @@
     const SPARK_HALF_RANGES = [25, 25, 10, 5, 2, 2];
 
     function resizeCanvases() {
-      sparkCanvases.forEach(c => {
-        c.width = c.clientWidth * window.devicePixelRatio;
-        c.height = c.clientHeight * window.devicePixelRatio;
-      });
+      if (jointsCanvas) {
+        jointsCanvas.width = jointsCanvas.clientWidth * window.devicePixelRatio;
+        jointsCanvas.height = jointsCanvas.clientHeight * window.devicePixelRatio;
+      }
     }
     window.addEventListener('resize', resizeCanvases);
     resizeCanvases();
+
+    // Draw all 6 joint signals overlaid on one canvas, each normalized to its
+    // own half-range so small-scale joints stay visible next to large ones.
+    function renderAllJoints() {
+      const c = jointsCanvas; if (!c) return;
+      const ctx = c.getContext('2d'); const w = c.width, h = c.height, pad = 8 * window.devicePixelRatio;
+      ctx.clearRect(0, 0, w, h);
+      // zero line (center)
+      const midY = h / 2;
+      ctx.strokeStyle = 'rgba(255,117,24,0.18)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(w, midY); ctx.stroke();
+      for (let j = 0; j < 6; j++) {
+        const data = history.joints[j]; if (!data || data.length < 2) continue;
+        const half = SPARK_HALF_RANGES[j];
+        ctx.strokeStyle = jointColors[j];
+        ctx.lineWidth = 2 * window.devicePixelRatio; ctx.globalAlpha = 0.9;
+        ctx.beginPath();
+        const step = w / (data.length - 1);
+        data.forEach((val, i) => {
+          const norm = Math.max(-1, Math.min(1, val / half));   // -1..1
+          const y = midY - norm * (h / 2 - pad);
+          if (i === 0) ctx.moveTo(i * step, y); else ctx.lineTo(i * step, y);
+        });
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
 
     function renderSparkline(canvas, data, color, halfRange) {
       if (!data || data.length < 2) return;
@@ -407,10 +475,7 @@
     let needsRender = false;
     function animLoop() {
       if (needsRender) {
-        // Render 6 native sparklines
-        for (let i = 0; i < 6; i++) {
-          renderSparkline(sparkCanvases[i], history.joints[i], jointColors[i], SPARK_HALF_RANGES[i]);
-        }
+        renderAllJoints();
         needsRender = false;
       }
       requestAnimationFrame(animLoop);
@@ -834,7 +899,123 @@
       document.getElementById('predict-status').innerText =
         data.aborted ? 'Cycle aborted.' : 'No cycle running.';
     }
+
+    /* ---------- 🔮 Classify / Teach (file-based, coarse → fine) ---------- */
+    let classifyMode = 'infer';
+    const VERDICT_EMOJI = { empty: '👻', solid: '🍬', liquid: '💧' };
+
+    function setMode(m) {
+      classifyMode = m;
+      document.getElementById('mode-infer').classList.toggle('active', m === 'infer');
+      document.getElementById('mode-teach').classList.toggle('active', m === 'teach');
+      document.getElementById('infer-actions').style.display = (m === 'infer') ? '' : 'none';
+      document.getElementById('teach-actions').style.display = (m === 'teach') ? 'flex' : 'none';
+    }
+
+    async function loadRecordings() {
+      try {
+        const d = await (await fetch('/api/recordings')).json();
+        const sel = document.getElementById('rec-select');
+        sel.innerHTML = d.recordings.map(r =>
+          '<option value="' + r.file + '">' + r.label + '  ·  ' + r.file + '</option>').join('');
+      } catch (e) { /* offline */ }
+    }
+
+    function drawSignal(sig) {
+      const c = document.getElementById('sig-canvas');
+      c.width = c.clientWidth * devicePixelRatio; c.height = c.clientHeight * devicePixelRatio;
+      const ctx = c.getContext('2d'), w = c.width, h = c.height, pad = 10 * devicePixelRatio;
+      ctx.clearRect(0, 0, w, h);
+      const data = sig.j3 || []; if (data.length < 2) return;
+      let mn = Math.min(...data), mx = Math.max(...data); if (mx - mn < 1e-6) { mn -= 1; mx += 1; }
+      const rng = mx - mn;
+      if (mn <= 0 && mx >= 0) { const zy = h - pad - ((0 - mn) / rng) * (h - 2 * pad); ctx.strokeStyle = 'rgba(255,117,24,0.2)'; ctx.beginPath(); ctx.moveTo(0, zy); ctx.lineTo(w, zy); ctx.stroke(); }
+      ctx.strokeStyle = '#ff7518'; ctx.lineWidth = 2 * devicePixelRatio; ctx.beginPath();
+      const step = w / (data.length - 1);
+      data.forEach((v, i) => { const y = h - pad - ((v - mn) / rng) * (h - 2 * pad); i ? ctx.lineTo(i * step, y) : ctx.moveTo(i * step, y); });
+      ctx.stroke();
+    }
+
+    async function runClassify() {
+      const file = document.getElementById('rec-select').value;
+      const btn = document.getElementById('classify-btn'); btn.disabled = true; btn.innerText = '…';
+      document.getElementById('classify-status').innerText = 'running cascade…';
+      document.getElementById('fine-result').innerHTML = '';
+      try {
+        const d = await (await fetch('/api/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file }) })).json();
+        if (!d.ok) { document.getElementById('classify-status').innerText = 'error: ' + d.error; return; }
+        document.getElementById('classify-result').style.display = 'block';
+        document.getElementById('verdict-emoji').innerText = VERDICT_EMOJI[d.coarse] || '🥤';
+        document.getElementById('verdict-text').innerText = d.coarse.toUpperCase();
+        document.getElementById('verdict-sub').innerHTML =
+          'true label: <b>' + (d.true_label || '?') + '</b> · ' + (d.has_swirl ? 'swirl ✓' : '<span style="color:#ffc24b;">no swirl</span>');
+        document.getElementById('bar-loaded').style.width = Math.round(d.loadedness * 100) + '%';
+        const showRig = d.coarse !== 'empty';
+        document.getElementById('row-rigidity').style.opacity = showRig ? 1 : 0.35;
+        document.getElementById('track-rigidity').style.opacity = showRig ? 1 : 0.35;
+        document.getElementById('bar-rigid').style.width = Math.round(d.rigidity * 100) + '%';
+        drawSignal(d.signal);
+        document.getElementById('feat-bars').innerHTML = (d.features || []).map(f => {
+          return '<div style="display:flex;align-items:center;gap:8px;font-size:0.75rem;margin:2px 0;">' +
+            '<span style="width:80px;color:#8a74a0;font-family:monospace;">' + f.name + '</span>' +
+            '<span style="font-family:monospace;color:var(--text-bright);">' + f.val + '</span></div>';
+        }).join('');
+        document.getElementById('classify-status').innerText = 'coarse = ' + d.coarse + ' · loadedness ' + Math.round(d.loadedness * 100) + '% · rigidity ' + Math.round(d.rigidity * 100) + '%';
+        window._lastClassify = { file, coarse: d.coarse };
+      } catch (e) { document.getElementById('classify-status').innerText = 'error: ' + e; }
+      finally { btn.disabled = false; btn.innerText = 'CLASSIFY'; }
+    }
+
+    async function runFine() {
+      const lc = window._lastClassify; if (!lc) return;
+      const box = document.getElementById('fine-result'); box.innerHTML = 'querying Atlas…';
+      try {
+        const d = await (await fetch('/api/finegrained', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(lc) })).json();
+        if (!d.ok) { box.innerHTML = '<span style="color:#ff4d6d;">Atlas error: ' + d.error + '</span>'; return; }
+        if (!d.matches.length) { box.innerHTML = 'no neighbours in Atlas yet — teach some items first.'; return; }
+        box.innerHTML = '<div class="kpi-sub">' + (d.filtered ? 'nearest <b>' + d.coarse + '</b> items (class-filtered):' : 'nearest items (no ' + d.coarse + ' in memory):') + '</div>' +
+          d.matches.map((m, i) => '<div style="font-family:monospace;font-size:0.8rem;color:' + (i ? '#8a74a0' : 'var(--accent)') + ';">' +
+            (i === 0 ? '→ ' : '&nbsp;&nbsp; ') + m.similarity.toFixed(3) + '  ' + m.label + '</div>').join('');
+      } catch (e) { box.innerHTML = 'error: ' + e; }
+    }
+
+    async function teachFile() {
+      const file = document.getElementById('rec-select').value;
+      const label = document.getElementById('teach-file-label').value.trim();
+      const st = document.getElementById('classify-status');
+      if (!label) { st.innerText = 'enter a class name first'; return; }
+      st.innerText = 'teaching "' + label + '" to Atlas…';
+      try {
+        const d = await (await fetch('/api/teach_file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file, label }) })).json();
+        st.innerText = d.ok ? ('✓ taught "' + d.label + '" → Atlas (sig ' + d.sig_id + '). Instantly queryable.') : ('error: ' + d.error);
+        if (d.ok) loadClasses();
+      } catch (e) { st.innerText = 'error: ' + e; }
+    }
+
+    async function loadClasses() {
+      const box = document.getElementById('classes-box');
+      try {
+        const d = await (await fetch('/api/classes')).json();
+        if (!d.ok) { box.innerHTML = '<span style="color:#ffc24b;">Atlas offline — ' + d.error + '</span>'; return; }
+        const emoji = { empty: '👻', solid: '🍬', liquid: '💧' };
+        let html = '<div class="kpi-sub" style="margin-bottom:6px;">' + d.total + ' signatures · ' + d.n_labels + ' classes</div>';
+        // all groups side by side on one flex-wrapping row
+        let groups = '';
+        ['empty', 'solid', 'liquid'].forEach(g => {
+          const items = d.groups[g] || {};
+          const keys = Object.keys(items); if (!keys.length) return;
+          groups += '<span style="display:inline-flex; align-items:center; gap:5px;">' +
+            '<span class="ghdr">' + (emoji[g] || '') + ' ' + g + '</span>' +
+            keys.sort().map(k => '<span class="cls-pill">' + k + ' <b>×' + items[k] + '</b></span>').join('') + '</span>';
+        });
+        box.innerHTML = html + '<div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center;">' + groups + '</div>' || 'memory empty';
+      } catch (e) { box.innerHTML = '<span style="color:#ffc24b;">Atlas offline</span>'; }
+    }
+
+    loadRecordings();
+    loadClasses();
+    refreshVSpace();   // show all Atlas signatures immediately
   </script>
-  <div id="build-info" style="text-align:center; color:#6e7681; font-size:0.7rem; padding:12px;">build …</div>
+  <div id="build-info" style="text-align:center; color:#6e7681; font-size:0.65rem; padding:5px;">build …</div>
 </body>
 </html>
