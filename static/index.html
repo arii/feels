@@ -821,6 +821,13 @@ function toggleJoints() {
       document.getElementById('sim-speed').style.display = sim ? '' : 'none';
       document.getElementById('sim-progress-wrap').style.display = sim ? '' : 'none';
       document.getElementById('predict-btn').innerText = sim ? 'Replay recording & predict' : 'Run swirl macro & predict';
+      // Teach needs the robot - disable in sim mode
+      const teachBtn = document.getElementById('teach-btn');
+      if (teachBtn) {
+        teachBtn.disabled = sim;
+        teachBtn.title = sim ? 'Teaching needs the robot - switch to Live mode' : 'Run swirl & save to Atlas';
+        teachBtn.style.opacity = sim ? '0.5' : '1';
+      }
       renderStageStrip(sim ? 'home' : null);
       if (sim) loadSimCandidates();
     }
@@ -861,7 +868,14 @@ function toggleJoints() {
         renderStageStrip('predict');
         renderDecision(data);
       } catch (e) {
-        status.innerText = 'Error: ' + e.message;
+        let msg = String(e.message || e);
+        // Never dump raw tracebacks in the UI - one human-readable line
+        if (msg.includes('Traceback') || msg.includes('File "')) {
+          msg = 'prediction failed - see server log for details';
+        } else if (msg.length > 120) {
+          msg = msg.slice(0, 120) + '…';
+        }
+        status.innerText = 'Error: ' + msg;
       } finally {
         clearInterval(timer);
         btn.disabled = false;

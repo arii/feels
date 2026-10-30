@@ -784,7 +784,10 @@ async def handle_cycle_predict(request):
                         status=409)
                 result = await _simulate_run(csv_path, speed=sim_speed)
                 if not result.get("ok"):
-                    return web.json_response(result, status=409)
+                    err = str(result.get("error", "simulation failed"))
+                    if "Traceback" in err:
+                        err = "simulation failed - see server log"
+                    return web.json_response({"ok": False, "error": err}, status=409)
             else:
                 csv_path = await _run_swirl_macro("mystery")
                 df = pd.read_csv(csv_path)
