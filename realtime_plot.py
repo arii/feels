@@ -238,7 +238,8 @@ def _macro_cmd(object_label: str) -> list:
         return [a.format(label=object_label, cycles=1, here=HERE)
                 for a in shlex.split(tpl)]
     return [sys.executable, os.path.join(HERE, "repeatable_grasp.py"),
-            "--object", object_label, "--record", "--cycles", "1", "--swirl-smooth"]
+            "--object", object_label, "--record", "--cycles", "1", "--swirl-smooth",
+            "--no-inspect"]
 
 
 def _publish_stage(stage: str):

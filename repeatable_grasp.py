@@ -848,6 +848,11 @@ async def main():
         action="store_true",
         help="Inspect resources and planned trajectory without triggering motions",
     )
+    parser.add_argument(
+        "--no-inspect",
+        action="store_true",
+        help="Skip the Viam resource/waypoint inspection (saves ~10-30s of API calls)",
+    )
 
     args = parser.parse_args()
     if args.swirl_smooth:
@@ -872,7 +877,8 @@ async def main():
         arm = Arm.from_robot(machine, "arm")
         gripper = Gripper.from_robot(machine, "gripper")
 
-        await inspect_resources(machine)
+        if not args.no_inspect:
+            await inspect_resources(machine)
 
         if args.dry_run:
             print("[DRY RUN] Motion execution skipped.")
