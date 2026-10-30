@@ -788,7 +788,8 @@ function toggleJoints() {
           const btn = document.getElementById(id);
           if (btn) btn.disabled = busy;
         }
-        if (busy) {
+        if (busy && document.getElementById('run-banner').style.display !== 'flex') {
+          // Only show if not already visible (button handlers show it with specific text)
           showRunBanner(s.sim ? 'Simulating…' : 'Running swirl macro on the robot…');
           document.getElementById('predict-status').innerText = s.sim
             ? `Simulating — replaying ${s.sim.csv} (${s.sim.stage}…)`
