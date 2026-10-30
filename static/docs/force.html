@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>feels docs — effective force without a force-torque sensor</title>
+<style>
+:root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
+body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
+.docnav { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); position:sticky; top:0; flex-wrap:wrap; gap:8px; }
+.docnav a { color:var(--muted); text-decoration:none; margin-left:18px; font-size:0.9rem; }
+.docnav a:hover, .docnav a.active { color:var(--text); }
+.docnav a.brand { margin-left:0; color:var(--text); font-weight:700; }
+main { max-width:780px; margin:0 auto; padding:36px 24px 80px; }
+h1 { font-size:2rem; margin-bottom:0.3em; }
+h2 { font-size:1.3rem; margin-top:2em; border-bottom:1px solid var(--border); padding-bottom:0.3em; }
+p, li { color:#c9d1d9; }
+code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em; }
+pre { background:#161b22; border:1px solid var(--border); border-radius:8px; padding:16px; overflow-x:auto; }
+.honest { background:rgba(210,153,34,0.08); border:1px solid #9e6a03; border-radius:8px; padding:12px 16px; margin:1.5em 0; }
+.honest strong { color:#d29922; }
+</style>
+</head>
+<body>
+<nav class="docnav">
+  <a class="brand" href="/docs">feels · docs</a>
+  <span>
+    <a href="/docs/problem">Problem</a>
+    <a href="/docs/approach">Approach</a>
+    <a class="active" href="/docs/force">Force without a sensor</a>
+    <a href="/docs/relevance">Why it matters</a>
+    <a href="/">← Dashboard</a>
+  </span>
+</nav>
+<main>
+  <h1>Effective force measurement without a force-torque sensor</h1>
+
+  <h2>The textbook relation</h2>
+  <p>Joint torques and end-effector forces are linked through the arm's Jacobian:</p>
+  <pre>τ = Jᵀ(q) · F  +  gravity(q)  +  dynamics(q, q̇, q̈)</pre>
+  <p>A wrist-mounted 6-axis force-torque sensor measures <code>F</code> directly.
+  Without one, you can still reason about it: subtract gravity and the arm's own
+  dynamics, and the leftover torque residuals are the payload talking.</p>
+
+  <h2>What we actually do</h2>
+  <p>We do <strong>not</strong> invert the Jacobian, and we do <strong>not</strong>
+  output calibrated newtons. Full force estimation would need an accurate mass
+  model of the arm plus a clean tare — and our audit showed the tare baseline is
+  the noisiest part of the system (~10 N·m of drift against a ≤2 N·m payload
+  signal). Instead:</p>
+  <ol>
+    <li><strong>Detrend:</strong> a low-pass filter removes gravity and slow
+      pose trends, leaving torque <em>residuals</em> — the fast, motion-coupled
+      part of the signal.</li>
+    <li><strong>Signature, not newtons:</strong> variance, peak-to-peak swing,
+      and phase lag of the residuals become features. A sloshing liquid shows
+      high residual variance and a measurable phase lag; a rigid weight shows
+      low variance and near-zero lag.</li>
+    <li><strong>Compare, don't calibrate:</strong> the features are never
+      converted to force units. They only need <em>contrast</em> between classes
+      — which is exactly what classification requires.</li>
+  </ol>
+
+  <h2>Why this is enough</h2>
+  <p>Discrimination is a weaker demand than measurement. To identify contents you
+  don't need to know the force in newtons — you need the torque traces of water
+  and soap to look different. They do: different viscosity and slosh dynamics
+  imprint different residuals on the same driven motion. The swirl is doing the
+  work of an excitation signal, the way tapping a melon is.</p>
+
+  <h2>Why not just mount the sensor?</h2>
+  <ul>
+    <li>A 6-axis F/T sensor costs <strong>$5k+</strong>, needs wrist integration,
+      wiring, and its own calibration.</li>
+    <li>Every servo arm <em>already reports joint loads for free</em> — it's the
+      telemetry channel the motor controllers use internally.</li>
+    <li>For tasks that need "which of these is it?" rather than "how many
+      newtons?", the free channel carries enough signal.</li>
+  </ul>
+
+  <div class="honest"><strong>What we don't claim.</strong> No calibrated force
+  output. Pose-dependent gravity terms are removed, not modeled — so residuals
+  are only comparable within one fixed macro. And tare drift means static
+  offsets are untrustworthy; everything we use comes from the motion.</div>
+</main>
+</body>
+</html>

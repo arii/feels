@@ -610,9 +610,22 @@ async def handle_stream(request):
     return response
 
 
+_DOC_PAGES = {"index", "problem", "approach", "force", "relevance"}
+
+
+async def handle_docs(request):
+    """Serve the built-in docs pages (the presentation). /docs and /docs/{page}."""
+    page = request.match_info.get("page", "index")
+    if page not in _DOC_PAGES:
+        raise web.HTTPNotFound()
+    return web.FileResponse(os.path.join(HERE, "static", "docs", f"{page}.html"))
+
+
 async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
     app = web.Application()
     app.router.add_get("/", handle_index)
+    app.router.add_get("/docs", handle_docs)
+    app.router.add_get("/docs/{page}", handle_docs)
     app.router.add_get("/stream", handle_stream)
     app.router.add_post("/tare", handle_tare)
     app.router.add_post("/record/start", handle_record_start)

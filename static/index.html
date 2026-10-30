@@ -99,6 +99,8 @@
     button.rec-start { background: #da3633; border-color: #f85149; }
     button.rec-start:hover { background: #f85149; }
     button.rec-stop { background: #6e7681; border-color: #8b949e; }
+    a.docs-link { display:inline-block; background:#21262d; border:1px solid var(--border); color:#8b949e; border-radius:6px; padding:8px 14px; font-size:0.85rem; text-decoration:none; margin-right:8px; }
+    a.docs-link:hover { color:#e6edf3; border-color:#58a6ff; }
     button.active-toggle { background: #238636; border-color: #3fb950; }
     .chart-container {
       background: var(--card-bg);
@@ -193,6 +195,7 @@
       <p style="color: #8b949e; font-size: 0.8rem; margin-top: 2px;">Pick up &rarr; swirl &rarr; place &mdash; identify what's inside the lidded cup</p>
     </div>
     <div class="controls">
+      <a href="/docs" class="docs-link">Docs</a>
       <button class="rec-stop" id="abort-btn" onclick="abortCycle()" title="Stop the running macro">■ Stop</button>
     </div>
   </header>
