@@ -22,7 +22,7 @@ The **feels** system enables an industrial robotic arm (UFactory xArm850) to det
 2. **Dynamic Swirl Excitation:** Horizontal circular orbital swirl induces fluid vortex lag, loose candy chatter, and rotational inertia without spillage.
 3. **Deterministic Feature Extraction:** Extracts a 10-dimensional explicit physical feature vector $z$ and calculates a unit-norm embedding $e \in \mathbb{S}^9$.
 4. **MongoDB Atlas Vector Memory:** Queries the Atlas `cup_dynamics_index` via `$vectorSearch` for instant k-NN classification and online item registration.
-5. **Real-Time Operator UX:** A high-performance web dashboard displaying 10-second rolling force/weight plots, 6-joint sparklines, active cycle phase badges, and live classification verdict cards.
+5. **Real-Time Operator UX:** A high-performance web dashboard displaying 6-joint torque sparklines (fixed axes), the 2-mode predict/teach workflow, live classification verdict cards with feature-space and "why" physics panels, and a 2-D PCA vector-space view of the Atlas signature library.
 
 ---
 
@@ -70,12 +70,11 @@ python realtime_plot.py --port 8080
 ```
 
 Open **`http://localhost:8080`** in your browser to:
-- Monitor live payload weight and vertical force in real time.
-- View individual 6-joint actuator torque sparklines.
-- Click **"▶ Run Pick & Place Cycle"** to trigger the automated pick $\to$ swirl $\to$ place sequence.
-- Inspect the **Detection Reporting Card** to see the predicted object, confidence score, and top-3 Atlas matches.
-- Click **"Teach / Save to Atlas"** to register a new calibrated item into Atlas memory on the fly.
-- Download recorded CSV datasets from the dataset drawer.
+- Monitor 6-joint actuator torque sparklines (10 s rolling windows, fixed ±N·m axes so still joints read as flat lines).
+- Click **"RUN SWIRL MACRO & PREDICT"** (Mode 1) to identify a mystery cup: runs the macro, extracts the 10-D swirl signature, queries Atlas `$vectorSearch`. The verdict card shows the predicted label, confidence bar, top-3 neighbors, the feature-space signature (grouped bars with plain-language explanations), torque-residual "why" charts with measured phase lag, and an honest power spectrum (observable band only).
+- Click **"RUN SWIRL & SAVE TO ATLAS"** (Mode 2) with a label to teach a new item — preset chips cover the confound set (`solid_150g`/`water_150g`/`candy_150g`/`soap_150g`) and basics. The signature is indexed instantly, no retraining.
+- Explore the **Vector space** card: 2-D PCA of the Atlas 10-D signature library, hover any dot for its label, gold/silver/bronze rings mark the top-3 neighbors after a prediction. Refreshes live as items are taught.
+- The footer shows the running `build <sha>` — compare with the branch tip after pulling.
 
 ### 4. CLI Headless Execution
 
@@ -85,13 +84,13 @@ To run the repeatable pick-and-place swirl sequence from the terminal:
 # Run one full pick up -> swirl -> place cycle with labeled telemetry recording
 python repeatable_grasp.py --record --object water_half
 ```
-### 6. Force & Weight Sensitivity Analysis
+### 5. Force & Weight Sensitivity Analysis
 
 ```bash
 python effective_force.py --duration 15.0
 ```
 
-### 7. Zero-Latency On-Robot Control Service (`control_service.py`)
+### 6. Zero-Latency On-Robot Control Service (`control_service.py`)
 
 To eliminate the ~158ms WebRTC cloud latency and sample at 50–200 Hz, deploy [`control_service.py`](control_service.py) (`hackathons:control_logic:generic-service`) directly onto the robot host (`sfhack12`). Test with:
 
@@ -99,7 +98,7 @@ To eliminate the ~158ms WebRTC cloud latency and sample at 50–200 Hz, deploy [
 python client_control_service.py
 ```
 
-### 8. Swirl Feature Extractor + 2-Mode Dashboard
+### 7. Swirl Feature Extractor + 2-Mode Dashboard
 
 The demo loop is pick-up → swirl → place, driven by `repeatable_grasp.py --swirl-smooth` (locked in, don't touch it). Everything below consumes its CSVs.
 
@@ -113,7 +112,7 @@ python feature_extractor.py recordings/recording_20261029_180332_empty_cup.csv
 python feature_extractor.py --calibrate
 ```
 
-Outputs `z` (10 interpretable features: mass offsets, swirl variances, peak-to-peak, phase lag, rattle energy, grip compliance, lift transient, swirl speed), `e` (L2-normalized embedding matching the Atlas `cup_dynamics_index`: 10 dims, cosine), and `diagnostics` (sampling rate, tare QC flags, rattle-band limits). The 5–25 Hz rattle band is **not** observable at 4–5 Hz cloud sampling — the extractor flags `rattle_band_limited` honestly; the real band needs the 100 Hz on-robot module (step 7).
+Outputs `z` (10 interpretable features: mass offsets, swirl variances, peak-to-peak, phase lag, rattle energy, grip compliance, lift transient, swirl speed), `e` (L2-normalized embedding matching the Atlas `cup_dynamics_index`: 10 dims, cosine), and `diagnostics` (sampling rate, tare QC flags, rattle-band limits). The 5–25 Hz rattle band is **not** observable at 4–5 Hz cloud sampling — the extractor flags `rattle_band_limited` honestly; the real band needs the 100 Hz on-robot module (step 6).
 
 **Dashboard API (2 modes):**
 
@@ -144,9 +143,42 @@ python predict_mystery.py --qc                   # tare-baseline quality gate pe
 
 See [`BASELINE_FINDINGS.md`](BASELINE_FINDINGS.md) for the audit behind the QC checks.
 
+**Batch-teach recordings (no robot needed):**
+
+```bash
+python teach_csv.py recordings/ --require-swirl --dry-run  # preview
+python teach_csv.py recordings/ --require-swirl --session thu
+python teach_csv.py --list   # signature counts per label
+```
+
+`teach_csv.py` teaches labeled CSVs straight into Atlas: label resolution is
+`--label` > `object_label` column > filename; mystery/unlabeled and non-grasp
+CSVs are skipped; files already taught are skipped unless `--force`; provenance
+(CSV name, tare flags, phase source) is stored so bad runs can be found and
+deleted later.
+
+**Swirl-protocol consistency matters.** Only recordings with a true SWIRL phase
+should enter the library (`--require-swirl` enforces this): the embedding
+encodes the motion as much as the contents — the same cup scores ~0.4 cosine
+across protocols vs ~0.9 for different items within one protocol. The dashboard
+always records with `--swirl-smooth`, so new data is consistent by construction.
+
+**Vector-space API:**
+
+`POST /api/vectorspace` with optional `{"query": [<10 floats>]}` returns a 2-D
+PCA projection of the Atlas signature library, with the query projected in the
+same basis. Powers the dashboard's Vector space card; refreshes on load, every
+5 s, and after each teach/predict.
+
 ---
 
 ## Experimental Findings: Weight Detection via Joint Torques
+
+> **Note (2026-10-29 audit):** static hold torques were later found identical
+> across contents to 3 decimals — the tare baseline dominates these numbers,
+> not the payload. Treat the mass estimates below as pre-audit observations;
+> the discriminative signal in the current pipeline comes from swirl *dynamics*,
+> not statics. See [`BASELINE_FINDINGS.md`](BASELINE_FINDINGS.md).
 
 Even without a dedicated 6-axis F/T flange sensor, the xArm850 reports high-resolution joint loads via `arm.do_command({"load": ""})`.
 
@@ -282,15 +314,20 @@ python repeatable_grasp.py --dry-run
 
 ---
 
-## Calibrated Object Library
+## Signature Library (in progress — swirl protocol only)
 
-| Object Label | Dynamic Physical Signature | Atlas Verdict |
-|--------------|----------------------------|---------------|
-| `empty_cup` | Zero mass offset ($\Delta \tau \approx 0$), zero swirl variance | 👻 Empty cup (tare) |
-| `water_half` | Medium mass (~180g), dynamic swirl vortex lag | 💧 Water (fluid slosh) |
-| `dish_soap_half` | Medium mass (~210g), heavy viscous swirl damping | 🫧 Dish soap (viscous fluid) |
-| `candy_mixed` | Sharp impact chatter in 5–25 Hz rattle band | 🍬 Candy (trick-or-treat rattle) |
-| `solid_weight` | High mass (~350g), rigid coupling, zero swirl lag | 🪨 Solid weight (rigid mass) |
+Signatures are taught from swirl-protocol recordings only
+(`teach_csv.py --require-swirl`; the dashboard records with `--swirl-smooth`).
+The confound set is the key demo: four cups at the same 150 g, separable only
+by dynamics — mass features alone cannot distinguish them.
+
+| Object Label | Expected dynamic cue |
+|--------------|----------------------|
+| `empty_cup` | Baseline tare; minimal swirl variance |
+| `water_half` | Fluid slosh; torque phase lag vs TCP motion |
+| `dish_soap_half` | Viscous damping; larger phase lag |
+| `candy_mixed` | Loose-impact torque variance (the 5–25 Hz rattle band itself is *not* observable at 4–5 Hz sampling) |
+| `solid_150g` / `water_150g` / `candy_150g` / `soap_150g` | Same-mass confound set — mass features can't separate these; dynamics must |
 
 ---
 

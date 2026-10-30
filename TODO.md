@@ -11,14 +11,17 @@
 ## 1. High-Priority Active Deliverables
 
 ### A. Dynamic Feature Extraction Engine (`feature_extractor.py`)
-- [ ] Create standalone `feature_extractor.py` with `DynamicFeatureExtractor`:
-  - Static lift mass offset ($\Delta \tau_{\text{gravity}}$)
-  - Swirl residual torque variance ($\text{Var}(\tau_{\text{swirl}})$)
-  - FFT spectral peak frequency & power ($f_{\text{peak}}$, $P_{\text{peak}}$)
-  - High-frequency rattle energy in 5–25 Hz band ($E_{\text{rattle}}$)
-  - Orbital swirl cross-correlation phase lag ($\Delta \phi_{\text{lag}}$)
-  - L2-normalized 10D metric embedding $e \in \mathbb{S}^9$
-- [ ] Unit tests running extractor on saved CSV recordings in `recordings/`.
+- [x] Standalone `feature_extractor.py` (done): the real 10-D `z` is
+  `mass_j2`/`mass_j3` (static gravity offsets), `swirl_var_j2`/`swirl_var_j3`,
+  `swirl_ptp_j3`, `phase_lag_s` (xcorr lag of TCP speed vs J3 residual, ±2 s),
+  `rattle_e` (observable band only — 5–25 Hz **not** reachable at 4–5 Hz
+  sampling, flagged `rattle_band_limited`), `grip_comp`, `lift_dyn_j3`,
+  `swirl_speed` → per-feature scaled (`FEATURE_SCALES`, `--calibrate`), then
+  L2-normalized to the embedding `e`. Ships `FEATURE_DESCRIPTIONS`
+  (plain-language meanings for the dashboard) and `swirl_window_series()`
+  (detrended residuals + phase lag for the "why" charts).
+- [x] Unit sanity: extractor runs on saved CSV recordings in `recordings/`
+  (`predict_mystery.py --eval` / `--qc`).
 
 ### B. Repeatable Grasp Pipeline Refactoring (`repeatable_grasp.py`)
 - [ ] Implement smooth horizontal orbital swirl excitation $a_{\text{swirl}}$ in travel position:
@@ -28,29 +31,42 @@
 - [ ] Automatic end-of-run feature extraction and CSV export.
 
 ### C. Web Visualization Dashboard & Online Recording UX (`realtime_plot.py`)
-- [ ] **Live Telemetry & Rolling Sparklines:**
-  - 10-second rolling Chart.js (Weight + Force Fz).
-  - 6 independent native HTML5 canvas sparklines for individual joint torques with zero lines.
-- [ ] **Active Phase Status Badge:**
-  - Real-time indicator (`IDLE` $\to$ `APPROACH` $\to$ `GRASP` $\to$ `LIFT` $\to$ `SWIRL` $\to$ `PLACE`).
-- [ ] **Detection Reporting Card:**
-  - Prominent verdict banner with predicted item emoji and title.
-  - Confidence percentage bar (0–100%).
-  - Top-3 k-NN matches from MongoDB Atlas `$vectorSearch` with similarity scores.
-- [ ] **Online Recording & Instant Teaching:**
-  - "▶ Run Pick & Place Cycle" one-click button.
-  - "⏹ Abort" button for safety.
-  - "Teach / Save to Atlas" one-click button to register current feature vector into Atlas memory.
-  - Dataset recordings drawer with 1-click CSV download.
+- [x] **Live Telemetry & Rolling Sparklines:**
+  - 6 independent native HTML5 canvas sparklines for individual joint torques,
+    fixed ±N·m axes (a still joint reads as a flat line, not stretched noise).
+  - (Removed: derived payload-weight / force-Fz KPI cards — those numbers were
+    tare-contaminated per the audit.)
+- [x] **Detection Reporting Card (Mode 1):**
+  - Predicted class with confidence bar, top-3 Atlas `$vectorSearch` neighbors
+    with similarity scores; persists across refreshes via `/api/status`.
+  - 10-D feature-space panel (grouped bars + plain-language hover descriptions).
+  - "Why" physics: swirl torque-residual traces with measured phase lag, and an
+    honest power spectrum (observable band only — the 5–25 Hz band is labeled
+    as requiring 100 Hz sampling, never faked).
+- [x] **Vector space card:** 2-D PCA of the Atlas signature library, hover
+  tooltips, gold/silver/bronze rings on the top-3 neighbor labels after a
+  prediction, per-label counts; refreshes on load, every 5 s, after teach/predict.
+- [x] **Online Recording & Instant Teaching (Mode 2):**
+  - "RUN SWIRL MACRO & PREDICT" / "RUN SWIRL & SAVE TO ATLAS" one-click buttons
+    with elapsed-second tickers; "■ Stop" for the macro subprocess.
+  - Preset label chips: confound set (`solid_150g`/`water_150g`/`candy_150g`/`soap_150g`)
+    + basics.
+  - `teach_csv.py` batch-teaches labeled CSVs without the robot
+    (`--require-swirl` enforces protocol consistency).
+  - Footer shows the running `build <sha>` so venue pulls are verifiable.
+- [x] **Mock mode** (`FEELS_MOCK=1`): full 2-mode UI from recorded data with a
+  purple MOCK badge — the robot/network failure fallback.
 
 ### D. MongoDB Atlas Calibration & Seed Dataset
-- [ ] Calibrate 5 distinct baseline items via the Pick Up $\to$ Swirl $\to$ Place routine:
-  1. `empty_cup` (Tare baseline, zero mass, zero swirl variance)
-  2. `water_half` (Fluid vortex, dynamic swirl phase lag)
-  3. `dish_soap_half` (Viscous damping, delayed peak torque)
-  4. `candy_mixed` (High-frequency impact chatter in 5–25 Hz rattle band)
-  5. `solid_weight` (Rigid mass, zero swirl lag, zero rattle)
-- [ ] Verify Atlas `$vectorSearch` accuracy across all 5 classes.
+- [ ] Calibrate baseline items via the Pick Up $\to$ Swirl $\to$ Place routine
+  (**swirl protocol only** — mixed protocols confound the embedding):
+  1. `empty_cup` (tare baseline)
+  2. `water_half` (fluid slosh, phase lag)
+  3. `dish_soap_half` (viscous damping, larger lag)
+  4. `candy_mixed` (loose-impact variance; 5–25 Hz band *not* observable at 4–5 Hz)
+  5. `solid_150g` / `water_150g` / `candy_150g` / `soap_150g` (same-mass confound set)
+- [ ] Verify Atlas `$vectorSearch` accuracy across classes.
+- [x] Atlas reachable from venue (was: TLS handshake failure — fixed via IP access list).
 
 ---
 
