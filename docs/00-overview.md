@@ -1,5 +1,16 @@
 # Feels Hackathon — Project Overview
 
+> [!IMPORTANT]
+> **Key Architecture Decisions & Scope Clarifications:**
+> 1. **Fixed Motion Routine — Pick Up, Swirl, and Place:** All experiments use a single, deterministic pick-up, horizontal swirl excitation, and placement sequence executed from a fixed taped square.
+> 2. **No Pushing or Impedance Manipulation:** We do not push, slide, or shuffle cups across the table. This avoids non-holonomic friction slippage, table surface irregularities, and cup tipping.
+> 3. **No Shake or Tilt:** High-frequency linear sine shaking and aggressive angular tilting are eliminated. Swirling provides smooth, continuous centripetal and tangential excitation to differentiate sloshing liquids from tumbling granular solids and rigid masses without spilling.
+> 4. **No Dynamic Vision Grasping:** Vision-guided visual servoing is replaced with fixed, mechanically repeatable arm-position-saver waypoints on a marked square.
+> 5. **No Deep Learning Training On-Site:** We do not train CNNs or Transformers during the hackathon. We use deterministic, hand-crafted physical signal features mapped to a normalized metric embedding.
+> 6. **Primary Focus:** High-reliability **MongoDB Atlas feature extraction** + **Operator UX** for live telemetry visualization, detection reporting, and online dataset recording/teaching.
+
+---
+
 ## Links & Resources
 
 - Event: https://luma.com/ta40197s?tk=ZtkRNO
@@ -12,81 +23,49 @@
 
 ## Problem Statement
 
-Use **proprioception + vision** to identify what the robot is holding inside a lidded coffee cup (liquid, toy, candy, partial fill, etc.). The cup is covered so we cannot see the contents — but we can pick it up, move through motions, and collect data (vision + mostly proprioception) to determine what is inside.
+Use **proprioception** (actuator torques, end-effector load, and arm kinematics) to identify what is inside a covered, lidded coffee cup (water, viscous soap, loose candy, rigid weight, or empty). The contents are occluded from vision — but by executing a fixed **pick up $\to$ swirl $\to$ place** routine, the robot extracts distinctive physical dynamic signatures and matches them via **MongoDB Atlas Vector Search**.
 
-Ideally we set up **online training** to identify new items and then run the experiment.
+### Core Information-Gathering Routine
+- **Fixed Pick Up:** Approach and grasp cup at fixed taped square; vertical lift to transit altitude.
+- **Controlled Swirl:** Smooth circular/orbital horizontal swirl excitation to induce fluid vortex vs. solid rattle dynamics.
+- **Fixed Place:** Controlled descent to place cup back on target square, open gripper, and return home.
 
-### Information-Gathering Actions
-- Pick up — top grasp
-- Pick up — side grasp
-- Pushing
-- Waving through set motion (figure-8, up/down, jiggle)
-- Potentially audio if it makes noise
+*(Archived: Pushing, multi-cup games, violent sine shaking, angular tilt sweeps, and audio).*
 
 ### Object Properties to Identify
 
 **Liquid**
-- High viscosity (dish soap)
-- Water
+- Low viscosity Newtonian fluid (water — dynamic swirl slosh)
+- High viscosity non-Newtonian fluid (dish soap — heavy viscous swirl damping)
 
-**Dry object**
-- Halloween candy fun size
-- Pencil
-- Heavy item
+**Dry Object**
+- Discrete loose solids (Halloween candy fun size — sharp tumbling chatter)
+- Solid rigid weight (rigid coupling, high mass, zero swirl lag)
 
-**Capacity**
-- Think of visual cross-section
-- Vertical filling (full cup of water)
-- Horizontal filling (candy uses small amount of horizontal shape)
+**Baseline / Empty**
+- Empty cup (baseline tare mass, zero internal dynamics)
 
 ---
 
-## Formal Research Problem
-
-**Interactive Dynamic Identification of Hidden Contents**
-
-**Interactive perception** (active dynamic identification) on an unobservable payload θ* sealed inside an opaque container. The robot executes a sequence of dynamic exploratory motions (probing actions) and records multi-modal time-series signals — primarily proprioception (joint positions, velocities, torques/efforts, wrist wrench) along with external/wrist camera observations — to infer the latent physical properties and classify the object category.
-
-### Problem Setting & Formulations
-- **Simplified:** Training a classifier
-- **Formal:** Interactive Bayesian identification of kinematic mechanisms (ref: Barragán, Patrick R. — *Interactive Bayesian identification of kinematic mechanisms*)
-
----
-
-## System Diagram (Active Exploration Loop)
+## System Diagram (Deterministic Swirl & Retrieval Pipeline)
 
 ```
-[Target Cup in Scene]
-  Vision: Grasp Pose Detection via Viam
-          ↓
-[Initial Approach & Grasp]
-  (Slip / Deformation Test)
-          ↓
-  ┌─────────────────────────────────────────────────────────────┐
-  │                   Active Exploration Loop                   │
-  │                                                             │
-  │  1. Action      2. Trajectory   3. Data       4. Feature   │
-  │  Selection:  →  Execution:   →  Collection: → Extraction: →│
-  │  aₖ ~ argmax    Cartesian       High-rate       FFT phase  │
-  │  Info Gain      Oscillation     Joint Torque/   lag,       │
-  │                                 F/T Wrench      transient  │
-  │                                                 spikes     │
-  │                         ↓                                  │
-  │                  5. Belief Update: p(θ | D₁:ₖ)            │
-  └─────────────────────────────────────────────────────────────┘
-          ↓ (Threshold certainty reached)
-[Output: Object Class + Estimated Fill / Viscosity]
+[Taped Table Square]
+        ↓
+[Standard Approach & Grasp] (Fixed Waypoint)
+        ↓
+[Vertical Lift & Static Hold] (Steady-state mass Δτ_gravity)
+        ↓
+[Orbital Swirl Excitation] (Fluid vortex lag, granular tumble chatter, torque variance)
+        ↓
+[Safe Descent & Placement] (Descend, release gripper, return home)
+        ↓
+[Feature Extraction Engine] (Computes 10D physical vector z & normalized embedding e)
+        ↓
+[MongoDB Atlas $vectorSearch] (Cosine k-NN retrieval against 'signatures' collection)
+        ↓
+[Web Dashboard UX] (Live detection report, confidence score, and 1-click teach/record)
 ```
-
----
-
-## Action Items (Initial Backlog)
-- [ ] GitHub repo config setup
-- [ ] Networking / get rough demo with pick-and-place task ASAP
-- [ ] MongoDB data collection
-- [ ] Creating set motions
-- [ ] Training / interactive Bayesian analysis
-- [ ] UX interaction website
 
 ---
 
@@ -94,8 +73,9 @@ Ideally we set up **online training** to identify new items and then run the exp
 
 ### Robot
 - **Robot name:** sfhack12
-- **Arm:** UFactory xArm x850
-- **Camera:** RealSense
+- **Arm:** UFactory xArm x850 (6-DOF)
+- **Gripper:** UFactory parallel-jaw gripper
+- **Camera:** Intel RealSense D435 (monitoring / dashboard visual verification)
 
 ### Viam Server / Agent Versions
 - viam-server: 1.14.3

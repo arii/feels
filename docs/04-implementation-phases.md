@@ -1,101 +1,77 @@
 # Implementation Phases & Roadmap
 
-## The Minimal Viable Demo — "3-Motion Macro"
+> [!IMPORTANT]
+> **Core Decisions & Scope Refinement:**
+> - **Motion Routine:** Fixed **Pick Up $\to$ Swirl $\to$ Place** sequence from a taped table square.
+> - **Explicitly Excluded:**
+>   - *No pushing / impedance manipulation:* Pushing or sliding cups leads to unpredictable friction slippage and tipping.
+>   - *No shake or tilt:* Violent linear shaking and tilt sweeps are eliminated; replaced with gentle, continuous horizontal swirling.
+>   - *No dynamic vision grasping:* Static waypoints provide 100% mechanical repeatability.
+>   - *No deep learning training:* Hand-crafted signal features mapped to Atlas vector search provide robust, explainable metric classification without training delays.
+> - **Primary Focus:** **MongoDB Atlas feature extraction** (`feature_extractor.py`) + **Operator Web UX** (`realtime_plot.py`) for live detection reporting, real-time telemetry, and online recording.
 
-Program one fixed, repeatable 6-second trajectory:
+---
 
-1. **Lift & Hold (1.5 s):** Reads steady-state joint torque / motor current to calculate mass
-2. **Sine Shake (2.5 s):** Shakes horizontally along one axis at 2–3 Hz to capture rattle spikes (candy/pencil) vs. fluid slosh lag (water/soap)
-3. **Slow Tilt (2.0 s):** Tilts end-effector 25° and returns to level to measure static CoM shift
+## The Minimal Viable Demo — "Pick Up $\to$ Swirl $\to$ Place"
+
+One fixed, highly repeatable trajectory:
+
+1. **Approach & Grasp (1.5 s):** Align and close parallel-jaw gripper at taped square.
+2. **Lift & Static Hold (2.0 s):** Lift vertically to travel altitude; measure steady-state torque $\Delta \tau_{\text{gravity}}$ for net mass.
+3. **Orbital Swirl Excitation (3.0 s):** Smooth horizontal circular swirl in the XY plane to excite fluid vortex/slosh lag, solid candy chatter, and torque variance without risking spills.
+4. **Controlled Place & Release (2.0 s):** Descend to target square, open gripper, and return to home staging pose.
 
 ---
 
 ## Streamlined Item Library (Distinct Physical Signatures)
 
-Stick to 4–5 items that have dramatically different physical responses:
+5 calibrated items with distinctly separable dynamic signatures under the swirl routine:
 
-| Item | Signature |
-|------|-----------|
-| Empty cup | Low mass, near-zero shake resistance, no rattle |
-| Water (half-full) | Medium mass, dynamic phase lag, low high-frequency rattle |
-| Dish soap (half-full) | Medium mass, heavy viscous damping, delayed peak torque |
-| Halloween fun-size candy / loose screws | Sharp, high-frequency impact chatter (5–25 Hz rattle peaks) |
-| Solid heavy weight (e.g., small metal tool / solid roll of tape) | High mass, rigid coupling, zero rattle, zero phase lag |
-
----
-
-## Simplified Tech Stack & Roles
-
-- **Robot Control:** Write a single async Python script using Viam Python SDK (`MoveToPosition` or joint waypoints)
-- **Telemetry Buffer:** Record a single Pandas DataFrame per run (`timestamp`, `joint_torques`, `tcp_wrench`, `gripper_load`)
-- **Database & Memory:** Push the 10-dimension feature vector directly to MongoDB Atlas. Query with a straightforward `$vectorSearch` aggregation pipeline
-- **UI:** A single-page lightweight dashboard (Streamlit or Vite/React) with two buttons:
-  - **"Identify Cup"** — Runs macro → extracts features → queries Atlas → displays top 3 matches with % confidence
-  - **"Teach New Item"** — Runs macro → asks for text label → inserts document into Atlas
+| Item | Swirl & Mass Signature | Expected Atlas Match |
+|------|------------------------|----------------------|
+| **Empty Cup** | Zero mass offset ($\Delta \tau \approx 0$), zero swirl variance, zero rattle | `empty_cup` (Tare baseline) |
+| **Water (half-full)** | Medium mass (~180g), dynamic swirl vortex phase lag, low high-frequency chatter | `water_half` |
+| **Dish Soap (half-full)** | Medium mass (~210g), heavy viscous swirl damping, delayed response peak | `dish_soap_half` |
+| **Candy (loose fun-size)** | Medium mass (~140g), sharp impact chatter in 5–25 Hz rattle band | `candy_mixed` |
+| **Solid Weight (rigid)** | High mass (~350g), rigid coupling, zero swirl lag, zero rattle | `solid_weight` |
 
 ---
 
-## Phase 1: MVP (Target: Thursday Dinner / 6:00 PM)
+## Phase 1: Feature Extraction & Swirl Integration (Immediate Focus)
 
-*Goal: Prove the full end-to-end loop — pick a cup, run the fixed 3-in-1 motion, extract a basic feature vector, store/retrieve from MongoDB Atlas, and print the match.*
-
-- [ ] **Taped Workspace Setup:** Tape a fixed target square on the table for consistent cup placement (bypassing visual servoing)
-- [ ] **Hardcoded Pick & Place Script:** Write a Python script using the Viam Arm API to approach the taped square, close the gripper to grab the cup, lift 15 cm, and place it back down
-- [ ] **Telemetry Logging:** In a background thread, log timestamps, joint torques/currents, and wrist F/T readings to a local Pandas DataFrame or CSV during motion
-- [ ] **Standard 3-in-1 Motion Macro:**
-  - Hold static (1.5 s)
-  - 1D horizontal sine shake at 2–3 Hz (2.5 s)
-  - Tilt 25° and return (2.0 s)
-- [ ] **Baseline Feature Extractor:** Calculate an initial 6-dimensional vector:
-  - Static lift torque Δτ_lift (mass proxy)
-  - Shake torque variance σ²_τ
-  - Dominant FFT peak frequency f_max
-  - FFT peak power P_max
-  - Rattle band energy (5–25 Hz)
-  - Tilt torque hysteresis Δτ_tilt
-- [ ] **Atlas Vector Pipeline:**
-  - Seed Atlas with 3 baseline items (Empty cup, Water, Candy)
-  - Write a Python script to send a query vector via `$vectorSearch` and print the top match and cosine similarity score
+- [x] Verified arm-position-saver waypoints (`home-pose`, `approach`, `grasp`, `travel`, `place`)
+- [ ] Implement `DynamicFeatureExtractor` in `feature_extractor.py`:
+  - Static mass offset ($\Delta \tau_{\text{gravity}}$)
+  - Swirl residual torque variance ($\text{Var}(\tau_{\text{swirl}})$)
+  - Dominant FFT frequency and power ($f_{\text{peak}}$, $P_{\text{peak}}$)
+  - High-frequency rattle energy ($E_{\text{rattle}}$ 5–25 Hz)
+  - Swirl phase lag ($\Delta \phi_{\text{lag}}$)
+  - L2-normalized 10D embedding vector $e \in \mathbb{S}^9$
+- [ ] Implement smooth horizontal swirl orbital trajectory in `repeatable_grasp.py`
+- [ ] Automatic end-of-run feature extraction and CSV logging
 
 ---
 
-## Phase 2: Live Operator UI & Visual Proof (Target: Friday 12:30 PM)
+## Phase 2: Web Dashboard UX & Live Detection Reporting (Immediate Focus)
 
-*Goal: Replace the terminal script with a browser dashboard to make the physics and data flow visible to judges.*
-
-- [ ] **Web Dashboard (Vite / React or Streamlit):**
-  - Live camera stream showing the cup on the table
-  - Big action buttons: "Run Diagnostic", "Tare/Home", and "Emergency Stop"
-  - Telemetry graph: Plotting commanded velocity vs. measured torque in real time to show phase lag
-  - FFT spectrum chart highlighting rattle spikes
-- [ ] **Interactive Teaching Loop:**
-  - Add an input box: "Label New Item" + button "Record & Save to Atlas"
-  - Allows registering a new item live during the demo without code restarts
-- [ ] **Expanded Physical Item Suite:** Calibrate 5 items with distinct dynamic signatures:
-  - Empty cup
-  - Water (half-full)
-  - Dish soap / shampoo (viscous fluid)
-  - Fun-size candy or screws (chattering solid)
-  - Solid rigid weight (rigid coupling)
-
----
-
-## Phase 3: Polish & Expansion (Target: Friday 2:30 PM — Before 3:30 PM Demos)
-
-*Goal: Add intelligence, agent interaction, and safety layers if time permits.*
-
-- [ ] **Confidence Threshold & Fallback Probing:** If the top Atlas vector search score is < 0.85, trigger an auxiliary action (e.g., a secondary vertical jiggle or push) to disambiguate close matches
-- [ ] **LLM / Viam Agent Skill Integration:** Wrap the diagnostic routine and Atlas query as callable tools in an LLM agent that outputs an explanation (e.g., *"Detected low high-frequency rattle but high dynamic lag, matching viscous liquid properties"*)
-- [ ] **Slip / Deformation Detection:** Use gripper stroke percentage and motor load to detect if a lightweight cup is being crushed or sliding during high-acceleration shakes
-- [ ] **3-Cup Mystery Game (Stretch Goal):** Allow the user to place three identical cups on marked spots; the robot inspects each one in sequence to find which one holds the target object
+- [ ] Upgrade `realtime_plot.py` dashboard:
+  - **Live Telemetry:** 10s rolling Chart.js (Weight + Force Fz) and 6-joint canvas sparklines
+  - **Active Phase Display:** Live badge tracking (`IDLE` $\to$ `APPROACH` $\to$ `GRASP` $\to$ `LIFT` $\to$ `SWIRL` $\to$ `PLACE`)
+  - **Detection Reporting Card:** Prominent verdict displaying predicted label with emoji, confidence score, and top-3 k-NN matches from Atlas `$vectorSearch`
+  - **Online Recording & Teaching:**
+    - "▶ Run Pick & Place Cycle" one-click button
+    - "⏹ Abort" button
+    - "Teach / Save to Atlas" one-click button to register new calibrated items
+    - CSV dataset drawer with download links
 
 ---
 
 ## What to Cut vs. What to Keep
 
-| Cut | Keep |
-|-----|------|
-| Dynamic vision tracking (visual servoing / continuous cup tracking) | Fixed taped square for placement; camera only for static 2D/depth check or live dashboard stream |
-| Cartesian impedance pushing & three-cup shuffles | Single vertical pick-and-place routine |
-| Deep learning & neural network training on-site (CNNs/Transformers) | Hand-crafted signal features (mass, FFT peak, spectral energy, phase lag) → 8–12 dim vector |
-| Multi-step active Bayesian planning in real time | Single, deterministic 3-in-1 diagnostic macro every time |
+| Cut (Archived) | Keep (Active Architecture) |
+|----------------|----------------------------|
+| Dynamic vision tracking / visual servoing / YOLO-3D grasp planning | Fixed taped table square with arm-position-saver waypoints |
+| Cartesian impedance pushing & cup shuffling | Single vertical pick-and-place routine |
+| Violent linear sine shaking & tilt sweeps | Smooth horizontal circular swirl excitation |
+| Deep learning & neural network training on-site (CNNs/Transformers) | Hand-crafted physical signal features mapped to a normalized 10D vector |
+| Dynamic Bayesian policy exploration | Deterministic pick $\to$ swirl $\to$ place execution with Atlas k-NN retrieval |

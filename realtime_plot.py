@@ -13,11 +13,15 @@ Optimizations:
 
 import asyncio
 import os
+import re
 import time
 import math
 import json
 import csv
+import glob
 import argparse
+import subprocess
+import sys
 from datetime import datetime
 from typing import Set, List, Optional, Dict, Any
 from dotenv import load_dotenv
@@ -25,6 +29,9 @@ from dotenv import load_dotenv
 from aiohttp import web
 from viam.robot.client import RobotClient
 from viam.components.arm import Arm
+
+import pandas as pd
+import feature_extractor
 
 load_dotenv()
 
@@ -34,6 +41,127 @@ VIAM_MACHINE_ADDRESS = os.getenv("VIAM_MACHINE_ADDRESS", "sfhack12-main.ty1cywh7
 GRAVITY = 9.80665
 RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recordings")
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+def _git_sha():
+    try:
+        out = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                             cwd=HERE, capture_output=True, text=True, timeout=5)
+        return out.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+GIT_SHA = _git_sha()
+
+# ── pick-swirl-place cycle machinery ──────────────────────────────────────
+_cycle_lock = asyncio.Lock()
+_cycle_proc: Optional[subprocess.Popen] = None
+_cycle_status: str = "idle"   # idle | running | done | error | aborted
+_last_prediction: Optional[dict] = None   # last successful Mode-1 result (survives refresh)
+
+# MOCK MODE: FEELS_MOCK=1 serves the 2-mode UI from recorded data instead of
+# the physical robot + Atlas. The mock predict runs the real feature
+# extractor on a recorded CSV and a local cosine k-NN over the reference
+# recordings (same math Atlas $vectorSearch would do). The UI shows a MOCK
+# badge whenever this is active — never demo it as live hardware.
+MOCK_MODE = os.getenv("FEELS_MOCK", "0") == "1"
+MOCK_DELAY_SEC = float(os.getenv("FEELS_MOCK_DELAY", "2.0"))
+
+
+def _atlas():
+    """Import atlas lazily so the dashboard boots without Mongo creds."""
+    import atlas as _a
+    if not os.getenv("MONGODB_URI"):
+        raise RuntimeError("MONGODB_URI not set — Atlas teach/identify unavailable")
+    return _a
+
+
+def _vspace_2d(items):
+    """2-D PCA projection of (label, 10-D vector) items via SVD. JSON-safe."""
+    import numpy as np
+    if not items:
+        return []
+    X = np.array([v for _, v in items], dtype=float)
+    X = X - X.mean(axis=0)
+    if len(items) < 2 or np.allclose(X, 0):
+        return [{"label": l, "x": 0.0, "y": 0.0} for l, _ in items]
+    U, S, _ = np.linalg.svd(X, full_matrices=False)
+    coords = U[:, :2] * S[:2]
+    if coords.shape[1] < 2:
+        coords = np.pad(coords, ((0, 0), (0, 2 - coords.shape[1])))
+    return [{"label": l, "x": round(float(p[0]), 4), "y": round(float(p[1]), 4)}
+            for (l, _), p in zip(items, coords)]
+
+
+async def handle_vspace(request):
+    """2-D PCA of the Atlas signature library, optionally with the query
+    vector projected in the same basis (POST {"query": [10 floats]})."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    query = data.get("query")
+    try:
+        a = _atlas()
+        docs = list(a.get_db().signatures.find({}, {"label": 1, "feature_vector": 1}))
+        items = [(d.get("label", "?"), d["feature_vector"])
+                 for d in docs if d.get("feature_vector")]
+        qidx = -1
+        if isinstance(query, list) and len(query) == 10:
+            items.append(("QUERY", [float(v) for v in query]))
+            qidx = len(items) - 1
+        return web.json_response({
+            "ok": True, "points": _vspace_2d(items),
+            "query_index": qidx, "n": len(items) - (1 if qidx >= 0 else 0),
+        })
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)[:300]}, status=500)
+
+
+def _newest_recording(after_ts: float) -> Optional[str]:
+    cands = [p for p in glob.glob(os.path.join(RECORDINGS_DIR, "recording_*.csv"))
+             if os.path.getmtime(p) >= after_ts - 2]
+    return max(cands, key=os.path.getmtime) if cands else None
+
+
+def _sanitize_label(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_") or "item"
+
+
+async def _run_swirl_macro(object_label: str) -> str:
+    """Run one pick-up → swirl → place cycle via repeatable_grasp.py.
+
+    Returns the path of the freshly recorded CSV. Raises on failure/abort.
+    Only one cycle may run at a time (guarded by _cycle_lock by callers).
+    """
+    global _cycle_proc, _cycle_status
+    _cycle_status = "running"
+    cmd = [sys.executable, os.path.join(HERE, "repeatable_grasp.py"),
+           "--object", object_label, "--record", "--cycles", "1", "--swirl-smooth"]
+    started = time.time()
+    try:
+        _cycle_proc = subprocess.Popen(
+            cmd, cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        loop = asyncio.get_event_loop()
+        # communicate() drains stdout while waiting — wait()+read() would
+        # deadlock once the pipe buffer (~64KB) fills on a chatty macro.
+        out, _ = await loop.run_in_executor(None, _cycle_proc.communicate)
+        rc = _cycle_proc.returncode
+        _cycle_proc = None
+        if rc != 0:
+            _cycle_status = "error"
+            raise RuntimeError(f"swirl macro exited rc={rc}\n{out[-2000:]}")
+        csv_path = _newest_recording(started)
+        if not csv_path:
+            _cycle_status = "error"
+            raise RuntimeError("macro finished but no new recording CSV appeared")
+        _cycle_status = "done"
+        return csv_path
+    except Exception:
+        _cycle_status = "error"
+        raise
+    finally:
+        _cycle_proc = None
 
 
 class RobotForceState:
@@ -240,7 +368,6 @@ HTML_PAGE = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <title>Viam xArm850 — 10s Rolling Real-Time Visualizer</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     :root {
       --bg: #0d1117;
@@ -381,6 +508,7 @@ HTML_PAGE = """<!DOCTYPE html>
       margin-bottom: 6px;
     }
     .joint-name { font-size: 0.85rem; font-weight: 600; color: var(--text-bright); }
+    .joint-range { font-size: 0.65rem; color: #6e7681; margin-left: 6px; }
     .joint-val { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; }
     .canvas-wrap {
       position: relative;
@@ -405,95 +533,109 @@ HTML_PAGE = """<!DOCTYPE html>
       align-items: center;
       justify-content: space-between;
     }
+    .feat-group { font-size:0.68rem; color:#8b949e; text-transform:uppercase; letter-spacing:0.04em; margin:8px 0 2px; }
+    .feat-row { display:grid; grid-template-columns:112px 1fr 54px; gap:8px; align-items:center; font-family:monospace; font-size:0.72rem; padding:1px 0; }
+    .feat-name { color:#6e7681; }
+    .feat-val { color:#e6edf3; text-align:right; }
+    .feat-bar-wrap { background:#21262d; border-radius:3px; height:8px; overflow:hidden; }
+    .feat-bar { display:block; height:100%; background:#1f6feb; }
+    .why-canvas { width:100%; height:110px; background:#0d1117; border:1px solid var(--border); border-radius:6px; margin-top:4px; }
+    #vspace-tip { display:none; position:absolute; background:#161b22; border:1px solid var(--border); border-radius:4px; padding:3px 8px; font-size:0.72rem; font-family:monospace; color:#e6edf3; pointer-events:none; z-index:5; }
+    .chip { background:#21262d; border:1px solid var(--border); color:#8b949e; border-radius:20px; padding:4px 12px; font-size:0.75rem; cursor:pointer; font-family:monospace; }
+    .chip:hover { color:#e6edf3; border-color:#58a6ff; }
+    .chip-label { color:#6e7681; font-size:0.72rem; align-self:center; }
   </style>
 </head>
 <body>
   <header>
     <div>
       <h1>
-        xArm850 Real-Time Telemetry
+        PHYSICAL AI CUP INSPECTOR
         <span class="badge" id="status-badge">CONNECTING...</span>
-        <span class="badge-rec" id="rec-badge">REC</span>
+        <span class="badge" id="atlas-badge" style="background:#6e7681;">ATLAS: ...</span>
+        <span class="badge" id="mock-badge" style="background:#8957e5; display:none;">MOCK</span>
       </h1>
-      <p style="color: #8b949e; font-size: 0.8rem; margin-top: 2px;">10-Second High-Performance Rolling Window</p>
+      <p style="color: #8b949e; font-size: 0.8rem; margin-top: 2px;">Pick up &rarr; swirl &rarr; place &mdash; identify what's inside the lidded cup</p>
     </div>
     <div class="controls">
-      <input type="text" id="obj-label-input" placeholder="Object label (e.g. candy, water)" style="background: #21262d; border: 1px solid #30363d; color: #fff; padding: 7px 10px; border-radius: 6px; font-size: 0.85rem; width: 175px;" />
-      <button class="rec-start" id="rec-btn" onclick="toggleRecording()">● Record Session</button>
-      <button class="tare-btn" onclick="tare()">Tare (Zero)</button>
-      <button class="active-toggle" id="filter-btn" onclick="toggleFilter()">EMA Filter: ON</button>
-      <button id="mode-btn" onclick="toggleMode()">View: Delta (Δ Nm)</button>
+      <button class="rec-stop" id="abort-btn" onclick="abortCycle()" title="Stop the running macro">■ Stop</button>
     </div>
   </header>
 
-  <div class="download-banner" id="dl-banner">
-    <span id="dl-msg">Session recorded successfully.</span>
-    <button onclick="downloadCSV()" style="background: #238636; border-color: #3fb950;">⬇ Download CSV Dataset</button>
+  <div class="grid-kpi" style="grid-template-columns: 1fr 1fr;">
+    <div class="kpi-card">
+      <div class="kpi-label">Mode 1 &mdash; Identify mystery object</div>
+      <button class="tare-btn" id="predict-btn" onclick="runPredict()" style="font-size:1rem; padding:10px 20px; margin:8px 0;">RUN SWIRL MACRO &amp; PREDICT</button>
+      <div id="decision-card" style="display:none; margin-top:8px; border-top:1px solid var(--border); padding-top:8px;">
+        <div class="kpi-label">Predicted class</div>
+        <div class="kpi-val" id="pred-label" style="font-size:1.5rem;">—</div>
+        <div style="background:#21262d; border-radius:6px; height:14px; margin:6px 0; overflow:hidden;">
+          <div id="pred-conf-bar" style="height:100%; width:0%; background:#3fb950;"></div>
+        </div>
+        <div class="kpi-sub" id="pred-conf-text">confidence —</div>
+        <div class="kpi-label" style="margin-top:8px;">Nearest Atlas neighbors</div>
+        <div id="pred-neighbors" style="font-size:0.85rem; margin-top:4px;"></div>
+        <div class="kpi-label" style="margin-top:8px;">10-D swirl signature — feature space</div>
+        <div id="pred-features"></div>
+        <div class="kpi-sub" id="pred-data" style="margin-top:6px;"></div>
+        <div class="kpi-label" style="margin-top:8px;">Why — torque residuals from this run</div>
+        <canvas id="ts-canvas" class="why-canvas"></canvas>
+        <div class="kpi-sub" id="ts-lag"></div>
+        <div class="kpi-label" style="margin-top:8px;">Power spectrum</div>
+        <canvas id="psd-canvas" class="why-canvas"></canvas>
+        <div class="kpi-sub" id="psd-note"></div>
+      </div>
+      <div class="kpi-sub" id="predict-status"></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Mode 2 &mdash; Teach new item (online dataset builder)</div>
+      <div style="display:flex; gap:8px; margin:8px 0;">
+        <input type="text" id="teach-label-input" placeholder="Item name, e.g. Loose Pens" style="flex:1; background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem;" />
+        <button class="rec-start" id="teach-btn" onclick="teachItem()" style="font-size:0.9rem; padding:10px 16px;">RUN SWIRL &amp; SAVE TO ATLAS</button>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px; margin:8px 0;">
+        <span class="chip-label">confound set:</span>
+        <button class="chip" onclick="setTeachLabel('solid_150g')">solid_150g</button>
+        <button class="chip" onclick="setTeachLabel('water_150g')">water_150g</button>
+        <button class="chip" onclick="setTeachLabel('candy_150g')">candy_150g</button>
+        <button class="chip" onclick="setTeachLabel('soap_150g')">soap_150g</button>
+        <span class="chip-label" style="margin-left:8px;">basics:</span>
+        <button class="chip" onclick="setTeachLabel('empty_cup')">empty_cup</button>
+        <button class="chip" onclick="setTeachLabel('water_half')">water_half</button>
+        <button class="chip" onclick="setTeachLabel('candy_mixed')">candy_mixed</button>
+        <button class="chip" onclick="setTeachLabel('dish_soap_half')">dish_soap_half</button>
+      </div>
+      <div class="kpi-sub" id="teach-status">Signature saved → vector indexed in MongoDB, instantly queryable.</div>
+    </div>
   </div>
 
-  <div class="grid-kpi">
-    <div class="kpi-card">
-      <div class="kpi-label">Effective Payload Weight</div>
-      <div class="kpi-val highlight-red" id="kpi-weight">+0.0 g</div>
-      <div class="kpi-sub">End-Effector Mass</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Vertical Force Fz</div>
-      <div class="kpi-val highlight-blue" id="kpi-force">0.00 N</div>
-      <div class="kpi-sub">External Load</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Shoulder Torque (J2)</div>
-      <div class="kpi-val highlight-green" id="kpi-j2">-16.05 Nm</div>
-      <div class="kpi-sub" id="kpi-delta-j2">Δ: 0.0000 Nm</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Elbow Torque (J3)</div>
-      <div class="kpi-val" id="kpi-j3">-16.82 Nm</div>
-      <div class="kpi-sub" id="kpi-j3-sub">Cantilever Moment</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Recording Status</div>
-      <div class="kpi-val" id="kpi-rec" style="font-size: 1.25rem;">IDLE</div>
-      <div class="kpi-sub" id="kpi-rec-sub">0 samples</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Cloud Latency (RTT)</div>
-      <div class="kpi-val" id="kpi-rtt" style="color: #39c5cf;">-- ms</div>
-      <div class="kpi-sub">Round-trip Query Time</div>
-    </div>
+  <!-- Vector space (2-D PCA of the Atlas signature library) -->
+  <div style="background:#161b22; border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px; position:relative;">
+    <div class="kpi-label">Vector space — 2-D PCA of the Atlas 10-D signature library</div>
+    <canvas id="vspace-canvas" class="why-canvas" style="height:220px;"></canvas>
+    <div id="vspace-tip"></div>
+    <div class="kpi-sub" id="vspace-note" style="margin-top:6px;"></div>
   </div>
 
-  <!-- Primary Force & Weight Chart (Optimized 10s Window) -->
-  <div class="chart-container">
-    <div class="chart-header">
-      <span>Effective End-Effector Force & Weight (Rolling 10s Window)</span>
-      <span style="font-size: 0.8rem; color: #8b949e;">Derived from Shoulder Pitch Δτ</span>
-    </div>
-    <div style="height: 220px;">
-      <canvas id="forceChart"></canvas>
-    </div>
-  </div>
-
-  <!-- High-Performance Separated 6-Joint Sparklines (Pure Native Canvas) -->
+  <!-- Live joint torques (native canvas sparklines) -->
   <div class="section-title">
-    <span>Individual Actuator Torques (Independent Auto-Scaling 10s Windows)</span>
-    <span style="font-size: 0.8rem; color: #8b949e;">Ultra-fast native canvas (<0.1ms render)</span>
+    <span>Live Joint Torques (10s Rolling Windows)</span>
+    <span style="font-size: 0.8rem; color: #8b949e;">Ultra-fast native canvas (&lt;0.1ms render)</span>
   </div>
 
   <div class="grid-joints">
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #39c5cf;">Joint 1 — Base (Yaw)</span>
-        <span class="joint-val" id="val-j1" style="color: #39c5cf;">0.000</span>
+        <span class="joint-val" id="val-j1" style="color: #39c5cf;">0.000</span><span class="joint-range">±5 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j1" class="sparkline"></canvas></div>
     </div>
 
     <div class="joint-card">
       <div class="joint-header">
-        <span class="joint-name" style="color: #3fb950;">Joint 2 — Shoulder (Pitch) [Weight]</span>
-        <span class="joint-val" id="val-j2" style="color: #3fb950;">-16.05</span>
+        <span class="joint-name" style="color: #3fb950;">Joint 2 — Shoulder (Pitch)</span>
+        <span class="joint-val" id="val-j2" style="color: #3fb950;">-16.05</span><span class="joint-range">±25 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j2" class="sparkline"></canvas></div>
     </div>
@@ -501,7 +643,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #d29922;">Joint 3 — Elbow (Pitch)</span>
-        <span class="joint-val" id="val-j3" style="color: #d29922;">-16.82</span>
+        <span class="joint-val" id="val-j3" style="color: #d29922;">-16.82</span><span class="joint-range">±20 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j3" class="sparkline"></canvas></div>
     </div>
@@ -509,7 +651,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #f0883e;">Joint 4 — Forearm (Roll)</span>
-        <span class="joint-val" id="val-j4" style="color: #f0883e;">0.778</span>
+        <span class="joint-val" id="val-j4" style="color: #f0883e;">0.778</span><span class="joint-range">±5 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j4" class="sparkline"></canvas></div>
     </div>
@@ -517,7 +659,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #bc8cff;">Joint 5 — Wrist (Pitch)</span>
-        <span class="joint-val" id="val-j5" style="color: #bc8cff;">0.373</span>
+        <span class="joint-val" id="val-j5" style="color: #bc8cff;">0.373</span><span class="joint-range">±5 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j5" class="sparkline"></canvas></div>
     </div>
@@ -525,7 +667,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #58a6ff;">Joint 6 — Flange (Roll)</span>
-        <span class="joint-val" id="val-j6" style="color: #58a6ff;">0.001</span>
+        <span class="joint-val" id="val-j6" style="color: #58a6ff;">0.001</span><span class="joint-range">±5 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j6" class="sparkline"></canvas></div>
     </div>
@@ -547,59 +689,7 @@ HTML_PAGE = """<!DOCTYPE html>
       joints: [[], [], [], [], [], []]
     };
 
-    // Primary Chart.js optimized (zero animations, fast line)
-    const ctxForce = document.getElementById('forceChart').getContext('2d');
-    const forceChart = new Chart(ctxForce, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [
-          {
-            label: 'Weight (g)',
-            data: [],
-            borderColor: '#ff7b72',
-            backgroundColor: 'rgba(255, 123, 114, 0.08)',
-            borderWidth: 2,
-            pointRadius: 0,
-            tension: 0,
-            fill: true,
-            yAxisID: 'yWeight'
-          },
-          {
-            label: 'Force Fz (N)',
-            data: [],
-            borderColor: '#58a6ff',
-            borderWidth: 1.5,
-            borderDash: [4, 4],
-            pointRadius: 0,
-            tension: 0,
-            yAxisID: 'yForce'
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        elements: { line: { tension: 0 } },
-        scales: {
-          x: { grid: { color: '#21262d' }, ticks: { color: '#8b949e', maxTicksLimit: 6 } },
-          yWeight: {
-            position: 'left',
-            grid: { color: '#21262d' },
-            ticks: { color: '#ff7b72', font: { size: 10 } },
-            title: { display: true, text: 'Weight (g)', color: '#ff7b72' }
-          },
-          yForce: {
-            position: 'right',
-            grid: { drawOnChartArea: false },
-            ticks: { color: '#58a6ff', font: { size: 10 } },
-            title: { display: true, text: 'Force (N)', color: '#58a6ff' }
-          }
-        },
-        plugins: { legend: { labels: { color: '#c9d1d9', boxWidth: 12 } } }
-      }
-    });
+    // (force/weight chart removed — derived mass was tare-contaminated; see BASELINE_FINDINGS.md)
 
     // Native High-Performance Sparkline Renderer (<0.1ms per canvas)
     const sparkCanvases = [
@@ -611,6 +701,10 @@ HTML_PAGE = """<!DOCTYPE html>
       document.getElementById('c-j6')
     ];
     const jointColors = ['#39c5cf', '#3fb950', '#d29922', '#f0883e', '#bc8cff', '#58a6ff'];
+    // Fixed y-axis half-ranges (N·m) per joint for the delta view: the axis never
+    // gets narrower than ±this around 0, so a still joint draws a flat line
+    // instead of stretching sensor noise full-height. Expands if data exceeds it.
+    const SPARK_HALF_RANGES = [5, 25, 20, 5, 5, 5];
 
     function resizeCanvases() {
       sparkCanvases.forEach(c => {
@@ -621,7 +715,7 @@ HTML_PAGE = """<!DOCTYPE html>
     window.addEventListener('resize', resizeCanvases);
     resizeCanvases();
 
-    function renderSparkline(canvas, data, color) {
+    function renderSparkline(canvas, data, color, halfRange) {
       if (!data || data.length < 2) return;
       const ctx = canvas.getContext('2d');
       const w = canvas.width;
@@ -630,10 +724,10 @@ HTML_PAGE = """<!DOCTYPE html>
 
       let min = Math.min(...data);
       let max = Math.max(...data);
-      if (max - min < 0.02) {
-        min -= 0.05;
-        max += 0.05;
-      }
+      // Fixed axis: at least ±halfRange around 0. A constant signal then draws
+      // as a flat line at its true offset instead of filling the canvas.
+      min = Math.min(min, -halfRange);
+      max = Math.max(max, halfRange);
       const padding = 6;
       const range = max - min;
 
@@ -667,15 +761,9 @@ HTML_PAGE = """<!DOCTYPE html>
     let needsRender = false;
     function animLoop() {
       if (needsRender) {
-        // Update Chart.js (10s rolling window)
-        forceChart.data.labels = history.t;
-        forceChart.data.datasets[0].data = history.grams;
-        forceChart.data.datasets[1].data = history.fz;
-        forceChart.update();
-
         // Render 6 native sparklines
         for (let i = 0; i < 6; i++) {
-          renderSparkline(sparkCanvases[i], history.joints[i], jointColors[i]);
+          renderSparkline(sparkCanvases[i], history.joints[i], jointColors[i], SPARK_HALF_RANGES[i]);
         }
         needsRender = false;
       }
@@ -696,35 +784,8 @@ HTML_PAGE = """<!DOCTYPE html>
       eventSource.onmessage = (event) => {
         const d = JSON.parse(event.data);
 
-        // Update KPIs immediately
-        const sign = d.grams >= 0 ? '+' : '';
-        document.getElementById('kpi-weight').innerText = `${sign}${d.grams.toFixed(1)} g`;
-        document.getElementById('kpi-force').innerText = `${d.fz.toFixed(2)} N`;
-        document.getElementById('kpi-j2').innerText = `${(useFilter ? d.smooth[1] : d.raw[1]).toFixed(3)} Nm`;
-        document.getElementById('kpi-delta-j2').innerText = `Δ: ${(d.delta_tau_j2 >= 0 ? '+' : '') + d.delta_tau_j2.toFixed(4)} Nm`;
-        document.getElementById('kpi-j3').innerText = `${(useFilter ? d.smooth[2] : d.raw[2]).toFixed(3)} Nm`;
-
-        if (d.rtt_ms !== undefined) {
-          const rttEl = document.getElementById('kpi-rtt');
-          rttEl.innerText = `${d.rtt_ms.toFixed(0)} ms`;
-          if (d.rtt_ms < 100) rttEl.style.color = '#3fb950';
-          else if (d.rtt_ms < 300) rttEl.style.color = '#d29922';
-          else rttEl.style.color = '#ff7b72';
-        }
-
-        if (d.is_recording) {
-          document.getElementById('kpi-rec').innerText = 'REC ●';
-          document.getElementById('kpi-rec').style.color = '#ff7b72';
-          document.getElementById('kpi-rec-sub').innerText = `${d.rec_count} samples`;
-        } else {
-          document.getElementById('kpi-rec').innerText = 'IDLE';
-          document.getElementById('kpi-rec').style.color = '#c9d1d9';
-        }
-
         // Manage rolling 10-second buffer
         history.t.push(`${d.t}s`);
-        history.grams.push(d.grams);
-        history.fz.push(d.fz);
 
         const activeVals = viewModeDelta ? d.deltas : (useFilter ? d.smooth : d.raw);
         for (let i = 0; i < 6; i++) {
@@ -756,60 +817,341 @@ HTML_PAGE = """<!DOCTYPE html>
     }
 
     connectSSE();
+    pollStatus();
+    setInterval(pollStatus, 5000);
 
-    async function tare() {
-      await fetch('/tare', { method: 'POST' });
-    }
+    const FEAT_GROUPS = [
+      ['Static lift — mass estimate', ['mass_j2', 'mass_j3', 'lift_dyn_j3']],
+      ['Swirl dynamics — what moves inside', ['swirl_var_j2', 'swirl_var_j3', 'swirl_ptp_j3', 'phase_lag_s', 'rattle_e']],
+      ['Grip & excitation', ['grip_comp', 'swirl_speed']],
+    ];
 
-    async function toggleRecording() {
-      const btn = document.getElementById('rec-btn');
-      const badge = document.getElementById('rec-badge');
-
-      if (!isRecording) {
-        const objInput = document.getElementById('obj-label-input').value.trim();
-        const url = '/record/start' + (objInput ? `?object=${encodeURIComponent(objInput)}` : '');
-        const res = await fetch(url, { method: 'POST' });
-        const data = await res.json();
-        isRecording = true;
-        btn.innerText = '■ Stop Recording';
-        btn.className = 'rec-stop';
-        badge.style.display = 'inline-block';
-        document.getElementById('dl-banner').style.display = 'none';
-      } else {
-        const res = await fetch('/record/stop', { method: 'POST' });
-        const data = await res.json();
-        isRecording = false;
-        btn.innerText = '● Record Session';
-        btn.className = 'rec-start';
-        badge.style.display = 'none';
-        if (data.file) {
-          lastRecordedFile = data.file;
-          document.getElementById('dl-msg').innerText = `Session saved: ${data.file} (${data.samples} samples)`;
-          document.getElementById('dl-banner').style.display = 'flex';
+    function renderFeatureSpace(data) {
+      const f = data.features || {};
+      const names = f.names || [], vals = f.z || [], desc = f.descriptions || {};
+      const dq = data.diagnostics || {};
+      const idx = {};
+      names.forEach((n, i) => idx[n] = i);
+      const maxAbs = Math.max(1e-9, ...vals.map(v => Math.abs(v || 0)));
+      let html = '';
+      for (const [gname, gfeats] of FEAT_GROUPS) {
+        html += `<div class="feat-group">${gname}</div>`;
+        for (const n of gfeats) {
+          const v = vals[idx[n]] ?? 0;
+          const pct = Math.round(Math.abs(v) / maxAbs * 100);
+          const note = (n === 'rattle_e' && dq.rattle_band_limited) ? ' — band-limited at this sample rate' : '';
+          const title = ((desc[n] || '') + note).replace(/"/g, '&quot;');
+          html += `<div class="feat-row" title="${title}"><span class="feat-name">${n}</span>` +
+            `<span class="feat-bar-wrap"><span class="feat-bar" style="width:${pct}%"></span></span>` +
+            `<span class="feat-val">${v.toFixed(3)}</span></div>`;
         }
       }
+      document.getElementById('pred-features').innerHTML = html;
+      const tf = (dq.tare_flags && dq.tare_flags.length) ? 'tare QC: ' + dq.tare_flags.join(', ') : 'tare QC: OK';
+      document.getElementById('pred-data').innerText =
+        `${dq.n_samples ?? '?'} samples @ ${dq.fs_hz ?? '?'} Hz · ${dq.n_swirl_samples ?? 0} swirl samples` +
+        ` · phase src: ${dq.phase_source ?? '?'} · ${tf}`;
     }
 
-    function downloadCSV() {
-      if (lastRecordedFile) {
-        window.location.href = `/record/download?file=${encodeURIComponent(lastRecordedFile)}`;
+    function sizeCanvas(c) {
+      const dpr = window.devicePixelRatio || 1;
+      c.width = Math.max(1, c.clientWidth * dpr);
+      c.height = Math.max(1, c.clientHeight * dpr);
+      return { ctx: c.getContext('2d'), w: c.width, h: c.height, dpr };
+    }
+
+    function renderWhy(data) {
+      const ts = data.timeseries;
+      const tsc = document.getElementById('ts-canvas');
+      const psc = document.getElementById('psd-canvas');
+      const lagEl = document.getElementById('ts-lag');
+      const noteEl = document.getElementById('psd-note');
+      if (!ts || !ts.t || ts.t.length < 4) {
+        tsc.style.display = 'none'; psc.style.display = 'none';
+        lagEl.innerText = ''; noteEl.innerText = '';
+        return;
+      }
+      tsc.style.display = 'block'; psc.style.display = 'block';
+
+      // --- torque residuals (J2 green, J3 amber), symmetric axis ---
+      let { ctx, w, h, dpr } = sizeCanvas(tsc);
+      const pad = 8 * dpr;
+      const tEnd = Math.max(1e-9, ts.t[ts.t.length - 1]);
+      let mx = Math.max(1e-6, ...ts.r2.concat(ts.r3).map(v => Math.abs(v))) * 1.1;
+      const X = i => pad + (ts.t[i] / tEnd) * (w - 2 * pad);
+      const Y = v => h / 2 - (v / mx) * (h / 2 - pad);
+      ctx.clearRect(0, 0, w, h);
+      ctx.strokeStyle = '#2d333b'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+      for (const [vals, color] of [[ts.r2, '#3fb950'], [ts.r3, '#d29922']]) {
+        ctx.strokeStyle = color; ctx.lineWidth = 1.6 * dpr;
+        ctx.beginPath();
+        vals.forEach((v, i) => { i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)); });
+        ctx.stroke();
+      }
+      ctx.font = `${10 * dpr}px monospace`;
+      ctx.fillStyle = '#3fb950'; ctx.fillText('J2', pad + 3, pad + 10 * dpr);
+      ctx.fillStyle = '#d29922'; ctx.fillText('J3', pad + 3, pad + 22 * dpr);
+      const lagMs = Math.round((ts.phase_lag_s || 0) * 1000);
+      lagEl.innerText = `detrended torque residuals during swirl — phase lag ${lagMs} ms (torque vs TCP motion)`;
+
+      // --- power spectrum of r3, 0..Nyquist only; the 5-25 Hz rattle band
+      //     is NOT observable at 4-5 Hz sampling, so we label that honestly ---
+      const N = ts.r3.length, fs = ts.fs_hz, fmax = fs / 2;
+      const spec = [];
+      for (let k = 0; k <= Math.floor(N / 2); k++) {
+        let re = 0, im = 0;
+        for (let n = 0; n < N; n++) {
+          const a = 2 * Math.PI * k * n / N;
+          re += ts.r3[n] * Math.cos(a); im -= ts.r3[n] * Math.sin(a);
+        }
+        spec.push({ f: k * fs / N, m: Math.hypot(re, im) });
+      }
+      ({ ctx, w, h, dpr } = sizeCanvas(psc));
+      const pad2 = 8 * dpr;
+      const mmax = Math.max(1e-9, ...spec.map(s => s.m));
+      const BX = f => pad2 + (f / fmax) * (w - 2 * pad2);
+      const BY = m => h - pad2 - (m / mmax) * (h - 2 * pad2);
+      ctx.clearRect(0, 0, w, h);
+      ctx.strokeStyle = '#2d333b'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pad2, h - pad2); ctx.lineTo(w - pad2, h - pad2); ctx.stroke();
+      ctx.fillStyle = '#1f6feb';
+      const bw = Math.max(1, (w - 2 * pad2) / spec.length * 0.7);
+      let peak = spec[0];
+      for (const s of spec) {
+        if (s.m > peak.m) peak = s;
+        ctx.fillRect(BX(s.f) - bw / 2, BY(s.m), bw, h - pad2 - BY(s.m));
+      }
+      ctx.fillStyle = '#f0883e';
+      ctx.beginPath(); ctx.arc(BX(peak.f), BY(peak.m), 3 * dpr, 0, 2 * Math.PI); ctx.fill();
+      ctx.fillStyle = '#8b949e'; ctx.font = `${10 * dpr}px monospace`;
+      ctx.fillText(`peak ${peak.f.toFixed(2)} Hz`, Math.min(BX(peak.f) + 6 * dpr, w - 92 * dpr), Math.max(BY(peak.m) - 6 * dpr, 10 * dpr));
+      ctx.fillText('0', pad2, h - 2);
+      const nx = `${fmax.toFixed(1)} Hz Nyquist`;
+      ctx.fillText(nx, w - pad2 - ctx.measureText(nx).width, h - 2);
+      noteEl.innerText =
+        `observable 0–${fmax.toFixed(1)} Hz at ${fs.toFixed(1)} Hz sampling · 5–25 Hz rattle band needs 100 Hz on-robot sampling`;
+    }
+
+    const VSPACE_COLORS = ['#3fb950', '#d29922', '#39c5cf', '#f0883e', '#bc8cff', '#58a6ff', '#ff7b72', '#a371f7'];
+    function labelColor(label) {
+      let h = 0;
+      for (const ch of String(label)) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
+      return VSPACE_COLORS[h % VSPACE_COLORS.length];
+    }
+    let lastQueryE = null;
+    let lastMatchLabels = [];
+    let vspaceLayout = [];
+
+    document.getElementById('vspace-canvas').addEventListener('mousemove', e => {
+      const c = e.target, tip = document.getElementById('vspace-tip');
+      const r = c.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const mx = (e.clientX - r.left) * (c.width / r.width);
+      const my = (e.clientY - r.top) * (c.height / r.height);
+      let best = null, bd = 1e18;
+      for (const p of vspaceLayout) {
+        const d = (p.px - mx) ** 2 + (p.py - my) ** 2;
+        if (d < bd) { bd = d; best = p; }
+      }
+      if (best && bd < (16 * dpr) ** 2) {
+        tip.style.display = 'block';
+        tip.style.left = (e.clientX - r.left + 14) + 'px';
+        tip.style.top = (e.clientY - r.top - 8) + 'px';
+        tip.innerText = best.label;
+      } else {
+        tip.style.display = 'none';
+      }
+    });
+    document.getElementById('vspace-canvas').addEventListener('mouseleave', () => {
+      document.getElementById('vspace-tip').style.display = 'none';
+    });
+
+    async function refreshVSpace() {
+      const note = document.getElementById('vspace-note');
+      try {
+        const res = await fetch('/api/vectorspace', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(lastQueryE ? {query: lastQueryE} : {}),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'vectorspace failed');
+        renderVSpace(data);
+      } catch (e) {
+        note.innerText = 'vector space unavailable: ' + e.message;
       }
     }
 
-    function toggleFilter() {
-      useFilter = !useFilter;
-      const btn = document.getElementById('filter-btn');
-      btn.innerText = useFilter ? 'EMA Filter: ON' : 'EMA Filter: RAW';
-      btn.className = useFilter ? 'active-toggle' : '';
+    function renderVSpace(data) {
+      const c = document.getElementById('vspace-canvas');
+      const note = document.getElementById('vspace-note');
+      const { ctx, w, h, dpr } = sizeCanvas(c);
+      ctx.clearRect(0, 0, w, h);
+      const pts = data.points || [];
+      if (!pts.length) {
+        note.innerText = 'no signatures in Atlas yet — teach an item in Mode 2';
+        return;
+      }
+      let minX = 1e18, maxX = -1e18, minY = 1e18, maxY = -1e18;
+      pts.forEach(p => {
+        minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+        minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+      });
+      if (maxX - minX < 1e-9) { minX -= 0.5; maxX += 0.5; }
+      if (maxY - minY < 1e-9) { minY -= 0.5; maxY += 0.5; }
+      const pad = 24 * dpr;
+      const X = x => pad + ((x - minX) / (maxX - minX)) * (w - 2 * pad);
+      const Y = y => h - pad - ((y - minY) / (maxY - minY)) * (h - 2 * pad);
+      vspaceLayout = [];
+      const rankColors = ['#ffd700', '#c0c0c0', '#cd7f32'];
+      pts.forEach((p, i) => {
+        const isQ = i === data.query_index;
+        const x = X(p.x), y = Y(p.y);
+        vspaceLayout.push({px: x, py: y, label: p.label});
+        ctx.fillStyle = isQ ? '#ffffff' : labelColor(p.label);
+        ctx.beginPath(); ctx.arc(x, y, (isQ ? 5 : 3.5) * dpr, 0, 2 * Math.PI); ctx.fill();
+        if (isQ) {
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5 * dpr;
+          ctx.beginPath(); ctx.arc(x, y, 9 * dpr, 0, 2 * Math.PI); ctx.stroke();
+          const r = 4 * dpr;
+          ctx.beginPath();
+          ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r);
+          ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r);
+          ctx.stroke();
+        } else {
+          const rank = lastMatchLabels.indexOf(p.label);
+          if (rank >= 0 && rank < 3) {
+            ctx.strokeStyle = rankColors[rank]; ctx.lineWidth = 1.5 * dpr;
+            ctx.beginPath(); ctx.arc(x, y, 7 * dpr, 0, 2 * Math.PI); ctx.stroke();
+            ctx.fillStyle = rankColors[rank]; ctx.font = `${10 * dpr}px monospace`;
+            ctx.fillText(String(rank + 1), x + 9 * dpr, y - 7 * dpr);
+          }
+        }
+      });
+      const counts = {};
+      pts.forEach((p, i) => {
+        if (i !== data.query_index) counts[p.label] = (counts[p.label] || 0) + 1;
+      });
+      note.innerHTML = Object.keys(counts).sort().map(l =>
+        `<span style="display:inline-block; margin:2px 10px 2px 0; color:#8b949e;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${labelColor(l)}; margin-right:5px;"></span>${l} ×${counts[l]}</span>`
+      ).join('') + `<span style="color:#6e7681;">${data.n} signature${data.n === 1 ? '' : 's'} · 2-D PCA of cosine space · × = current query · numbered rings = top-3 neighbors</span>`;
     }
 
-    function toggleMode() {
-      viewModeDelta = !viewModeDelta;
-      const btn = document.getElementById('mode-btn');
-      btn.innerText = viewModeDelta ? 'View: Delta (Δ Nm)' : 'View: Absolute (N·m)';
-      btn.className = viewModeDelta ? 'active-toggle' : '';
+    function renderDecision(data) {
+      document.getElementById('decision-card').style.display = 'block';
+      document.getElementById('pred-label').innerText = data.prediction || 'unknown';
+      const pct = Math.round((data.confidence || 0) * 100);
+      document.getElementById('pred-conf-bar').style.width = pct + '%';
+      document.getElementById('pred-conf-bar').style.background = data.low_confidence ? '#d29922' : '#3fb950';
+      document.getElementById('pred-conf-text').innerText =
+        `confidence ${pct}%${data.low_confidence ? ' — LOW, consider teaching this item' : ''}` +
+        (data.mock ? '  (MOCK)' : '');
+      setNeighbors(document.getElementById('pred-neighbors'), data.matches || []);
+      renderFeatureSpace(data);
+      renderWhy(data);
+      lastQueryE = (data.e && data.e.length === 10) ? data.e : null;
+      lastMatchLabels = (data.matches || []).slice(0, 3).map(m => m.label);
+      refreshVSpace();
+      const dq = data.diagnostics || {};
+      document.getElementById('predict-status').innerText = `Done — ${data.csv}` +
+        (data.mock ? '  (MOCK data, not live hardware)' : '') +
+        (dq.tare_flags && dq.tare_flags.length ? `  ⚠ tare flags: ${dq.tare_flags.join(',')}` : '');
+    }
+
+    async function pollStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const s = await res.json();
+        const b = document.getElementById('atlas-badge');
+        b.innerText = s.atlas_configured ? 'ATLAS: SYNCED' : 'ATLAS: NO URI';
+        b.style.background = s.atlas_configured ? '#238636' : '#da3633';
+        document.getElementById('mock-badge').style.display = s.mock ? 'inline-block' : 'none';
+        document.getElementById('build-info').innerText = 'build ' + (s.git_sha || 'unknown');
+        refreshVSpace();
+        if (s.last_prediction && s.last_prediction.ok) renderDecision(s.last_prediction);
+        const busy = s.cycle_busy;
+        for (const id of ['predict-btn', 'teach-btn']) {
+          const btn = document.getElementById(id);
+          if (btn) btn.disabled = busy;
+        }
+        if (busy) {
+          document.getElementById('predict-status').innerText = 'Swirl macro running on the robot…';
+        }
+      } catch (e) { /* dashboard stays usable offline */ }
+    }
+
+    function setNeighbors(el, matches) {
+      el.innerHTML = matches.map((m, i) =>
+        `<div>${i + 1}. ${m.label} — ${(m.similarity * 100).toFixed(1)}% similarity</div>`
+      ).join('');
+    }
+
+    async function runPredict() {
+      const btn = document.getElementById('predict-btn');
+      const status = document.getElementById('predict-status');
+      btn.disabled = true;
+      document.getElementById('decision-card').style.display = 'none';
+      const t0 = Date.now();
+      const tick = () => { status.innerText = `Running pick-up → swirl → place… ${Math.round((Date.now() - t0) / 1000)}s elapsed`; };
+      tick();
+      const timer = setInterval(tick, 1000);
+      try {
+        const res = await fetch('/api/cycle/predict', { method: 'POST' });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'prediction failed');
+        renderDecision(data);
+      } catch (e) {
+        status.innerText = 'Error: ' + e.message;
+      } finally {
+        clearInterval(timer);
+        btn.disabled = false;
+      }
+    }
+
+    function setTeachLabel(name) {
+      document.getElementById('teach-label-input').value = name;
+    }
+
+    async function teachItem() {
+      const input = document.getElementById('teach-label-input');
+      const btn = document.getElementById('teach-btn');
+      const status = document.getElementById('teach-status');
+      const name = input.value.trim();
+      if (!name) { status.innerText = 'Enter an item name first.'; return; }
+      btn.disabled = true;
+      const t0 = Date.now();
+      const tick = () => { status.innerText = `Teaching "${name}" — running swirl macro… ${Math.round((Date.now() - t0) / 1000)}s elapsed`; };
+      tick();
+      const timer = setInterval(tick, 1000);
+      try {
+        const res = await fetch('/api/cycle/teach', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item_name: name }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'teach failed');
+        status.innerText = data.mock
+          ? `✓ (MOCK) "${data.label}" recorded — not saved to Atlas.`
+          : `✓ Signature saved! "${data.label}" indexed in MongoDB (sig ${String(data.sig_id).slice(-6)}).`;
+        input.value = '';
+        refreshVSpace();
+      } catch (e) {
+        status.innerText = 'Error: ' + e.message;
+      } finally {
+        clearInterval(timer);
+        btn.disabled = false;
+      }
+    }
+
+    async function abortCycle() {
+      const res = await fetch('/api/cycle/abort', { method: 'POST' });
+      const data = await res.json();
+      document.getElementById('predict-status').innerText =
+        data.aborted ? 'Cycle aborted.' : 'No cycle running.';
     }
   </script>
+  <div id="build-info" style="text-align:center; color:#6e7681; font-size:0.7rem; padding:12px;">build …</div>
 </body>
 </html>
 """
@@ -857,6 +1199,151 @@ async def handle_record_download(request):
     return web.FileResponse(filepath, headers={"Content-Disposition": f'attachment; filename="{safe_name}"'})
 
 
+# ── 2-mode ML API ─────────────────────────────────────────────────────────
+async def _mock_predict():
+    """Mock Mode 1: real extractor + local cosine k-NN on recorded data."""
+    import numpy as np
+    import predict_mystery as pm
+    await asyncio.sleep(MOCK_DELAY_SEC)
+    recs = pm.load_real_recordings()
+    if not recs:
+        raise RuntimeError("mock mode: no recordings under recordings/")
+    mystery = [(n, df) for n, df in recs.items()
+               if str(df["object_label"].iloc[0]) in pm.KNOWN_LABEL_SKIP]
+    name, df = mystery[0] if mystery else sorted(recs.items())[-1]
+    ref, scaler = pm.build_reference(recs)
+    k = min(3, len(ref))
+    pred, conf, q, neigh, ndist = pm.predict(df, ref, scaler, k=k)
+    e_q = np.array(feature_extractor.extract_features(df)["e"])
+    matches = []
+    for (_, row) in neigh.iterrows():
+        e_r = np.array(feature_extractor.extract_features(recs[row["file"]])["e"])
+        sim = float(np.dot(e_q, e_r))  # both L2-normalized → cosine similarity
+        matches.append({"label": row["label"], "similarity": round(max(0.0, sim), 3)})
+    matches.sort(key=lambda m: m["similarity"], reverse=True)
+    feats = feature_extractor.extract_features(df)
+    ts = feature_extractor.swirl_window_series(df)
+    return {
+        "ok": True, "mock": True,
+        "csv": os.path.basename(name),
+        "prediction": str(pred),
+        "confidence": float(round(float(conf), 3)),
+        "low_confidence": bool(float(conf) < 0.82),
+        "matches": matches,
+        "features": {"names": feature_extractor.FEATURE_NAMES,
+                     "z": [round(float(v), 4) for v in feats["z"]],
+                     "descriptions": feature_extractor.FEATURE_DESCRIPTIONS},
+        "e": [float(v) for v in feats["e"]],
+        "timeseries": ts,
+        "diagnostics": feats["diagnostics"],
+    }
+
+
+async def _mock_teach(label: str):
+    """Mock Mode 2: pretend to save a signature (nothing touches Atlas)."""
+    import uuid
+    await asyncio.sleep(MOCK_DELAY_SEC)
+    return {"ok": True, "mock": True, "label": label, "csv": None,
+            "sig_id": f"mock-{uuid.uuid4().hex[:8]}",
+            "note": "mock mode — not saved to Atlas"}
+
+
+async def handle_cycle_predict(request):
+    """Mode 1: run the swirl macro on a mystery cup → features → Atlas $vectorSearch."""
+    global _last_prediction
+    if _cycle_lock.locked():
+        return web.json_response({"ok": False, "error": "a cycle is already running"}, status=409)
+    async with _cycle_lock:
+        try:
+            if MOCK_MODE:
+                result = await _mock_predict()
+            else:
+                csv_path = await _run_swirl_macro("mystery")
+                df = pd.read_csv(csv_path)
+                feats = feature_extractor.extract_features(df)
+                ts = feature_extractor.swirl_window_series(df)
+                a = _atlas()
+                res = a.identify(feats["e"], top_k=3)
+                result = {
+                    "ok": True,
+                    "csv": os.path.basename(csv_path),
+                    "prediction": res["label"],
+                    "confidence": round(res["confidence"], 3),
+                    "low_confidence": res["low_confidence"],
+                    "matches": [{"label": m["label"], "similarity": round(m["score"], 3)}
+                                for m in res["matches"]],
+                    "features": {"names": feature_extractor.FEATURE_NAMES,
+                                 "z": [round(float(v), 4) for v in feats["z"]],
+                                 "descriptions": feature_extractor.FEATURE_DESCRIPTIONS},
+                    "e": [float(v) for v in feats["e"]],
+                    "timeseries": ts,
+                    "diagnostics": feats["diagnostics"],
+                }
+            _last_prediction = result
+            return web.json_response(result)
+        except Exception as e:
+            return web.json_response({"ok": False, "error": str(e)[:500]}, status=500)
+
+
+async def handle_cycle_teach(request):
+    """Mode 2: run the swirl macro on a labeled item → save signature to Atlas."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    label = _sanitize_label(str(data.get("item_name", "")))
+    if not label or label == "item":
+        return web.json_response({"ok": False, "error": "provide item_name"}, status=400)
+    if _cycle_lock.locked():
+        return web.json_response({"ok": False, "error": "a cycle is already running"}, status=409)
+    async with _cycle_lock:
+        try:
+            if MOCK_MODE:
+                return web.json_response(await _mock_teach(label))
+            csv_path = await _run_swirl_macro(label)
+            feats = feature_extractor.extract_features(pd.read_csv(csv_path))
+            a = _atlas()
+            saved = a.teach(
+                label, feats["e"], motion_type="swirl_macro", session="thu",
+                properties={"tare_flags": feats["diagnostics"]["tare_flags"],
+                            "phase_source": feats["diagnostics"]["phase_source"],
+                            "csv": os.path.basename(csv_path)})
+            return web.json_response({
+                "ok": True, "label": label, "csv": os.path.basename(csv_path),
+                "sig_id": saved.get("sig_id"),
+                "diagnostics": feats["diagnostics"],
+            })
+        except Exception as e:
+            return web.json_response({"ok": False, "error": str(e)[:500]}, status=500)
+
+
+async def handle_cycle_abort(request):
+    """Stop the running macro subprocess (physical e-stop remains at the venue)."""
+    global _cycle_proc, _cycle_status
+    proc, _cycle_proc = _cycle_proc, None
+    if proc and proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        _cycle_status = "aborted"
+        return web.json_response({"ok": True, "aborted": True})
+    return web.json_response({"ok": True, "aborted": False, "note": "no cycle running"})
+
+
+async def handle_api_status(request):
+    return web.json_response({
+        "cycle": _cycle_status,
+        "cycle_busy": _cycle_lock.locked(),
+        "viam_address": VIAM_MACHINE_ADDRESS,
+        "atlas_configured": bool(os.getenv("MONGODB_URI")),
+        "mock": MOCK_MODE,
+        "git_sha": GIT_SHA,
+        "last_prediction": _last_prediction,
+    })
+
+
 async def handle_stream(request):
     response = web.StreamResponse(
         status=200,
@@ -893,6 +1380,11 @@ async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_post("/record/start", handle_record_start)
     app.router.add_post("/record/stop", handle_record_stop)
     app.router.add_get("/record/download", handle_record_download)
+    app.router.add_post("/api/cycle/predict", handle_cycle_predict)
+    app.router.add_post("/api/cycle/teach", handle_cycle_teach)
+    app.router.add_post("/api/cycle/abort", handle_cycle_abort)
+    app.router.add_get("/api/status", handle_api_status)
+    app.router.add_post("/api/vectorspace", handle_vspace)
 
     runner = web.AppRunner(app)
     await runner.setup()
