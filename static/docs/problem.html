@@ -37,22 +37,26 @@ pre { background:#161b22; border:1px solid var(--border); border-radius:8px; pad
 <main>
   <h1>The formal problem</h1>
 
-  <h2>Setup</h2>
-  <p>A 6-DOF arm holds a <strong>lidded, opaque cup</strong>. The contents
-  <code>c</code> belong to a set of classes <code>C</code> — empty, water, dish
-  soap, loose candy, a rigid weight — sealed inside the cup. The arm
-  reports joint angles <code>q<sub>t</sub></code> and actuator torques
-  <code>τ<sub>t</sub></code> at 4–5 Hz — the only signals the decision ever sees.</p>
+  <h2>The Setup</h2>
+  <p>A 6-DOF arm holds a <strong>lidded, opaque cup</strong>. To identify the
+  contents, the system relies entirely on standard joint-torque telemetry.</p>
+  <p>The contents belong to a set of classes: <strong>empty, water, loose candy,
+  or a rigid weight</strong>.</p>
+  <p>Because the lid visually seals the container, the system uses physical
+  interaction to classify the objects.</p>
 
-  <h2>Observation and decision</h2>
-  <p>The robot executes one <strong>fixed probing motion</strong> (pick up → swirl →
-  place) and records the rollout <code>D = {(q<sub>t</sub>, τ<sub>t</sub>)}</code>.
-  The task is to map the rollout to a contents label:</p>
-  <pre>ψ: D → ℝ¹⁰        (feature map: time series → 10-D signature)
-e = Wz / ‖Wz‖₂      (per-feature scaling + L2 normalization)
-ĉ = argmax over taught signatures of cosine(e, eᵢ)</pre>
-  <p>Classification is <strong>non-parametric</strong>: a new item is learned by
-  storing one embedding — the next query simply finds its nearest neighbors.</p>
+  <h3>The Solution: Dynamics</h3>
+  <p>The system leverages <strong>dynamics</strong> — measuring how the contents
+  move when swirled — to reveal exactly what is inside.</p>
+  <p>The robot executes one fixed probing motion (pick up → swirl → place).
+  The pipeline maps this directly to a prediction:</p>
+  <ol>
+    <li><strong>Time Series → 10-D Signature:</strong> raw joint torques are
+    converted into explicit physical features.</li>
+    <li><strong>Normalize:</strong> features are scaled and L2-normalized.</li>
+    <li><strong>Vector Search:</strong> the system immediately finds the nearest
+    neighbor in the taught library for instant classification.</li>
+  </ol>
 
   <h2>The lid is the whole problem</h2>
   <p>From outside, every class looks identical — a camera sees a cup. The contents
@@ -68,7 +72,7 @@ e = Wz / ‖Wz‖₂      (per-feature scaling + L2 normalization)
   <h2>What makes it hard</h2>
   <ul>
     <li><strong>Coarse sensing:</strong> 4–5 Hz torque telemetry. The true 5–25 Hz
-      rattle band is above Nyquist — we use what the channel carries.</li>
+      rattle band is above Nyquist — the system uses what the channel carries.</li>
     <li><strong>Tare drift:</strong> joint-torque baselines wander with pose and
       temperature; static offsets are unreliable, so the signal must come from
       motion.</li>
@@ -77,7 +81,7 @@ e = Wz / ‖Wz‖₂      (per-feature scaling + L2 normalization)
   </ul>
 
   <div class="honest"><strong>Honest limits.</strong> Static hold torques carry no
-  payload signal at our pose (verified identical across contents).
+  payload signal at this pose (verified identical across contents).
   Everything discriminative comes from the swirl dynamics.</div>
 </main>
 </body>

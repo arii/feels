@@ -45,9 +45,9 @@ pre { background:#161b22; border:1px solid var(--border); border-radius:8px; pad
   the arm's own dynamics, and the leftover torque residuals carry the payload's
   signature.</p>
 
-  <h2>What we actually do</h2>
+  <h2>What the system does</h2>
   <p>Full force estimation needs an accurate arm mass model plus a clean tare;
-  our audit measured ~10 N·m of tare drift against a ≤2 N·m payload signal.
+  the audit measured ~10 N·m of tare drift against a ≤2 N·m payload signal.
   The pipeline therefore works with residuals — three steps:</p>
   <ol>
     <li><strong>Detrend:</strong> a low-pass filter removes gravity and slow
