@@ -16,6 +16,15 @@ FEELS_MOCK=1 python realtime_plot.py --port 8080   # open http://localhost:8080
 No hardware needed — mock mode runs the full UI on bundled recordings.
 For the robot + Atlas, fill in `.env` (see Setup) and drop `FEELS_MOCK=1`.
 
+**Dataset:** 106 labeled swirl recordings on Hugging Face —
+[`dhyuti-n/feels-cup-dynamics`](https://huggingface.co/datasets/dhyuti-n/feels-cup-dynamics).
+Pull and teach in one step:
+
+```bash
+pip install huggingface_hub
+python tools/pull_from_hf.py --teach
+```
+
 ## Setup
 
 ```bash
