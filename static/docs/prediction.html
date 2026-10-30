@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>feels docs — prediction</title>
+<style>
+:root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
+body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
+.docnav { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); position:sticky; top:0; flex-wrap:wrap; gap:8px; }
+.docnav a { color:var(--muted); text-decoration:none; margin-left:18px; font-size:0.9rem; }
+.docnav a:hover, .docnav a.active { color:var(--text); }
+.docnav a.brand { margin-left:0; color:var(--text); font-weight:700; }
+main { max-width:780px; margin:0 auto; padding:36px 24px 80px; }
+h1 { font-size:2rem; margin-bottom:0.3em; }
+h2 { font-size:1.3rem; margin-top:2em; border-bottom:1px solid var(--border); padding-bottom:0.3em; }
+p, li { color:#c9d1d9; }
+code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em; }
+pre { background:#161b22; border:1px solid var(--border); border-radius:8px; padding:16px; overflow-x:auto; }
+table { border-collapse:collapse; width:100%; margin:1em 0; font-size:0.88rem; }
+th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; vertical-align:top; }
+th { background:#161b22; color:var(--muted); font-weight:600; }
+.honest { background:rgba(210,153,34,0.08); border:1px solid #9e6a03; border-radius:8px; padding:12px 16px; margin:1.5em 0; }
+.honest strong { color:#d29922; }
+</style>
+</head>
+<body>
+<nav class="docnav">
+  <a class="brand" href="/docs">feels · docs</a>
+  <span>
+    <a href="/docs/problem">Problem</a>
+    <a href="/docs/approach">Approach</a>
+    <a href="/docs/force">Extracting Force</a>
+    <a href="/docs/figures">Figures</a>
+    <a href="/docs/api">API</a>
+    <a href="/">← Dashboard</a>
+  </span>
+</nav>
+<main>
+  <h1>How the System Predicts</h1>
+
+  <h2>Ten Features That Describe a Swirl</h2>
+  <p>The extractor reads the joint-torque time series and computes ten
+  physical quantities, in three groups:</p>
+  <table>
+    <tr><th>Group</th><th>Features</th><th>What they capture</th></tr>
+    <tr><td>Static lift</td><td><code>mass_j2</code>, <code>mass_j3</code>, <code>lift_dyn_j3</code></td><td>Gravity torque offsets from the lift; an inertial cue as the arm accelerates</td></tr>
+    <tr><td>Swirl dynamics</td><td><code>swirl_var_j2</code>, <code>swirl_var_j3</code>, <code>swirl_ptp_j3</code>, <code>phase_lag_s</code>, <code>rattle_e</code></td><td>Slosh energy in the swirl; the swing of shifting mass; the lag between TCP motion and torque (viscous damping); rattle energy in the observable band</td></tr>
+    <tr><td>Grip and excitation</td><td><code>grip_comp</code>, <code>swirl_speed</code></td><td>Gripper compliance under load; the TCP swirl speed that drives the excitation</td></tr>
+  </table>
+  <p>Three of the ten — the two static mass offsets and swirl speed — carry
+  zero weight in the embedding. The static offsets sit below baseline noise,
+  and swirl speed measures the macro's drive rather than the contents. The
+  matcher works in the 7 informative dimensions; all ten stay in the vector
+  for display.</p>
+
+  <h2>The Taught Library</h2>
+  <p>The library holds the taught signatures — 113 at last count, each a 10-D
+  embedding with its label, material, category, and session tag, stored in
+  MongoDB Atlas. Teaching writes a signature; the next prediction searches
+  it. The offline evaluation used an 84/21 train/test split of the
+  recordings.</p>
+
+  <h2>Three Ways to Decide</h2>
+  <p><strong>Vector search over hand features.</strong> The query embedding
+  goes to Atlas <code>$vectorSearch</code>, which returns the nearest taught
+  signatures by cosine similarity. This path powers the vector-space plot and
+  supplies the neighbor list on the decision card. On the held-out set it
+  reaches 24% at the category level.</p>
+  <p><strong>Shrinkage LDA on the same features.</strong> <code>atlas.predict_lda</code>
+  standardizes the 10-D library, fits a shrinkage-LDA classifier in
+  milliseconds, and predicts — refit on every call, so a teach takes effect
+  immediately. This is the live decider. On the held-out set: 52% category,
+  43% material. The binary empty/nonempty number (86%) is a majority-class
+  artifact — the classifier predicts nonempty for everything.</p>
+  <p><strong>Learned embeddings, evaluated offline.</strong> Two unsupervised
+  alternatives were baked off against the hand features: PCA-10 on raw
+  torque-delta trajectories (43% material, matching hand features) and
+  Chronos foundation-model embeddings (56% on swirl-only data, the best
+  measured). Neither runs live — Chronos needs its own 2304-D index and
+  torch on the venue machine.</p>
+
+  <h2>What a Prediction Looks Like</h2>
+  <p>A fresh recording comes off the swirl macro. The extractor computes the
+  10-D signature. <code>predict_lda</code> decides. The decision card shows
+  the predicted category, the material, and the closest taught item — with
+  the measured accuracy (52% category) rather than a per-prediction score,
+  since the LDA probabilities are uncalibrated.</p>
+</main>
+</body>
+</html>
