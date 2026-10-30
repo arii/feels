@@ -67,7 +67,7 @@ details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
     <button id="modePlayback" class="mode" onclick="setMode('playback')">Playback</button>
   </div>
 
-  <p class="stageline" id="stageline"><span id="sgProbe">○ Probe</span> &nbsp;→&nbsp; <span id="sgEncode">○ Encode</span> &nbsp;→&nbsp; <span id="sgRetrieve">○ Retrieve</span></p>
+  <p class="stageline" id="stageline"><span id="sgSwirl">○ Swirl</span> &nbsp;→&nbsp; <span id="sgPredict">○ Predict</span></p>
   <div id="verdict"></div>
 
   <div id="vspaceWrap">
@@ -253,11 +253,11 @@ function setMode(m) {
 function stage(id, cls, glyph) {
   const el = document.getElementById(id);
   el.className = cls || "";
-  const names = {sgProbe: "Probe", sgEncode: "Encode", sgRetrieve: "Retrieve"};
+  const names = {sgSwirl: "Swirl", sgPredict: "Predict"};
   el.textContent = (glyph || "○") + " " + names[id];
 }
 function resetStages() {
-  ["sgProbe","sgEncode","sgRetrieve"].forEach(id => stage(id));
+  ["sgSwirl","sgPredict"].forEach(id => stage(id));
   document.getElementById("verdict").innerHTML = "";
 }
 function setStatus(html) { document.getElementById("vspaceStatus").innerHTML = html; }
@@ -265,7 +265,7 @@ async function runDemo() {
   const btn = document.getElementById("runBtn");
   btn.disabled = true;
   resetStages();
-  stage("sgProbe", "on", "●");
+  stage("sgSwirl", "on", "●");
   setStatus("<strong>Status: Running (" + demoMode + ").</strong> Swirling…");
   let pred = null;
   try {
@@ -285,13 +285,12 @@ async function runDemo() {
       const s = await (await fetch("/api/status")).json();
       if (!s.cycle_busy) {
         clearInterval(poll);
-        stage("sgProbe", "done", "●");
-        stage("sgEncode", "on", "●");
-        setStatus("<strong>Status: Encoding.</strong> Torque trace → 10-D signature…");
+        stage("sgSwirl", "done", "●");
+        stage("sgPredict", "on", "●");
+        setStatus("<strong>Status: Predicting.</strong> 10-D signature → Atlas…");
         setTimeout(() => {
-          stage("sgEncode", "done", "●");
-          stage("sgRetrieve", "done", "●");
-          setStatus("<strong>Status: Done.</strong> Retrieved nearest signatures from Atlas.");
+          stage("sgPredict", "done", "●");
+          setStatus("<strong>Status: Done.</strong> Nearest signatures retrieved from Atlas.");
           showVerdict(pred);
           if (pred && pred.ok && pred.e) loadLivePlot(pred.e);
           btn.disabled = false;
