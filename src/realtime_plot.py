@@ -505,6 +505,27 @@ async def _mock_teach(label: str):
             "note": "mock mode — not saved to Atlas"}
 
 
+def _gate_prediction_to_coarse(result):
+    """Restrict neighbors + material votes to the predicted coarse class, so a
+    solid verdict never surfaces liquid options (and vice-versa). Falls back to
+    the unfiltered list if filtering would leave nothing (never show empty)."""
+    import atlas as _a
+    mat = result.get("material")
+    if not mat:
+        return result
+    coarse = _a.coarse_class(mat)
+    result["coarse"] = coarse
+    same = [m for m in result.get("matches", [])
+            if _a.resolve_coarse(m["label"], m.get("coarse")) == coarse]
+    if same:
+        result["matches"] = same
+    mm = [m for m in result.get("material_matches", [])
+          if _a.coarse_class(m["material"]) == coarse]
+    if mm:
+        result["material_matches"] = mm
+    return result
+
+
 async def handle_cycle_predict(request):
     """Mode 1: run the swirl macro on a mystery cup → features → Atlas $vectorSearch."""
     global _last_prediction
@@ -544,6 +565,7 @@ async def handle_cycle_predict(request):
                     "timeseries": ts,
                     "diagnostics": feats["diagnostics"],
                 }
+            result = _gate_prediction_to_coarse(result)
             _last_prediction = result
             return web.json_response(result)
         except Exception as e:
@@ -557,6 +579,7 @@ async def handle_cycle_teach(request):
     except Exception:
         data = {}
     label = _sanitize_label(str(data.get("item_name", "")))
+    coarse = (str(data.get("coarse", "")).strip().lower() or None)
     if not label or label == "item":
         return web.json_response({"ok": False, "error": "provide item_name"}, status=400)
     if _cycle_lock.locked():
@@ -569,7 +592,7 @@ async def handle_cycle_teach(request):
             feats = feature_extractor.extract_features(pd.read_csv(csv_path))
             a = _atlas()
             saved = a.teach(
-                label, feats["e"], motion_type="swirl_macro", session="thu",
+                label, feats["e"], motion_type="swirl_macro", session="thu", coarse=coarse,
                 properties={"tare_flags": feats["diagnostics"]["tare_flags"],
                             "phase_source": feats["diagnostics"]["phase_source"],
                             "csv": os.path.basename(csv_path)})
@@ -604,6 +627,7 @@ async def handle_cycle_correct(request):
     except Exception:
         data = {}
     label = _sanitize_label(str(data.get("true_label", "")))
+    coarse = (str(data.get("coarse", "")).strip().lower() or None)
     if not label or label == "item":
         return web.json_response({"ok": False, "error": "provide true_label"}, status=400)
     if _cycle_lock.locked():
@@ -624,7 +648,7 @@ async def handle_cycle_correct(request):
             feats = feature_extractor.extract_features(pd.read_csv(csv_path))
             a = _atlas()
             saved = a.teach(
-                label, feats["e"], motion_type="swirl_macro", session="thu",
+                label, feats["e"], motion_type="swirl_macro", session="thu", coarse=coarse,
                 properties={"tare_flags": feats["diagnostics"]["tare_flags"],
                             "phase_source": feats["diagnostics"]["phase_source"],
                             "csv": os.path.basename(csv_path),
@@ -747,14 +771,17 @@ async def handle_classes(request):
         import atlas as _a
         db = _a.get_db()
         from collections import Counter
-        labels = Counter(s["label"] for s in db.signatures.find({}, {"label": 1, "_id": 0}))
-
-        def state_of(label):
-            m = _a.material_of(label)
-            return "empty" if m == "empty" else ("solid" if m in ("solid", "screws", "candy") else "liquid")
+        # Group by the stored coarse class (per label), falling back to the
+        # label heuristic for pre-coarse signatures.
+        labels = Counter()
+        label_coarse = {}
+        for s in db.signatures.find({}, {"label": 1, "coarse": 1, "_id": 0}):
+            lbl = s["label"]
+            labels[lbl] += 1
+            label_coarse.setdefault(lbl, _a.resolve_coarse(lbl, s.get("coarse")))
         groups = {"empty": {}, "solid": {}, "liquid": {}}
         for lbl, n in labels.items():
-            groups.setdefault(state_of(lbl), {})[lbl] = n
+            groups.setdefault(label_coarse[lbl], {})[lbl] = n
         return web.json_response({"ok": True, "total": sum(labels.values()),
                                   "n_labels": len(labels), "groups": groups})
     except Exception as e:
@@ -823,10 +850,9 @@ async def handle_finegrained(request):
         e = feature_extractor.extract_features(df)["e"]
         res = _a.identify(e, top_k=8)
 
-        def state_of(label):
-            m = _a.material_of(label)
-            return "empty" if m == "empty" else ("solid" if m in ("solid", "screws", "candy") else "liquid")
-        same = [m for m in res["matches"] if state_of(m["label"]) == coarse] if coarse else res["matches"]
+        same = ([m for m in res["matches"]
+                 if _a.resolve_coarse(m["label"], m.get("coarse")) == coarse]
+                if coarse else res["matches"])
         pool = same if same else res["matches"]
         out = [{"label": m["label"], "similarity": round(m["score"], 3)} for m in pool[:5]]
         return web.json_response({"ok": True, "coarse": coarse, "filtered": bool(same),
@@ -842,12 +868,14 @@ async def handle_teach_file(request):
         body = await request.json()
         path = _safe_recording(body.get("file", ""))
         label = _sanitize_label(str(body.get("label", "")))
+        coarse = (str(body.get("coarse", "")).strip().lower() or None)
         if not label or label == "item":
             return web.json_response({"ok": False, "error": "provide a label"}, status=400)
         df = pd.read_csv(path)
         feats = feature_extractor.extract_features(df)
         ids = _a.teach(label=label, feature_vector=feats["e"], raw_data=feats.get("raw_j3"),
-                       motion_type="swirl_macro", properties={"source": "ui_teach"}, session="live")
+                       motion_type="swirl_macro", properties={"source": "ui_teach"},
+                       session="live", coarse=coarse)
         return web.json_response({"ok": True, "label": label, "sig_id": ids.get("sig_id")})
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)[:400]}, status=500)

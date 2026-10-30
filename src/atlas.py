@@ -61,6 +61,7 @@ def setup_collections():
     # Scalar indexes for fast filtering
     db.signatures.create_index([("label", 1)])
     db.signatures.create_index([("session", 1)])
+    db.signatures.create_index([("coarse", 1)])
     db.signatures.create_index([("label", 1), ("session", 1)])
     db.items.create_index([("label", 1)], unique=True)
     print("  scalar indexes created")
@@ -85,6 +86,7 @@ def _create_vector_index(db):
                 },
                 {"type": "filter", "path": "label"},
                 {"type": "filter", "path": "session"},
+                {"type": "filter", "path": "coarse"},
             ]
         },
         name="cup_dynamics_index",
@@ -122,9 +124,11 @@ def _signature_doc(
     properties: dict | None = None,
     session: str = "thu",
     run_id=None,
+    coarse: str | None = None,
 ) -> dict:
     return {
         "label": label,
+        "coarse": resolve_coarse(label, coarse),
         "motion_type": motion_type,
         "feature_vector": feature_vector,
         "properties": properties or {},
@@ -145,6 +149,7 @@ def teach(
     motion_type: str = "3in1_macro",
     properties: dict | None = None,
     session: str = "thu",
+    coarse: str | None = None,
 ) -> dict:
     """
     Insert a labeled run into Atlas.
@@ -156,6 +161,8 @@ def teach(
         motion_type:    "3in1_macro" | "sine_shake" | "tilt" | "fig8"
         properties:     optional dict {"estimated_mass_g": 185, "fill_ratio": 0.5}
         session:        "thu" or "fri" — used to filter vector search by day
+        coarse:         explicit coarse state ("empty"/"solid"/"liquid"); when
+                        omitted, inferred from the label via coarse_class()
 
     Returns:
         dict with inserted run_id and sig_id
@@ -168,11 +175,25 @@ def teach(
         run_id = result.inserted_id
 
     sig_result = db.signatures.insert_one(
-        _signature_doc(label, feature_vector, motion_type, properties, session, run_id)
+        _signature_doc(label, feature_vector, motion_type, properties, session, run_id, coarse)
     )
 
-    print(f"[teach] stored '{label}'  sig_id={sig_result.inserted_id}")
+    print(f"[teach] stored '{label}' ({resolve_coarse(label, coarse)})  sig_id={sig_result.inserted_id}")
     return {"run_id": str(run_id), "sig_id": str(sig_result.inserted_id)}
+
+
+def set_coarse(label: str, coarse: str) -> int:
+    """Set the coarse class on every existing signature for a label.
+
+    Use to correct a taught item's physical state after the fact, e.g.
+    set_coarse("airpods", "solid"). Returns the number of docs updated.
+    """
+    if coarse not in VALID_COARSE:
+        raise ValueError(f"coarse must be one of {VALID_COARSE}, got {coarse!r}")
+    db = get_db()
+    res = db.signatures.update_many({"label": label}, {"$set": {"coarse": coarse}})
+    print(f"[set_coarse] '{label}' -> {coarse}  ({res.modified_count} signatures updated)")
+    return res.modified_count
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +232,36 @@ def material_of(label: str) -> str:
     """
     stem = _CAPACITY_SUFFIX.sub("", label.strip().lower())
     return MATERIAL_STEMS.get(stem, stem)
+
+
+# ---------------------------------------------------------------------------
+# Coarse physical state: empty / solid / liquid — the single source of truth.
+# Used to gate the UI (a solid verdict never surfaces liquid options) and to
+# class-filter vector search. A material not in this map defaults to "solid"
+# (a rigid object), but any taught signature can override it explicitly via
+# teach(coarse=...) / --set-coarse — that stored value always wins.
+# ---------------------------------------------------------------------------
+VALID_COARSE = ("empty", "solid", "liquid")
+
+COARSE_OF_MATERIAL = {
+    "empty": "empty",
+    "water": "liquid",
+    "soap": "liquid",
+    "solid": "solid",
+    "screws": "solid",
+    "candy": "solid",
+    "airpods": "solid",
+}
+
+
+def coarse_class(label: str) -> str:
+    """Coarse physical state (empty/solid/liquid) inferred from a label."""
+    return COARSE_OF_MATERIAL.get(material_of(label), "solid")
+
+
+def resolve_coarse(label: str, stored=None) -> str:
+    """Stored coarse class wins; otherwise fall back to the label heuristic."""
+    return stored if stored in VALID_COARSE else coarse_class(label)
 
 
 def identify(
@@ -258,6 +309,7 @@ def identify(
         "$project": {
             "label": 1,
             "session": 1,
+            "coarse": 1,
             "score": {"$meta": "vectorSearchScore"},
             "_id": 0,
         }
@@ -267,6 +319,9 @@ def identify(
 
     if not results:
         return {"label": None, "confidence": 0.0, "matches": [], "low_confidence": True}
+
+    # Resolve each label's coarse class once (stored value wins over heuristic).
+    label_coarse = {r["label"]: resolve_coarse(r["label"], r.get("coarse")) for r in results}
 
     # Group by label: mean similarity of each label's hits
     label_scores: dict[str, list[float]] = defaultdict(list)
@@ -285,7 +340,8 @@ def identify(
     # (e.g. stale feature scales collapsing every embedding to ~0.97 cosine).
     # Report ambiguity instead of a confident-looking number.
     ambiguous = margin < 0.02
-    matches = [{"label": lbl, "score": round(score, 4)} for lbl, score in ranked]
+    matches = [{"label": lbl, "score": round(score, 4), "coarse": label_coarse.get(lbl)}
+               for lbl, score in ranked]
 
     # Material-level aggregation: capacity variants of one material vote
     # together. water_025pct vs water_075pct is a fill question; water vs
@@ -384,7 +440,15 @@ if __name__ == "__main__":
                         help="Also run a smoke teach() with a RANDOM vector + identify(). "
                              "DO NOT use after real items are taught — it inserts a junk "
                              "'water_half' row that will pollute $vectorSearch results.")
+    parser.add_argument("--set-coarse", nargs=2, metavar=("LABEL", "CLASS"),
+                        help="Set coarse class (empty/solid/liquid) on existing signatures "
+                             "for a label, e.g. --set-coarse airpods solid. Does not run setup.")
     args = parser.parse_args()
+
+    if args.set_coarse:
+        lbl, cls = args.set_coarse
+        set_coarse(lbl, cls)
+        raise SystemExit(0)
 
     print("=== Atlas setup ===\n")
     print(f"Database: {DB_NAME}")
