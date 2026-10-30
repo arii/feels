@@ -56,24 +56,24 @@ DEFAULT_CX = 656.2068
 DEFAULT_CY = 366.5177
 
 # Table & workspace constraints (mm)
-TABLE_SURFACE_Z = -123.0    # Obstacle table reference in world frame
-DEFAULT_GRASP_Z = 35.0      # Lower vertical grasp altitude to prevent tipping (was 60-70mm)
-DEFAULT_Z_OFFSET = -20.0    # Offset applied to detected centroid to grab lower body (mm)
-MIN_SAFE_Z = 22.0           # Absolute minimum clearance above table
-MAX_SAFE_Z = 55.0           # Maximum grasp altitude to avoid tipping
+TABLE_SURFACE_Z = -23.0     # Obstacle table top surface reference in world frame (box top is at Z = -23.0mm)
+DEFAULT_GRASP_Z = 50.0      # Lower vertical grasp altitude to prevent tipping (was 70.4mm, 50.0mm keeps 18mm table clearance)
+DEFAULT_Z_OFFSET = -12.0    # Offset applied to detected centroid to grab lower body (mm)
+MIN_SAFE_Z = 48.0           # Absolute minimum clearance above table: gripper bottom radius is 55mm -> 48 - 55 = -7mm (> -23mm table)
+MAX_SAFE_Z = 65.0           # Maximum grasp altitude to avoid tipping
 
 # Standoff and insertion geometry (mm)
-# Note: tcp_offset = 130mm positions the cup center right in the middle of the rubber finger pads
-# without plunging into the palm (105mm was pushing the cup 25mm too deep).
-DEFAULT_TCP_OFFSET = 130.0  # Flange to finger contact center offset (mm)
-APPROACH_STANDOFF = 70.0    # Pre-grasp standoff distance back along approach ray (mm)
+# Note: tcp_offset = 142.0mm centers the cup directly between the rubber finger pads
+# while leaving >50mm clearance before the gripper palm, completely preventing the robot from pushing the cup.
+DEFAULT_TCP_OFFSET = 142.0  # Flange to finger contact center offset (mm)
+APPROACH_STANDOFF = 60.0    # Pre-grasp standoff distance back along approach ray (mm)
 TRAVEL_SAFE_Z = 195.0       # Lift altitude for safe transit (mm)
 
 # Default orientation for side grasp (matches xArm tool flange horizontal side grasp)
 DEFAULT_SIDE_THETA = 175.7  # Degrees roll around tool axis for horizontal finger opening
 
 # Contact detection parameters
-DEFAULT_CONTACT_THRESH = 0.40  # Torque delta in Nm to declare physical contact
+DEFAULT_CONTACT_THRESH = 0.22  # Torque delta in Nm to declare physical contact (Joint 3 / Joint 5)
 
 
 class CupDetector:
@@ -207,7 +207,8 @@ class CupDetector:
             if abs(ray_world[2]) < 1e-4:
                 return None
 
-            lam = (target_z - P_cam[2]) / ray_world[2]
+            clamped_z = max(MIN_SAFE_Z, min(MAX_SAFE_Z, float(target_z)))
+            lam = (clamped_z - P_cam[2]) / ray_world[2]
             P_world = P_cam + lam * ray_world
 
             return {
@@ -215,7 +216,7 @@ class CupDetector:
                 "bbox": (cup.x_min, cup.y_min, cup.x_max, cup.y_max),
                 "confidence": cup.confidence,
                 "center_px": (u_c, v_c),
-                "position_world": (float(P_world[0]), float(P_world[1]), float(target_z)),
+                "position_world": (float(P_world[0]), float(P_world[1]), float(clamped_z)),
                 "camera_pos_world": (float(P_cam[0]), float(P_cam[1]), float(P_cam[2])),
             }
         except Exception as e:
@@ -300,13 +301,28 @@ class VisionGraspController:
         self.detector = CupDetector(machine)
 
     async def move_pose(self, pose: Pose, label: str = "pose", timeout: float = 30.0) -> bool:
-        """Move arm to Cartesian pose using collision-aware motion service."""
+        """
+        Move arm to Cartesian pose using collision-aware motion service.
+        Strictly enforces collision avoidance: if motion.move detects an obstacle (e.g. table),
+        the move is aborted and NEVER bypassed to direct IK.
+        """
+        if pose.z < MIN_SAFE_Z:
+            print(f"[COLLISION SAFETY] Target Z={pose.z:.1f}mm is below MIN_SAFE_Z={MIN_SAFE_Z:.1f}mm! Clamping to prevent table collision.")
+            pose.z = MIN_SAFE_Z
+
         goal = PoseInFrame(reference_frame="world", pose=pose)
         print(f"[MOVE] Navigating to {label} -> (X: {pose.x:.1f}, Y: {pose.y:.1f}, Z: {pose.z:.1f})...")
         try:
             return await self.motion.move(component_name="arm", destination=goal, timeout=timeout)
         except Exception as e:
-            print(f"[MOTION] motion.move notice ({e}); using direct arm.move_to_position...")
+            err_msg = str(e).lower()
+            # If the motion service failed due to an obstacle collision, abort immediately!
+            if any(kw in err_msg for kw in ["violation", "constraint", "collision", "table", "failed constraints"]):
+                print(f"[COLLISION AVOIDANCE BLOCKED MOVE] motion.move blocked by collision safety: {e}")
+                print("  ABORTING MOVE to prevent striking table or obstacles. Unconstrained IK fallback is disabled.")
+                return False
+
+            print(f"[MOTION] motion.move non-collision notice ({e}); using direct arm.move_to_position...")
             try:
                 await self.arm.move_to_position(pose, timeout=timeout)
                 return True
@@ -558,10 +574,10 @@ async def main():
     parser.add_argument("--dry-run", action="store_true", help="Verify perception and motion plan without moving")
     parser.add_argument("--grasp", action="store_true", help="Execute live physical side grasp with placement")
     parser.add_argument("--grasp-only", action="store_true", help="Execute grasp and lift only (skip place/return sequence)")
-    parser.add_argument("--z-height", type=float, default=None, help="Explicit vertical grasp altitude in mm (e.g. 35.0)")
-    parser.add_argument("--z-offset", type=float, default=DEFAULT_Z_OFFSET, help="Vertical offset from centroid (default: -20.0mm)")
-    parser.add_argument("--tcp-offset", type=float, default=DEFAULT_TCP_OFFSET, help="Flange-to-cup standoff offset (default: 130.0mm to prevent pushing)")
-    parser.add_argument("--contact-thresh", type=float, default=DEFAULT_CONTACT_THRESH, help="Torque deflection in Nm to detect contact (default: 0.40Nm)")
+    parser.add_argument("--z-height", type=float, default=None, help="Explicit vertical grasp altitude in mm (default: 50.0mm)")
+    parser.add_argument("--z-offset", type=float, default=DEFAULT_Z_OFFSET, help="Vertical offset from centroid (default: -12.0mm)")
+    parser.add_argument("--tcp-offset", type=float, default=DEFAULT_TCP_OFFSET, help="Flange-to-cup standoff offset (default: 142.0mm to prevent pushing)")
+    parser.add_argument("--contact-thresh", type=float, default=DEFAULT_CONTACT_THRESH, help="Torque deflection in Nm to detect contact (default: 0.22Nm)")
     parser.add_argument("--stage", action="store_true", help="Move arm to staging home-pose before detecting")
     args = parser.parse_args()
 
@@ -579,30 +595,31 @@ async def main():
             det = await controller.detector.detect_cup(target_z=args.z_height, z_offset=args.z_offset)
             if not det:
                 print("[!] No cup detected in current view.")
-                print("    Hint: If arm is currently close to the table (Z < 150mm), run with --stage to move to home-pose for unoccluded perception.")
+                print("    Hint: If arm is currently close to the table (Z < 150mm), run with --stage to move to staging pose for unoccluded perception.")
                 return
-                cup_pos = det["position_world"]
-                cam_pos = det["camera_pos_world"]
-                plan = SideGraspPlanner.plan_side_grasp(
-                    cup_pos, cam_pos, tcp_offset=args.tcp_offset, grasp_z=cup_pos[2]
-                )
-                p_app = plan["approach"]
-                p_grp = plan["grasp"]
-                p_lft = plan["lift"]
-                v = plan["vector"]
-                print("\n" + "=" * 68)
-                print(f"📍 YOLO-3D CUP IDENTIFICATION ({det.get('method')})")
-                print("=" * 68)
-                if "detected_centroid_world" in det:
-                    dc = det["detected_centroid_world"]
-                    print(f"• Centroid Detected: X={dc[0]:.1f}mm, Y={dc[1]:.1f}mm, Z={dc[2]:.1f}mm")
-                print(f"• Target Grasp 3D:   X={cup_pos[0]:.2f}mm, Y={cup_pos[1]:.2f}mm, Z={cup_pos[2]:.2f}mm (Lowered)")
-                print(f"• Approach Ray:      [{v[0]:.3f}, {v[1]:.3f}, 0.0] ({math.degrees(math.atan2(v[1], v[0])):.1f}°)")
-                print(f"• Standoff Arm:      X={p_app.x:.2f}mm, Y={p_app.y:.2f}mm, Z={p_app.z:.2f}mm")
-                print(f"• Contact Arm:       X={p_grp.x:.2f}mm, Y={p_grp.y:.2f}mm, Z={p_grp.z:.2f}mm (Offset: {args.tcp_offset:.1f}mm)")
-                print(f"• Safe Lift Arm:     X={p_lft.x:.2f}mm, Y={p_lft.y:.2f}mm, Z={p_lft.z:.2f}mm")
-                print(f"• Placement Targets: 'travel' -> 'place' -> 'travel' -> 'home-pose'")
-                print("=" * 68 + "\n")
+
+            cup_pos = det["position_world"]
+            cam_pos = det["camera_pos_world"]
+            plan = SideGraspPlanner.plan_side_grasp(
+                cup_pos, cam_pos, tcp_offset=args.tcp_offset, grasp_z=cup_pos[2]
+            )
+            p_app = plan["approach"]
+            p_grp = plan["grasp"]
+            p_lft = plan["lift"]
+            v = plan["vector"]
+            print("\n" + "=" * 68)
+            print(f"📍 CUP IDENTIFICATION ({det.get('method')})")
+            print("=" * 68)
+            if "detected_centroid_world" in det:
+                dc = det["detected_centroid_world"]
+                print(f"• Centroid Detected: X={dc[0]:.1f}mm, Y={dc[1]:.1f}mm, Z={dc[2]:.1f}mm")
+            print(f"• Target Grasp 3D:   X={cup_pos[0]:.2f}mm, Y={cup_pos[1]:.2f}mm, Z={cup_pos[2]:.2f}mm (Lowered: {cup_pos[2]:.1f}mm)")
+            print(f"• Approach Ray:      [{v[0]:.3f}, {v[1]:.3f}, 0.0] ({math.degrees(math.atan2(v[1], v[0])):.1f}°)")
+            print(f"• Standoff Arm:      X={p_app.x:.2f}mm, Y={p_app.y:.2f}mm, Z={p_app.z:.2f}mm")
+            print(f"• Contact Arm:       X={p_grp.x:.2f}mm, Y={p_grp.y:.2f}mm, Z={p_grp.z:.2f}mm (Offset: {args.tcp_offset:.1f}mm)")
+            print(f"• Safe Lift Arm:     X={p_lft.x:.2f}mm, Y={p_lft.y:.2f}mm, Z={p_lft.z:.2f}mm")
+            print(f"• Placement Targets: 'travel' -> 'place' -> 'travel' -> 'home-pose'")
+            print("=" * 68 + "\n")
             return
 
         full_cycle = not args.grasp_only

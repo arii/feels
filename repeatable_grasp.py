@@ -240,7 +240,12 @@ async def move_to_waypoint(machine: RobotClient, arm: Arm, name: str, timeout: f
 
 
 async def move_to_cartesian_pose(machine: RobotClient, arm: Arm, pose: Pose, label: str = "target", timeout: float = 30.0) -> bool:
-    """Move arm to Cartesian pose using Motion service with direct IK fallback."""
+    """Move arm to Cartesian pose using Motion service with strict collision avoidance."""
+    MIN_SAFE_Z = 48.0
+    if pose.z < MIN_SAFE_Z:
+        print(f"[COLLISION SAFETY] Clamping Z={pose.z:.1f}mm to MIN_SAFE_Z={MIN_SAFE_Z:.1f}mm to protect table.")
+        pose.z = MIN_SAFE_Z
+
     print(f"\n[MOVE] Commanding arm to {label} -> (X: {pose.x:.1f}, Y: {pose.y:.1f}, Z: {pose.z:.1f})...")
     try:
         from viam.services.motion import MotionClient
@@ -253,7 +258,12 @@ async def move_to_cartesian_pose(machine: RobotClient, arm: Arm, pose: Pose, lab
         print(f"[✓] Arrived at {label} in {duration:.1f}s -> (X: {pos.x:.1f}, Y: {pos.y:.1f}, Z: {pos.z:.1f})")
         return True
     except Exception as e:
-        print(f"[MOTION] motion.move fallback to arm.move_to_position: {e}")
+        err_msg = str(e).lower()
+        if any(kw in err_msg for kw in ["violation", "constraint", "collision", "table", "failed constraints"]):
+            print(f"[COLLISION AVOIDANCE BLOCKED MOVE] Obstacle collision detected by motion service: {e}")
+            print("  Refusing direct IK fallback to protect table surface.")
+            return False
+        print(f"[MOTION] motion.move non-collision notice: {e}; trying direct arm.move_to_position...")
         try:
             t0 = time.time()
             await arm.move_to_position(pose, timeout=timeout)
@@ -404,7 +414,9 @@ async def run_grasp_cycle(
     settle_threshold: float = 0.04,
     use_vision: bool = False,
     z_height: Optional[float] = None,
-    z_offset: float = -20.0,
+    z_offset: float = -12.0,
+    tcp_offset: float = 142.0,
+    contact_thresh: float = 0.22,
 ) -> bool:
     """
     Executes one complete pick-and-place sequence with phase-synchronized recording:
@@ -434,10 +446,12 @@ async def run_grasp_cycle(
         if det:
             cup_pos = det["position_world"]
             cam_pos = det["camera_pos_world"]
-            dynamic_poses = SideGraspPlanner.plan_side_grasp(cup_pos, cam_pos, grasp_z=cup_pos[2])
+            dynamic_poses = SideGraspPlanner.plan_side_grasp(
+                cup_pos, cam_pos, tcp_offset=tcp_offset, grasp_z=cup_pos[2]
+            )
             print(f"[✓] Cup localized at: X={cup_pos[0]:.1f}, Y={cup_pos[1]:.1f}, Z={cup_pos[2]:.1f} (Conf: {det['confidence']:.2f})")
             print(f"    Dynamic approach: X={dynamic_poses['approach'].x:.1f}, Y={dynamic_poses['approach'].y:.1f}, Z={dynamic_poses['approach'].z:.1f}")
-            print(f"    Dynamic grasp:    X={dynamic_poses['grasp'].x:.1f}, Y={dynamic_poses['grasp'].y:.1f}, Z={dynamic_poses['grasp'].z:.1f} (Anti-Tip)")
+            print(f"    Dynamic grasp:    X={dynamic_poses['grasp'].x:.1f}, Y={dynamic_poses['grasp'].y:.1f}, Z={dynamic_poses['grasp'].z:.1f} (Offset: {tcp_offset:.1f}mm)")
         else:
             print("[✗] Error: Cup not detected via YOLO perception! Aborting cycle.")
             return False
@@ -461,7 +475,7 @@ async def run_grasp_cycle(
     if use_vision and dynamic_poses:
         vision_ctrl = VisionGraspController(machine)
         ok, contact = await vision_ctrl.guarded_advance_with_contact(
-            dynamic_poses["approach"], dynamic_poses["grasp"]
+            dynamic_poses["approach"], dynamic_poses["grasp"], contact_threshold=contact_thresh
         )
         if not ok:
             return False
@@ -590,13 +604,25 @@ async def main():
         "--z-height",
         type=float,
         default=None,
-        help="Explicit vertical grasp altitude in mm (e.g. 35.0 to lower grip and prevent cup tipping)",
+        help="Explicit vertical grasp altitude in mm (e.g. 50.0 to lower grip and prevent cup tipping)",
     )
     parser.add_argument(
         "--z-offset",
         type=float,
-        default=-20.0,
-        help="Vertical offset from detected centroid in mm (default: -20.0mm)",
+        default=-12.0,
+        help="Vertical offset from detected centroid in mm (default: -12.0mm)",
+    )
+    parser.add_argument(
+        "--tcp-offset",
+        type=float,
+        default=142.0,
+        help="Flange-to-cup standoff offset in mm (default: 142.0mm to center fingers and avoid palm collision)",
+    )
+    parser.add_argument(
+        "--contact-thresh",
+        type=float,
+        default=0.22,
+        help="Torque deflection in Nm to detect contact (default: 0.22Nm)",
     )
     parser.add_argument(
         "--dry-run",
@@ -662,6 +688,8 @@ async def main():
                     use_vision=args.use_vision,
                     z_height=args.z_height,
                     z_offset=args.z_offset,
+                    tcp_offset=args.tcp_offset,
+                    contact_thresh=args.contact_thresh,
                 )
                 if not success:
                     print(f"[!] Cycle #{c} aborted due to an error.")
