@@ -145,6 +145,51 @@ To eliminate the ~158ms WebRTC cloud latency and sample at 50–200 Hz, deploy [
 python client_control_service.py
 ```
 
+### 8. Swirl Feature Extractor + 2-Mode Dashboard
+
+The demo loop is pick-up → swirl → place, driven by `repeatable_grasp.py --swirl-smooth` (locked in, don't touch it). Everything below consumes its CSVs.
+
+**Feature extractor:**
+
+```bash
+# Extract the 10-D vector + normalized embedding from a recording
+python feature_extractor.py recordings/recording_20261029_180332_empty_cup.csv
+
+# Recalibrate per-feature scales on your dataset (run once on P0 data, then freeze)
+python feature_extractor.py --calibrate
+```
+
+Outputs `z` (10 interpretable features: mass offsets, swirl variances, peak-to-peak, phase lag, rattle energy, grip compliance, lift transient, swirl speed), `e` (L2-normalized embedding matching the Atlas `cup_dynamics_index`: 10 dims, cosine), and `diagnostics` (sampling rate, tare QC flags, rattle-band limits). The 5–25 Hz rattle band is **not** observable at 4–5 Hz cloud sampling — the extractor flags `rattle_band_limited` honestly; the real band needs the 100 Hz on-robot module (step 7).
+
+**Dashboard API (2 modes):**
+
+```bash
+python realtime_plot.py --port 8080   # open http://localhost:8080
+```
+
+- **Mode 1 — Identify:** `POST /api/cycle/predict` runs the swirl macro on a mystery cup, extracts features, queries Atlas `$vectorSearch`, returns the label + confidence + top 3 neighbors.
+- **Mode 2 — Teach:** `POST /api/cycle/teach` with `{"item_name": "..."}` runs the macro and inserts the signature into Atlas — instantly queryable, no retraining.
+- `POST /api/cycle/abort` stops a running macro; `GET /api/status` reports cycle state, Viam address, and Atlas config.
+
+**Mock mode (no robot / no Atlas):**
+
+```bash
+FEELS_MOCK=1 python realtime_plot.py --port 8080
+```
+
+Serves the full 2-mode UI from recorded data: predict runs the real extractor + a local cosine k-NN over the reference recordings; teach simulates the save. A purple **MOCK** badge is always shown — never demo it as live hardware.
+
+**Offline classifier:**
+
+```bash
+python predict_mystery.py                        # classify mystery recordings
+python predict_mystery.py recordings/foo.csv     # classify one CSV
+python predict_mystery.py --eval                 # leave-one-recording-out accuracy
+python predict_mystery.py --qc                   # tare-baseline quality gate per run
+```
+
+See [`BASELINE_FINDINGS.md`](BASELINE_FINDINGS.md) for the audit behind the QC checks.
+
 ---
 
 ## Experimental Findings: Weight Detection via Joint Torques
@@ -296,7 +341,7 @@ When writing code that moves physical hardware, follow the rules defined in [`.c
 
 ## Next Steps & Roadmap
 
-See [**`TODO.md`**](TODO.md) for full task tracking:
+See [**`PLAN.md`**](PLAN.md) for the concrete finish plan (tonight + demo day), and [**`TODO.md`**](TODO.md) for the longer research backlog:
 1. **Simulator Integration:** Test PyBullet / URDF / MuJoCo / Viam mock components for collision-free trajectory testing.
 2. **On-Robot Data Collection:** Deploy a low-latency daemon on `sfhack12` to poll at 100–200 Hz over direct socket (port 30000).
 3. **Kinematic Posture Optimization:** Move arm to a cantilever pose ($q_2 \approx 45^\circ\text{--}60^\circ, q_3 \approx 45^\circ\text{--}90^\circ$) to maximize perpendicular moment arm and signal-to-noise ratio.
