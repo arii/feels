@@ -330,8 +330,12 @@
 
     <!-- predict decision card (expands after identify) -->
     <div id="decision-card" style="display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:8px;">
-      <div class="kpi-label">Predicted material</div>
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div class="kpi-label">Predicted material</div>
+        <button class="rec-stop" onclick="clearVerdict()" title="Clear this verdict from the dashboard" style="font-size:0.72rem; padding:3px 9px;">✕ Clear</button>
+      </div>
       <div class="kpi-val" id="pred-material" style="font-size:1.5rem;">—</div>
+      <div class="kpi-sub" id="pred-cascade" style="color:#8a74a0; margin-top:2px;"></div>
       <div style="background:#21262d; border-radius:6px; height:14px; margin:6px 0; overflow:hidden;">
         <div id="pred-conf-bar" style="height:100%; width:0%; background:#3fb950;"></div>
       </div>
@@ -782,6 +786,14 @@
       if (correctInput && COARSE_EG[coarse]) correctInput.placeholder = 'Actual item, e.g. ' + COARSE_EG[coarse];
       const correctSel = document.getElementById('correct-coarse');
       if (correctSel) correctSel.value = coarse && COARSE_EG[coarse] ? coarse : '';
+      // Trained-cascade read (empty→loaded→solid/liquid) that drove the coarse call.
+      const cascEl = document.getElementById('pred-cascade');
+      if (cascEl) {
+        const cc = data.cascade;
+        cascEl.innerText = cc
+          ? `classifier → ${cc.coarse}  (loaded ${Math.round(cc.loadedness * 100)}% · solid ${Math.round(cc.rigidity * 100)}%)`
+          : (data.cascade_error ? 'classifier unavailable' : '');
+      }
       const mpct = Math.round(((data.material_confidence ?? data.confidence) || 0) * 100);
       const mLow = data.material_low_confidence ?? data.low_confidence;
       document.getElementById('pred-conf-bar').style.width = mpct + '%';
@@ -818,8 +830,14 @@
         document.getElementById('mock-badge').style.display = s.mock ? 'inline-block' : 'none';
         document.getElementById('build-info').innerText = 'build ' + (s.git_sha || 'unknown');
         refreshVSpace();
-        if (s.last_prediction && s.last_prediction.ok) renderDecision(s.last_prediction);
         const busy = s.cycle_busy;
+        // While a cycle is running, clear the stale verdict so the previous
+        // prediction never lingers under the new run; restore on completion.
+        if (busy) {
+          document.getElementById('decision-card').style.display = 'none';
+        } else if (s.last_prediction && s.last_prediction.ok) {
+          renderDecision(s.last_prediction);
+        }
         for (const id of ['predict-btn', 'teach-btn']) {
           const btn = document.getElementById(id);
           if (btn) btn.disabled = busy;
@@ -834,6 +852,12 @@
       el.innerHTML = matches.map((m, i) =>
         `<div>${i + 1}. ${m.label} — ${(m.similarity * 100).toFixed(1)}% similarity</div>`
       ).join('');
+    }
+
+    async function clearVerdict() {
+      document.getElementById('decision-card').style.display = 'none';
+      document.getElementById('predict-status').innerText = '';
+      try { await fetch('/api/prediction/clear', { method: 'POST' }); } catch (e) { /* offline ok */ }
     }
 
     async function runPredict() {

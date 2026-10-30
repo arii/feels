@@ -507,13 +507,17 @@ async def _mock_teach(label: str):
 
 def _gate_prediction_to_coarse(result):
     """Restrict neighbors + material votes to the predicted coarse class, so a
-    solid verdict never surfaces liquid options (and vice-versa). Falls back to
-    the unfiltered list if filtering would leave nothing (never show empty)."""
+    solid verdict never surfaces liquid options (and vice-versa). The trained
+    cascade (empty→loaded→solid/liquid) decides the coarse class; the Atlas
+    material vote is the fallback. Falls back to the unfiltered list if
+    filtering would leave nothing (never show empty)."""
     import atlas as _a
-    mat = result.get("material")
-    if not mat:
-        return result
-    coarse = _a.coarse_class(mat)
+    coarse = (result.get("cascade") or {}).get("coarse")
+    if not coarse:
+        mat = result.get("material")
+        if not mat:
+            return result
+        coarse = _a.coarse_class(mat)
     result["coarse"] = coarse
     same = [m for m in result.get("matches", [])
             if _a.resolve_coarse(m["label"], m.get("coarse")) == coarse]
@@ -523,6 +527,7 @@ def _gate_prediction_to_coarse(result):
           if _a.coarse_class(m["material"]) == coarse]
     if mm:
         result["material_matches"] = mm
+        result["material"] = mm[0]["material"]   # keep material consistent with coarse
     return result
 
 
@@ -565,6 +570,17 @@ async def handle_cycle_predict(request):
                     "timeseries": ts,
                     "diagnostics": feats["diagnostics"],
                 }
+            # Run the trained cascade (empty→loaded→solid/liquid) on the same
+            # recording so the swirl verdict uses the model for the coarse call,
+            # with Atlas providing the fine-grained match within that class.
+            try:
+                cdf = pd.read_csv(os.path.join(RECORDINGS_DIR, os.path.basename(result["csv"])))
+                cc = _cascade_coarse(cdf)
+                result["cascade"] = {"coarse": cc["coarse"],
+                                     "loadedness": cc["loadedness"], "rigidity": cc["rigidity"]}
+            except Exception as ce:
+                result["cascade"] = None
+                result["cascade_error"] = str(ce)[:200]
             result = _gate_prediction_to_coarse(result)
             _last_prediction = result
             return web.json_response(result)
@@ -678,6 +694,13 @@ async def handle_cycle_abort(request):
     return web.json_response({"ok": True, "aborted": False, "note": "no cycle running"})
 
 
+async def handle_prediction_clear(request):
+    """Clear the persisted Mode-1 verdict so the dashboard shows a clean slate."""
+    global _last_prediction
+    _last_prediction = None
+    return web.json_response({"ok": True, "cleared": True})
+
+
 async def handle_api_status(request):
     return web.json_response({
         "cycle": _cycle_status,
@@ -744,6 +767,28 @@ def _cascade():
     return _CASCADE
 
 
+def _cascade_coarse(df):
+    """Run the trained cascade on a recording DataFrame → coarse state.
+
+    Stage 1 (empty vs loaded) then Stage 2 (solid vs liquid), the same model
+    the CLASSIFY button uses. Returns coarse + stage confidences + the feature
+    dict (reused by the CLASSIFY feature bars)."""
+    import numpy as np
+    import train_classifier as tc
+    c = _cascade()
+    order = c["feature_order"]
+    feats = tc.features(df)
+    x = np.array([[feats[k] for k in order]])
+
+    def pconf(pipe, cls):
+        return float(dict(zip(pipe.classes_, pipe.predict_proba(x)[0])).get(cls, 0.0))
+    loadedness = pconf(c["stage1"], "loaded")
+    rigidity = pconf(c["stage2_all"], "solid")
+    coarse = "empty" if loadedness < 0.5 else ("solid" if rigidity >= 0.5 else "liquid")
+    return {"coarse": coarse, "loadedness": round(loadedness, 3),
+            "rigidity": round(rigidity, 3), "feats": feats}
+
+
 def _safe_recording(name: str) -> str:
     """Resolve a recordings/*.csv basename safely (no path traversal)."""
     base = os.path.basename(str(name))
@@ -792,22 +837,12 @@ async def handle_classify(request):
     """Coarse cascade on a recording → state spectrum (loadedness × rigidity),
     the J3 torque signal, and the top classifier features."""
     try:
-        import numpy as np
-        import train_classifier as tc
         body = await request.json()
         path = _safe_recording(body.get("file", ""))
         df = pd.read_csv(path)
-        c = _cascade()
-        order = c["feature_order"]
-        feats = tc.features(df)
-        x = np.array([[feats[k] for k in order]])
-
-        def pconf(pipe, cls):
-            return float(dict(zip(pipe.classes_, pipe.predict_proba(x)[0])).get(cls, 0.0))
-        loadedness = pconf(c["stage1"], "loaded")
-        rigidity = pconf(c["stage2_all"], "solid")
+        cc = _cascade_coarse(df)
+        loadedness, rigidity, coarse, feats = cc["loadedness"], cc["rigidity"], cc["coarse"], cc["feats"]
         has_swirl = bool((df["phase"] == feature_extractor.SWIRL_PHASE).any())
-        coarse = "empty" if loadedness < 0.5 else ("solid" if rigidity >= 0.5 else "liquid")
 
         # classifier input signal: detrended swirl torque if present, else raw J3
         try:
@@ -901,6 +936,7 @@ async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_post("/api/cycle/abort", handle_cycle_abort)
     app.router.add_post("/api/cycle/correct", handle_cycle_correct)
     app.router.add_get("/api/status", handle_api_status)
+    app.router.add_post("/api/prediction/clear", handle_prediction_clear)
     app.router.add_post("/api/vectorspace", handle_vspace)
 
     runner = web.AppRunner(app)
