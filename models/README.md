@@ -57,8 +57,8 @@ solids/empties — the known sensing limit.
 
 Regenerate / re-evaluate:
 ```
-python train_classifier.py          # leak-free evaluation of every stage
-python train_classifier.py --save   # + refit on all data -> models/cascade.joblib
+python src/train_classifier.py          # leak-free evaluation of every stage
+python src/train_classifier.py --save   # + refit on all data -> models/cascade.joblib
 ```
 
 ---

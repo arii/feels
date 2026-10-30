@@ -32,7 +32,7 @@ from scipy.signal import butter, filtfilt
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REC_DIR = os.path.join(HERE, "recordings")
 
 JOINTS = list(range(1, 7))

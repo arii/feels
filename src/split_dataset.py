@@ -29,7 +29,7 @@ from collections import defaultdict
 
 import pandas as pd
 
-REC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recordings")
+REC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "recordings")
 
 
 def scan_recordings():

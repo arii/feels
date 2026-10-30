@@ -60,10 +60,10 @@ fix this — the signal isn't there.
 Mirrors the notebook's cleaning pipeline exactly:
 
 ```bash
-python predict_mystery.py                        # classify mystery recordings
-python predict_mystery.py recordings/foo.csv     # classify one CSV
-python predict_mystery.py --eval                 # LORO accuracy on references
-python predict_mystery.py --qc                   # tare-baseline quality gate
+python src/predict_mystery.py                        # classify mystery recordings
+python src/predict_mystery.py recordings/foo.csv     # classify one CSV
+python src/predict_mystery.py --eval                 # LORO accuracy on references
+python src/predict_mystery.py --qc                   # tare-baseline quality gate
 ```
 
 Reproduces the notebook's mystery result; honest about confidence.

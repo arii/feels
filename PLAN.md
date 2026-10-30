@@ -5,19 +5,19 @@ Concrete next steps, in order. Demos Friday 3:30 PM; hard close tonight 9 PM.
 ## Tonight (before 9 PM hard close)
 
 1. **Merge or hold `feat/swirl-extractor-dashboard`.** Review the diff, merge to main if clean — everything after tonight should run off one branch.
-2. **Atlas ready.** `MONGODB_URI` in `.env`; run `python atlas.py` setup so the `signatures` collection and the `cup_dynamics_index` vector index (10 dims, cosine) exist before any teach call. Then **delete the fake setup signature** the script inserts:
+2. **Atlas ready.** `MONGODB_URI` in `.env`; run `python src/atlas.py` setup so the `signatures` collection and the `cup_dynamics_index` vector index (10 dims, cosine) exist before any teach call. Then **delete the fake setup signature** the script inserts:
    `python -c "import atlas; db = atlas.get_db(); print(db.signatures.delete_many({'label': 'water_half', 'motion_type': '3in1_macro'}).deleted_count)"`
    (matched by `motion_type` so a real `water_half` taught later is untouched).
 2b. **Swirl protocol only.** Teach exclusively from recordings with a true SWIRL phase — `teach_csv.py --require-swirl` enforces this, and the dashboard always records with `--swirl-smooth`. Mixed protocols confound the embedding (verified: same cup scores ~0.4 cosine across protocols vs ~0.9 for different items within one protocol).
 3. **Run the P0 data collection.** `P0_ONLY=1 bash run_plan.sh` — E1, E3–E5, E9, E12, E17, E21–E24. The confound set (E21–E24: solid/water/candy/soap at 150 g) is the demo that matters: same mass, different contents. Prioritize it if time is short.
-4. **Gate every run.** `python predict_mystery.py --qc` after each batch — discard runs with INIT_DRIFT / INIT_MOTION flags. The tare baseline is the #1 data-quality risk (see BASELINE_FINDINGS.md).
-5. **Recalibrate and freeze.** `python feature_extractor.py --calibrate` on the P0 swirl recordings, paste the new `FEATURE_SCALES` into `feature_extractor.py`, commit. Rescaling later invalidates Atlas signatures already taught.
+4. **Gate every run.** `python src/predict_mystery.py --qc` after each batch — discard runs with INIT_DRIFT / INIT_MOTION flags. The tare baseline is the #1 data-quality risk (see BASELINE_FINDINGS.md).
+5. **Recalibrate and freeze.** `python src/feature_extractor.py --calibrate` on the P0 swirl recordings, paste the new `FEATURE_SCALES` into `feature_extractor.py`, commit. Rescaling later invalidates Atlas signatures already taught.
 
 ## Friday morning
 
 6. **Teach the item library** via dashboard Mode 2 (needs the robot + Atlas) or in batch with `teach_csv.py recordings/ --require-swirl --session thu`: empty, water half, candy, soap, + the confound set. Each dashboard teach is one swirl macro — budget ~2 min per item with setup.
 7. **Dry-run Mode 1** on a true mystery cup. If confidence < 82%, the UI says so — teach that item on the spot (that's the online-learning story for the judges).
-8. **Rehearse the fallback.** `FEELS_MOCK=1 python realtime_plot.py` runs the entire 2-mode demo from recorded data with the MOCK badge shown. If the robot or network misbehaves at 3:30, this is the backup — never present it as live.
+8. **Rehearse the fallback.** `FEELS_MOCK=1 python src/realtime_plot.py` runs the entire 2-mode demo from recorded data with the MOCK badge shown. If the robot or network misbehaves at 3:30, this is the backup — never present it as live.
 
 ## Demo talk track (2 min)
 

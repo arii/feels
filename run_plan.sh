@@ -97,7 +97,7 @@ run_trial() { # label, i, total, path
   local label="$1" i="$2" tot="$3" path="$4" extra=""
   [ "$path" = "swirl" ] && extra="--swirl-smooth"
   pause "   ▶ $label  [$path]  trial $i/$tot — RE-GRASP: release & reposition the cup." || return 1
-  local cmd="$PY repeatable_grasp.py --object \"$label\" --record --cycles 1 $extra"
+  local cmd="$PY src/repeatable_grasp.py --object \"$label\" --record --cycles 1 $extra"
   if [ "$DRY_RUN" = "1" ]; then echo "     DRY: $cmd"; else eval "$cmd"; fi
 }
 

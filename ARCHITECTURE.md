@@ -54,12 +54,12 @@ extractor, and Atlas flow stay untouched.
 
 **Your own features:** edit `FEATURE_NAMES` / `FEATURE_DESCRIPTIONS` /
 `FEATURE_SCALES` in `feature_extractor.py`, then `python
-feature_extractor.py --calibrate` on your data and freeze the scales
+src/feature_extractor.py --calibrate` on your data and freeze the scales
 (rescaling invalidates taught signatures).
 
-**Dashboard without our robot:** `FEELS_MOCK=1 python realtime_plot.py`
+**Dashboard without our robot:** `FEELS_MOCK=1 python src/realtime_plot.py`
 runs the full UI from recorded CSVs (purple MOCK badge; never demo as live).
 
 **Vector memory standalone:** `atlas.teach("label", embedding_vector)` and
 `atlas.identify(query_vector, top_k=3)` — needs `MONGODB_URI` and the
-`cup_dynamics_index` (10 dims, cosine) from `python atlas.py`.
+`cup_dynamics_index` (10 dims, cosine) from `python src/atlas.py`.

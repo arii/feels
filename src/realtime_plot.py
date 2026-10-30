@@ -39,9 +39,9 @@ VIAM_API_KEY = os.getenv("VIAM_API_KEY")
 VIAM_API_KEY_ID = os.getenv("VIAM_API_KEY_ID")
 VIAM_MACHINE_ADDRESS = os.getenv("VIAM_MACHINE_ADDRESS", "sfhack12-main.ty1cywh7tq.viam.cloud")
 GRAVITY = 9.80665
-RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recordings")
+RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "recordings")
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def _git_sha():
     try:

@@ -32,7 +32,7 @@ import joblib
 import train_classifier as tc
 import feature_extractor as fx
 
-MODEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "cascade.joblib")
+MODEL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models", "cascade.joblib")
 
 
 def _p(pipe, x, cls):

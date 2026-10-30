@@ -38,6 +38,53 @@ The **feels** system enables an industrial robotic arm (UFactory xArm850) to det
 
 ---
 
+## Architecture
+
+```
+                          ┌─────────────────────────────────────────────┐
+                          │            sfhack12  (Viam machine)          │
+   PHYSICAL               │   xArm850 ──┬── gripper ──┬── RealSense cam  │
+   cup on taped square ──▶│   arm-position-saver switches: approach/     │
+                          │   grasp/travel/place/back-off  + motion svc  │
+                          └───────────────────────┬─────────────────────┘
+                                                  │ Viam Python SDK (gRPC/WebRTC)
+                                                  ▼
+        ┌──────────────────────────────────────────────────────────────────────┐
+        │  MOTION  repeatable_grasp.py / safe_pick.py                            │
+        │  pick → lift → ◯ swirl → place     (arm.do_command{"load"} telemetry)  │
+        └───────────────────────────────┬──────────────────────────────────────┘
+                                         │  24-ch torque+pose CSV  (recordings/)
+                                         ▼
+        ┌──────────────────────────────────────────────────────────────────────┐
+        │  FEATURES  feature_extractor.py  →  10-D vector  +  unit embedding e   │
+        └──────────────┬──────────────────────────────────┬────────────────────┘
+                       │                                   │
+          classify     ▼                        teach /    ▼  identify
+        ┌───────────────────────────┐          ┌───────────────────────────────┐
+        │  CLASSIFIER                │          │  MONGODB ATLAS  (atlas.py)     │
+        │  train_classifier.py       │          │  Vector Search  $vectorSearch  │
+        │  cascade: empty→loaded     │◀────────▶│  cup_dynamics_index (cosine)   │
+        │          →solid/liquid     │ class-   │  openset.py: teach / novelty   │
+        │  state_spectrum.py (2-D)   │ filtered │  one-shot new-item learning    │
+        └──────────────┬─────────────┘          └───────────────┬───────────────┘
+                       │                                         │
+                       └────────────────┬────────────────────────┘
+                                        ▼
+        ┌──────────────────────────────────────────────────────────────────────┐
+        │  DASHBOARD  realtime_plot.py + static/index.html  (http://localhost:8080)│
+        │  live 6-joint torques · coarse→fine classify · Atlas feature-space PCA  │
+        └──────────────────────────────────────────────────────────────────────┘
+```
+
+**Flow:** the robot runs a fixed *pick → swirl → place* macro while streaming joint
+torques → `feature_extractor` turns each run into a 10-D embedding → that embedding
+is either **classified** (cascade: empty → solid/liquid, as a 2-D state spectrum) or
+**stored/queried** in **MongoDB Atlas Vector Search** (teach a new item in one shot,
+or k-NN identify). The **dashboard** drives and visualizes the whole loop.
+See [`PROJECT_MAP.md`](PROJECT_MAP.md) for per-module detail.
+
+---
+
 ## Getting Started
 
 ### 1. Virtual Environment Setup
@@ -53,22 +100,37 @@ pip install -r requirements.txt
 
 ### 2. Configure Credentials
 
-Ensure `.env` contains your Viam and MongoDB Atlas credentials:
+Copy the template and fill in your values:
 
-```env
-VIAM_API_KEY=your_api_key_here
-VIAM_API_KEY_ID=your_api_key_id_here
-VIAM_MACHINE_ADDRESS=sfhack12-main.ty1cywh7tq.viam.cloud
-MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/
-MONGODB_DATABASE=physical_ai_db
+```bash
+cp .env.example .env
 ```
+
+| Variable | Required | What it is / where to get it |
+|---|---|---|
+| `VIAM_API_KEY` | ✅ | Viam app → your machine → **CONNECT** tab → API key |
+| `VIAM_API_KEY_ID` | ✅ | …the matching API key **ID** from the same tab |
+| `VIAM_MACHINE_ADDRESS` | ✅ | machine remote address, e.g. `sfhack12-main.ty1cywh7tq.viam.cloud` |
+| `MONGODB_URI` | ✅ | Atlas SRV string `mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/?retryWrites=true&w=majority` |
+| `MONGODB_DATABASE` | ✅ | Atlas database name (default `physical_ai_db`) |
+| `VIAM_ARM_NAME` | | arm component name in Viam config (default `arm`) |
+| `VIAM_GRIPPER_NAME` | | gripper component name (default `gripper`) |
+| `VIAM_CAMERA_NAME` | | camera component name (default `cam`) |
+| `VIAM_MOTION_NAME` | | motion service name (default `builtin`) |
+| `VIAM_VISION_NAME` | | vision detector name (default `yolo` — `viam-labs:vision:yolov8`) |
+| `VIAM_WALL_BACK_NAME`, `VIAM_WALL_LEFT_NAME`, `VIAM_HOME_POSE_NAME` | | boundary/home component names (optional) |
+| `MOCK_MODE` | | `true` = offline mock components (no robot); `false` = live hardware |
+
+> **No hardware?** Set `MOCK_MODE=true` (or leave Atlas creds only) — the dashboard
+> mock mode and `python tools/fake_run.py` / `predict_mystery.py` run the full ML
+> path with no robot.
 
 ### 3. Launch the Operator Web Dashboard & Visualizer
 
 Launch the high-performance visualizer:
 
 ```bash
-python realtime_plot.py --port 8080
+python src/realtime_plot.py --port 8080
 ```
 
 Open **`http://localhost:8080`** in your browser to:
@@ -84,7 +146,7 @@ To run the repeatable pick-and-place swirl sequence from the terminal:
 
 ```bash
 # Run one full pick up -> swirl -> place cycle with labeled telemetry recording
-python repeatable_grasp.py --record --object water_half
+python src/repeatable_grasp.py --record --object water_half
 ```
 ### 5. Force & Weight Sensitivity Analysis
 
@@ -97,7 +159,7 @@ python effective_force.py --duration 15.0
 To eliminate the ~158ms WebRTC cloud latency and sample at 50–200 Hz, deploy [`control_service.py`](control_service.py) (`hackathons:control_logic:generic-service`) directly onto the robot host (`sfhack12`). Test with:
 
 ```bash
-python client_control_service.py
+python src/client_control_service.py
 ```
 
 ### 7. Swirl Feature Extractor + 2-Mode Dashboard
@@ -108,10 +170,10 @@ The demo loop is pick-up → swirl → place, driven by `repeatable_grasp.py --s
 
 ```bash
 # Extract the 10-D vector + normalized embedding from a recording
-python feature_extractor.py recordings/recording_20261029_180332_empty_cup.csv
+python src/feature_extractor.py recordings/recording_20261029_180332_empty_cup.csv
 
 # Recalibrate per-feature scales on your dataset (run once on P0 data, then freeze)
-python feature_extractor.py --calibrate
+python src/feature_extractor.py --calibrate
 ```
 
 Outputs `z` (10 interpretable features: mass offsets, swirl variances, peak-to-peak, phase lag, rattle energy, grip compliance, lift transient, swirl speed), `e` (L2-normalized embedding matching the Atlas `cup_dynamics_index`: 10 dims, cosine), and `diagnostics` (sampling rate, tare QC flags, rattle-band limits). The 5–25 Hz rattle band is **not** observable at 4–5 Hz cloud sampling — the extractor flags `rattle_band_limited` honestly; the real band needs the 100 Hz on-robot module (step 6).
@@ -119,7 +181,7 @@ Outputs `z` (10 interpretable features: mass offsets, swirl variances, peak-to-p
 **Dashboard API (2 modes):**
 
 ```bash
-python realtime_plot.py --port 8080   # open http://localhost:8080
+python src/realtime_plot.py --port 8080   # open http://localhost:8080
 ```
 
 - **Mode 1 — Identify:** `POST /api/cycle/predict` runs the swirl macro on a mystery cup, extracts features, queries Atlas `$vectorSearch`, returns the label + confidence + top 3 neighbors.
@@ -129,7 +191,7 @@ python realtime_plot.py --port 8080   # open http://localhost:8080
 **Mock mode (no robot / no Atlas):**
 
 ```bash
-FEELS_MOCK=1 python realtime_plot.py --port 8080
+FEELS_MOCK=1 python src/realtime_plot.py --port 8080
 ```
 
 Serves the full 2-mode UI from recorded data: predict runs the real extractor + a local cosine k-NN over the reference recordings; teach simulates the save. A purple **MOCK** badge is always shown — never demo it as live hardware.
@@ -137,10 +199,10 @@ Serves the full 2-mode UI from recorded data: predict runs the real extractor + 
 **Offline classifier:**
 
 ```bash
-python predict_mystery.py                        # classify mystery recordings
-python predict_mystery.py recordings/foo.csv     # classify one CSV
-python predict_mystery.py --eval                 # leave-one-recording-out accuracy
-python predict_mystery.py --qc                   # tare-baseline quality gate per run
+python src/predict_mystery.py                        # classify mystery recordings
+python src/predict_mystery.py recordings/foo.csv     # classify one CSV
+python src/predict_mystery.py --eval                 # leave-one-recording-out accuracy
+python src/predict_mystery.py --qc                   # tare-baseline quality gate per run
 ```
 
 See [`BASELINE_FINDINGS.md`](BASELINE_FINDINGS.md) for the audit behind the QC checks.
@@ -148,9 +210,9 @@ See [`BASELINE_FINDINGS.md`](BASELINE_FINDINGS.md) for the audit behind the QC c
 **Batch-teach recordings (no robot needed):**
 
 ```bash
-python teach_csv.py recordings/ --require-swirl --dry-run  # preview
-python teach_csv.py recordings/ --require-swirl --session thu
-python teach_csv.py --list   # signature counts per label
+python src/teach_csv.py recordings/ --require-swirl --dry-run  # preview
+python src/teach_csv.py recordings/ --require-swirl --session thu
+python src/teach_csv.py --list   # signature counts per label
 ```
 
 `teach_csv.py` teaches labeled CSVs straight into Atlas: label resolution is
@@ -294,24 +356,24 @@ Using the newly configured `erh:vmodutils:arm-position-saver` switches on `sfhac
 
 ```bash
 # Run 1 full pick-and-place cycle
-python repeatable_grasp.py
+python src/repeatable_grasp.py
 
 # Run multiple repeated cycles
-python repeatable_grasp.py --cycles 3 --delay 1.5
+python src/repeatable_grasp.py --cycles 3 --delay 1.5
 
 # Step to a specific static position
-python repeatable_grasp.py --step home-pose
-python repeatable_grasp.py --step approach
-python repeatable_grasp.py --step grasp
-python repeatable_grasp.py --step travel
-python repeatable_grasp.py --step place
+python src/repeatable_grasp.py --step home-pose
+python src/repeatable_grasp.py --step approach
+python src/repeatable_grasp.py --step grasp
+python src/repeatable_grasp.py --step travel
+python src/repeatable_grasp.py --step place
 
 # Manual gripper actuation
-python repeatable_grasp.py --gripper open
-python repeatable_grasp.py --gripper grab
+python src/repeatable_grasp.py --gripper open
+python src/repeatable_grasp.py --gripper grab
 
 # Inspect waypoints and status without moving (dry-run)
-python repeatable_grasp.py --dry-run
+python src/repeatable_grasp.py --dry-run
 ```
 
 ---

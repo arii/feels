@@ -40,7 +40,7 @@ from atlas import material_of
 
 warnings.filterwarnings("ignore")
 
-REPO = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RECS = os.path.join(REPO, "recordings")
 MODELS_DIR = os.path.join(REPO, "models")
 

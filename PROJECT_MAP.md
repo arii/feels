@@ -6,20 +6,24 @@ codebase: every module, grouped by purpose, with how to run it and how to reuse 
 
 ```
 feels/
-├─ Robot control & motion   repeatable_grasp, safe_pick, vision_grasp, control_service, main, sensors
-├─ ML / classification      feature_extractor, train_classifier, predict_content, state_spectrum, predict_mystery
-├─ Atlas vector memory      atlas, openset, teach_csv, push_to_atlas
-├─ Dashboard                realtime_plot + static/
-├─ Data capture / recording record_dataset, split_dataset, recordings/
-├─ tools/                   one-off probes & utilities (standalone, no deps on the above)
-├─ analysis/                offline analysis notebooks & plots
-├─ models/                  trained cascade + archived exploration (see models/README.md)
-└─ notebooks/               honest leak-free analysis notebooks
+├─ src/            all application modules (grouped by purpose below)
+│    ├─ Robot control & motion   repeatable_grasp, safe_pick, vision_grasp, control_service, main, sensors
+│    ├─ ML / classification      feature_extractor, train_classifier, predict_content, state_spectrum, predict_mystery
+│    ├─ Atlas vector memory      atlas, openset, teach_csv, push_to_atlas
+│    ├─ Dashboard                realtime_plot (+ ../static/)
+│    └─ Data capture             record_dataset, split_dataset
+├─ tools/          one-off probes & utilities (standalone, no deps on src/)
+├─ static/         dashboard UI (index.html)
+├─ recordings/     115 labeled telemetry CSVs + figures
+├─ models/         trained cascade + archived exploration (see models/README.md)
+├─ notebooks/      honest leak-free analysis notebooks
+├─ analysis/       offline analysis scripts & plots
+└─ docs/           design docs
 ```
 
-Everything runs from the **repo root** (`python <file>.py`). Flat layout is
-intentional: the core modules import each other by name (`import atlas`, …), so
-they live together; only self-contained one-offs are tucked into `tools/`.
+Run everything **from the repo root** as `python src/<file>.py` (or `python
+tools/<file>.py`). The `src/` modules import each other by name (`import atlas`, …)
+so they live together in one package dir; self-contained one-offs are in `tools/`.
 
 ---
 
@@ -32,12 +36,12 @@ they live together; only self-contained one-offs are tucked into `tools/`.
 | `control_service.py` | On-robot Viam Generic Service for 100 Hz telemetry + onboard features | deploy to the robot to beat cloud latency |
 | `client_control_service.py` | Test client for the on-robot service over gRPC | — |
 | `main.py` | CLI: `identify` / `teach` / `tare` / `status` | top-level entry point |
-| `sensors.py` | Full component inventory + live sensor readout | `python sensors.py` to inspect any machine |
+| `sensors.py` | Full component inventory + live sensor readout | `python src/sensors.py` to inspect any machine |
 
 ```bash
-python repeatable_grasp.py --record --object water_050pct   # one labeled cycle
-python repeatable_grasp.py --swirl --swirl-smooth           # smooth swirl agitation
-python repeatable_grasp.py --step swirl                     # test a single waypoint
+python src/repeatable_grasp.py --record --object water_050pct   # one labeled cycle
+python src/repeatable_grasp.py --swirl --swirl-smooth           # smooth swirl agitation
+python src/repeatable_grasp.py --step swirl                     # test a single waypoint
 ```
 
 ## 🧠 ML / classification
@@ -50,10 +54,10 @@ python repeatable_grasp.py --step swirl                     # test a single wayp
 | `predict_mystery.py` | Offline k-NN classifier (used by the dashboard's mock mode) | runs with no robot/Atlas |
 
 ```bash
-python train_classifier.py            # leak-free evaluation of every stage
-python train_classifier.py --save     # refit on all data → models/cascade.joblib
-python predict_content.py recordings/recording_..._water_025pct.csv
-python state_spectrum.py <recording.csv> --neighbors
+python src/train_classifier.py            # leak-free evaluation of every stage
+python src/train_classifier.py --save     # refit on all data → models/cascade.joblib
+python src/predict_content.py recordings/recording_..._water_025pct.csv
+python src/state_spectrum.py <recording.csv> --neighbors
 ```
 
 ## 🔮 Atlas vector memory (open-set learning)
@@ -65,9 +69,9 @@ python state_spectrum.py <recording.csv> --neighbors
 | `push_to_atlas.py` | Upload raw telemetry recordings into the Atlas `runs` collection | raw-data archive |
 
 ```bash
-python teach_csv.py recordings/ --session thu    # seed signatures
-python openset.py demo <recording.csv> --label oat_milk   # novelty → teach → recognize
-python openset.py stats                           # what the memory knows
+python src/teach_csv.py recordings/ --session thu    # seed signatures
+python src/openset.py demo <recording.csv> --label oat_milk   # novelty → teach → recognize
+python src/openset.py stats                           # what the memory knows
 ```
 
 ## 📊 Dashboard (operator UI)
@@ -76,7 +80,7 @@ python openset.py stats                           # what the memory knows
 | `realtime_plot.py` + `static/index.html` | 🎃 Halloween-themed live dashboard: all-6-joint torque graph, coarse→fine classify (infer/teach), Atlas feature-space PCA, existing-classes reference |
 
 ```bash
-python realtime_plot.py --port 8080     # → http://localhost:8080
+python src/realtime_plot.py --port 8080     # → http://localhost:8080
 ```
 
 ## 🎞️ Data capture & recording
@@ -107,7 +111,7 @@ python tools/fake_run.py identify --label water_half    # fully offline
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env            # fill in Viam + MongoDB creds
-python realtime_plot.py --port 8080
+python src/realtime_plot.py --port 8080
 ```
 
 ## Reusing this for your own robot

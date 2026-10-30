@@ -40,9 +40,9 @@ load_dotenv()
 VIAM_API_KEY = os.getenv("VIAM_API_KEY")
 VIAM_API_KEY_ID = os.getenv("VIAM_API_KEY_ID")
 VIAM_MACHINE_ADDRESS = os.getenv("VIAM_MACHINE_ADDRESS", "sfhack12-main.ty1cywh7tq.viam.cloud")
-RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recordings")
+RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "recordings")
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
-SWIRL_CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "swirl_joints.json")
+SWIRL_CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "swirl_joints.json")
 GRAVITY = 9.80665
 
 # Switch components corresponding to arm-position-saver waypoints
