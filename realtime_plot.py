@@ -159,7 +159,6 @@ def _playback_csv() -> Optional[str]:
         return None
 
     def has_swirl(path: str) -> bool:
-        """True when the CSV contains a SWIRL phase."""
         try:
             with open(path) as fh:
                 return "SWIRL" in fh.read(200000)
@@ -234,7 +233,6 @@ async def _run_swirl_macro(object_label: str) -> str:
 
 class RobotForceState:
     def __init__(self):
-        """Initialize polling state: baselines, EMA filters, recording buffer."""
         self.baseline_loads: List[float] = [0.0, -16.0489, -16.8209, 0.778, 0.3728, 0.0]
         self.is_calibrated: bool = False
         self.r_xy_m: float = 0.1391
@@ -264,22 +262,12 @@ class RobotForceState:
         self.subscribers: Set[asyncio.Queue] = set()
 
     def tare(self, loads: List[float]):
-        """Recalibrate the torque baseline from a fresh 6-joint load reading.
-        
-            Args:
-                loads: six joint torques in N·m.
-            """
         if loads and len(loads) >= 6:
             self.baseline_loads = list(loads)
             self.is_calibrated = True
             print(f"[TARE] Baseline recalibrated: J2={loads[1]:.4f} Nm")
 
     def start_recording(self, object_label: str = ""):
-        """Begin buffering polled samples for a labeled recording.
-        
-            Args:
-                object_label: label written into each sample, e.g. "water_075pct".
-            """
         self.is_recording = True
         self.recording_start_time = time.time()
         self.recorded_samples = []
@@ -290,11 +278,6 @@ class RobotForceState:
         print(f"[RECORD] Started session: {self.current_recording_file} (object: {self.current_object_label})")
 
     def stop_recording(self) -> Optional[str]:
-        """Stop buffering and write recordings/recording_*.csv.
-        
-            Returns:
-                Filename written, or None when nothing was recorded.
-            """
         if not self.is_recording:
             return None
         self.is_recording = False
@@ -325,11 +308,6 @@ state = RobotForceState()
 
 
 async def connect_robot():
-    """Open the Viam gRPC client to the hackathon machine.
-    
-        Returns:
-            Connected RobotClient for VIAM_MACHINE_ADDRESS.
-        """
     opts = RobotClient.Options.with_api_key(
         api_key=VIAM_API_KEY,
         api_key_id=VIAM_API_KEY_ID
@@ -467,31 +445,16 @@ HTML_PAGE = _load_index_html()
 
 
 async def handle_index(request):
-    """Serve the dashboard single-page app (static/index.html)."""
     return web.Response(text=HTML_PAGE, content_type="text/html")
 
 
 async def handle_tare(request):
-    """POST /tare — recalibrate the torque baseline from the latest loads.
-    
-        Returns:
-            JSON with ok and the new baseline.
-        """
-
     loads = list(state.latest_sample["smooth"])
     state.tare(loads)
     return web.json_response({"ok": True, "baseline_j2": state.baseline_loads[1]})
 
 
 async def handle_record_start(request):
-    """POST /record/start — begin buffering samples for a labeled recording.
-    
-        Body: {"object_label": str}.
-    
-        Returns:
-            JSON with ok.
-        """
-
     obj = request.query.get("object", "")
     if not obj and request.can_read_body:
         try:
@@ -508,23 +471,11 @@ async def handle_record_start(request):
 
 
 async def handle_record_stop(request):
-    """POST /record/stop — stop buffering and write recordings/recording_*.csv.
-    
-        Returns:
-            JSON with ok, file, and sample count.
-        """
-
     filename = state.stop_recording()
     return web.json_response({"ok": True, "file": filename, "samples": len(state.recorded_samples)})
 
 
 async def handle_record_download(request):
-    """GET /record/download?file= — download a recording CSV.
-    
-        Returns:
-            The CSV file, or 404 when missing.
-        """
-
     filename = request.query.get("file")
     if not filename:
         return web.Response(status=400, text="Missing file param")
@@ -968,12 +919,6 @@ async def handle_cycle_abort(request):
 
 
 async def handle_api_status(request):
-    """GET /api/status — dashboard health.
-
-    Returns:
-        JSON with cycle state, Atlas configuration, mock flag, simulate
-        progress, and the last prediction.
-    """
     return web.json_response({
         "cycle": _cycle_status,
         "cycle_busy": _cycle_lock.locked(),
@@ -988,11 +933,6 @@ async def handle_api_status(request):
 
 
 async def handle_stream(request):
-    """GET /stream — Server-Sent Events feed of torque samples.
-    
-        Streams live robot telemetry, or replayed recording rows during a
-        simulated run (flagged simulated=True, with phase/stage fields).
-        """
     response = web.StreamResponse(
         status=200,
         reason="OK",
@@ -1020,7 +960,7 @@ async def handle_stream(request):
     return response
 
 
-_DOC_PAGES = {"index", "problem", "approach", "prediction", "force", "figures", "api"}
+_DOC_PAGES = {"index", "problem", "approach", "prediction", "force", "api"}
 
 
 async def handle_docs(request):
@@ -1032,13 +972,6 @@ async def handle_docs(request):
 
 
 async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
-    """Start the aiohttp app and register all routes.
-    
-        Args:
-            host: bind address.
-            port: bind port.
-        """
-
     app = web.Application()
     app.router.add_get("/", handle_index)
     app.router.add_get("/docs", handle_docs)
@@ -1067,8 +1000,6 @@ async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
 
 
 async def main():
-    """CLI entry: parse args, connect the robot unless mocking, serve the dashboard."""
-
     parser = argparse.ArgumentParser(
         description="feels dashboard: 2-mode web UI for teaching and identifying cup contents.",
         epilog="""examples:
