@@ -192,7 +192,7 @@
         <span class="badge" id="atlas-badge" style="background:#6e7681;">ATLAS: ...</span>
         <span class="badge" id="mock-badge" style="background:#8957e5; display:none;">MOCK</span>
       </h1>
-      <p style="color: #8b949e; font-size: 0.8rem; margin-top: 2px;">Pick up &rarr; swirl &rarr; place &mdash; identify what's inside the lidded cup</p>
+      <p style="color: #8b949e; font-size: 0.8rem; margin-top: 2px;">lift &rarr; swirl &rarr; predict &mdash; identify what's inside the lidded cup</p>
     </div>
     <div class="controls">
       <a href="/docs" class="docs-link">Docs</a>
@@ -293,12 +293,12 @@
   </div>
 
   <!-- Live joint torques (native canvas sparklines) -->
-  <div class="section-title">
-    <span>Live Joint Torques (10s Rolling Windows)</span>
+  <div class="section-title" style="cursor:pointer;" onclick="toggleJoints()" title="show/hide joint telemetry">
+    <span>Live Joint Torques (10s Rolling Windows) <span id="joints-toggle" style="color:#58a6ff;">[−]</span></span>
     <span style="font-size: 0.8rem; color: #8b949e;">Ultra-fast native canvas (&lt;0.1ms render)</span>
   </div>
 
-  <div class="grid-joints">
+  <div id="joints-wrap"><div class="grid-joints">
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #39c5cf;">Joint 1 — Base (Yaw)</span>
@@ -346,9 +346,20 @@
       </div>
       <div class="canvas-wrap"><canvas id="c-j6" class="sparkline"></canvas></div>
     </div>
-  </div>
+  </div></div>
 
   <script>
+function setJointsCollapsed(collapsed) {
+  const w = document.getElementById('joints-wrap');
+  const tg = document.getElementById('joints-toggle');
+  if (!w) return;
+  w.style.display = collapsed ? 'none' : '';
+  if (tg) tg.textContent = collapsed ? '[+]' : '[−]';
+}
+function toggleJoints() {
+  const w = document.getElementById('joints-wrap');
+  setJointsCollapsed(w && w.style.display !== 'none');
+}
     // Strict 10-second rolling window (~45-50 points at 4.5Hz)
     const MAX_POINTS = 45;
     let useFilter = true;
@@ -525,7 +536,7 @@
         }
       }
       document.getElementById('pred-features').innerHTML = html;
-      const tf = (dq.tare_flags && dq.tare_flags.length) ? 'tare QC: ' + dq.tare_flags.join(', ') : 'tare QC: OK';
+      const tf = (dq.tare_flags && dq.tare_flags.length) ? 'baseline QC: ' + dq.tare_flags.join(', ') : 'baseline QC: OK';
       document.getElementById('pred-data').innerText =
         `${dq.n_samples ?? '?'} samples @ ${dq.fs_hz ?? '?'} Hz · ${dq.n_swirl_samples ?? 0} swirl samples` +
         ` · phase src: ${dq.phase_source ?? '?'} · ${tf}`;
@@ -755,7 +766,7 @@
       document.getElementById('predict-status').innerText = `Done — ${data.csv}` +
         (data.mock ? '  (MOCK data, not live hardware)' : '') +
         (data.simulated ? `  (SIMULATED replay${data.true_label ? ` — true contents: ${data.true_label}` : ''})` : '') +
-        (dq.tare_flags && dq.tare_flags.length ? `  ⚠ tare flags: ${dq.tare_flags.join(',')}` : '');
+        (dq.tare_flags && dq.tare_flags.length ? `  ⚠ baseline flags: ${dq.tare_flags.join(',')}` : '');
     }
 
     async function pollStatus() {
@@ -806,6 +817,7 @@
     function updateRunMode() {
       const mode = document.getElementById('run-mode').value;
       const sim = mode === 'simulate';
+      setJointsCollapsed(sim);
       document.getElementById('sim-csv').style.display = sim ? '' : 'none';
       document.getElementById('sim-speed').style.display = sim ? '' : 'none';
       document.getElementById('sim-progress-wrap').style.display = sim ? '' : 'none';

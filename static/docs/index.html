@@ -24,9 +24,6 @@ main { max-width:900px; margin:0 auto; padding:48px 24px 80px; text-align:center
 .stageline { color:var(--muted); margin:1.6em 0 0.4em; font-size:1rem; letter-spacing:0.02em; }
 .stageline .on { color:var(--accent); font-weight:700; }
 .stageline .done { color:var(--green); }
-#verdict { min-height:2.6em; margin:0.4em 0 0; font-size:1.6rem; font-weight:800; }
-#verdict .pb { display:inline-block; font-size:0.75rem; font-weight:700; color:var(--amber); border:1px solid var(--amber); border-radius:6px; padding:2px 10px; margin-left:12px; vertical-align:middle; }
-#verdict .low { font-size:0.95rem; color:var(--amber); font-weight:600; display:block; margin-top:0.3em; }
 #vspaceWrap { margin:1.6em auto 0; max-width:700px; }
 #vspaceWrap h2 { font-size:1rem; color:var(--muted); font-weight:600; border:none; margin:0 0 0.4em; padding:0; }
 #vspaceStatus { color:var(--muted); font-size:0.92rem; margin:0 0 0.8em; }
@@ -42,6 +39,11 @@ details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
 .card h3 { margin:0 0 0.3em; color:var(--text); font-size:1rem; }
 .card p { margin:0; font-size:0.85rem; color:var(--muted); }
 @media (max-width:600px) { .cards { grid-template-columns:1fr; } .hook { font-size:2.2rem; } }
+.dashlink { display:inline-block; margin:1em 0; padding:10px 22px; background:#1f6feb; color:#fff !important;
+  border-radius:8px; text-decoration:none; font-weight:600; }
+.dashlink:hover { background:#388bfd; }
+.macroanim { margin:1.2em auto 0; max-width:340px; }
+.macroanim svg { display:block; width:100%; height:auto; }
 </style>
 </head>
 <body>
@@ -61,14 +63,37 @@ details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
   <h1>Teaching a robot to feel.</h1>
   <p class="subtitle">Object classification through physical interaction.</p>
 
-  <button id="runBtn" onclick="runDemo()">&#9654; Run the demo</button><br>
-  <div class="modes">
-    <button id="modeLive" class="mode active" onclick="setMode('live')">Live robot</button>
-    <button id="modePlayback" class="mode" onclick="setMode('playback')">Playback</button>
+  <a href="/" class="dashlink">Open the live dashboard &rarr;</a>
+
+  <div class="macroanim">
+  <svg viewBox="0 0 320 200" width="320" height="200" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <rect width="320" height="200" fill="#0d1117" rx="8"/>
+    <!-- table -->
+    <line x1="20" y1="150" x2="300" y2="150" stroke="#2d333b" stroke-width="2"/>
+    <!-- cup -->
+    <rect x="208" y="128" width="24" height="22" rx="2" fill="#161b22" stroke="#8b949e"/>
+    <!-- TCP path: home -> approach -> grasp -> lift -> travel -> swirl orbit -> place -> back-off -> home -->
+    <path id="tcpPath" d="M60,40 L60,110 L60,132 L60,60 L220,60 m-28,0 a28,28 0 1,0 56,0 a28,28 0 1,0 -56,0 L220,60 L220,132 L220,60 L60,40"
+      fill="none" stroke="#2d333b" stroke-width="1.5"/>
+    <circle r="5" fill="#58a6ff">
+      <animateMotion dur="12s" repeatCount="indefinite" rotate="auto">
+        <mpath href="#tcpPath"/>
+      </animateMotion>
+    </circle>
+    <text x="60" y="22" font-size="10" fill="#8b949e" text-anchor="middle">home
+      <animate attributeName="opacity" values=".3;1;.3" keyTimes="0;.04;.1" dur="12s" repeatCount="indefinite"/></text>
+    <text x="120" y="52" font-size="10" fill="#8b949e" text-anchor="middle">lift
+      <animate attributeName="opacity" values=".3;1;.3" keyTimes=".08;.16;.26" dur="12s" repeatCount="indefinite"/></text>
+    <text x="220" y="18" font-size="10" fill="#8b949e" text-anchor="middle">swirl
+      <animate attributeName="opacity" values=".3;1;.3" keyTimes=".36;.5;.64" dur="12s" repeatCount="indefinite"/></text>
+    <text x="262" y="110" font-size="10" fill="#8b949e" text-anchor="middle">place
+      <animate attributeName="opacity" values=".3;1;.3" keyTimes=".66;.74;.84" dur="12s" repeatCount="indefinite"/></text>
+    <text x="140" y="185" font-size="10" fill="#8b949e" text-anchor="middle">predict
+      <animate attributeName="opacity" values=".3;1;.3" keyTimes=".86;.95;1" dur="12s" repeatCount="indefinite"/></text>
+  </svg>
   </div>
 
-  <p class="stageline" id="stageline"><span id="sgLift">○ lift</span> &nbsp;→&nbsp; <span id="sgSwirl">○ swirl</span> &nbsp;→&nbsp; <span id="sgPredict">○ predict</span></p>
-  <div id="verdict"></div>
+  <p class="stageline"><span>○ lift</span> &nbsp;→&nbsp; <span>○ swirl</span> &nbsp;→&nbsp; <span>○ predict</span></p>
 
   <div id="vspaceWrap">
     <h2>Signature space · live from Atlas</h2>
@@ -207,83 +232,6 @@ details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
 
 </main>
 <script>
-let demoMode = "live";
-const COLORS = ["#58a6ff","#3fb950","#f0883e","#d29922","#a371f7","#f778ba","#79c0ff","#ffa657"];
-function colorFor(label) {
-  let h = 0;
-  for (const c of label) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return COLORS[h % COLORS.length];
-}
-function setMode(m) {
-  demoMode = m;
-  document.getElementById("modeLive").classList.toggle("active", m === "live");
-  document.getElementById("modePlayback").classList.toggle("active", m === "playback");
-}
-function stage(id, cls, glyph) {
-  const el = document.getElementById(id);
-  el.className = cls || "";
-  const names = {sgLift: "lift", sgSwirl: "swirl", sgPredict: "predict"};
-  el.textContent = (glyph || "○") + " " + names[id];
-}
-function resetStages() {
-  ["sgLift","sgSwirl","sgPredict"].forEach(id => stage(id));
-  document.getElementById("verdict").innerHTML = "";
-}
-function setStatus(html) { document.getElementById("vspaceStatus").innerHTML = html; }
-async function runDemo() {
-  const btn = document.getElementById("runBtn");
-  btn.disabled = true;
-  resetStages();
-  stage("sgLift", "on", "●");
-  setStatus("<strong>Status: Running (" + demoMode + ").</strong> Lifting…");
-  setStatus("<strong>Status: Running (" + demoMode + ").</strong> Swirling…");
-  let pred = null;
-  try {
-    const r = await fetch("/api/cycle/predict", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({mode: demoMode})
-    });
-    pred = await r.json();
-  } catch (e) {
-    setStatus("<strong>Status: Error.</strong> Dashboard unreachable — is it running?");
-    btn.disabled = false;
-    resetStages();
-    return;
-  }
-  const poll = setInterval(async () => {
-    try {
-      const s = await (await fetch("/api/status")).json();
-      if (!s.cycle_busy) {
-        clearInterval(poll);
-        stage("sgLift", "done", "●");
-        stage("sgSwirl", "done", "●");
-        stage("sgPredict", "on", "●");
-        setStatus("<strong>Status: Predicting.</strong> 10-D signature → Atlas…");
-        setTimeout(() => {
-          stage("sgPredict", "done", "●");
-          setStatus("<strong>Status: Done.</strong> Nearest signatures retrieved from Atlas.");
-          showVerdict(pred);
-          if (pred && pred.ok && pred.e) loadLivePlot(pred.e);
-          btn.disabled = false;
-        }, 700);
-      }
-    } catch (e) { /* keep polling */ }
-  }, 600);
-}
-function showVerdict(pred) {
-  const v = document.getElementById("verdict");
-  if (!pred || !pred.ok) {
-    v.innerHTML = '<span class="low">prediction failed: ' + ((pred && pred.error) || "unknown") + "</span>";
-    return;
-  }
-  const cat = (pred.category || pred.prediction || "unknown").toUpperCase();
-  let html = cat;
-  if (pred.mode === "playback") html += '<span class="pb">PLAYBACK</span>';
-  if (pred.low_confidence || pred.category_low_confidence) {
-    html += '<span class="low">low confidence — teach this item to improve it</span>';
-  }
-  v.innerHTML = html;
-}
 async function loadLivePlot(query) {
   try {
     const r = await fetch("/api/vectorspace", {

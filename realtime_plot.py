@@ -1023,7 +1023,11 @@ GET /api/status, POST /api/vectorspace.""",
     args = parser.parse_args()
 
     await start_web_server(port=args.port)
-    await robot_polling_loop(target_delay_ms=args.delay_ms)
+    if MOCK_MODE:
+        print("[mock] pure demo playback: robot polling disabled, no Viam dial.")
+        await asyncio.Event().wait()  # serve forever without a robot
+    else:
+        await robot_polling_loop(target_delay_ms=args.delay_ms)
 
 
 if __name__ == "__main__":
