@@ -48,47 +48,171 @@ The **feels** system enables an industrial robotic arm (UFactory xArm850) to det
 
 ## Architecture
 
+One sentence: **the robot swirls a sealed cup, turns the joint torques into a 10-D
+signature, and asks MongoDB Atlas which cup that feels like.**
+🔵 Viam · 🟢 MongoDB Atlas · 🟣 operator UI · ⚪ our Python.
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"clusterBkg":"#ffffff","clusterBorder":"#94a3b8","lineColor":"#64748b","textColor":"#0f172a","edgeLabelBackground":"#ffffff","fontSize":"16px"},"flowchart":{"curve":"basis","nodeSpacing":55,"rankSpacing":70,"padding":16}}}%%
+flowchart LR
+
+  CUP["🥤&nbsp;&nbsp;<b>Sealed cup</b><br/>contents unknown"]
+  ROBOT["🤖&nbsp;&nbsp;<b>Robot arm</b><br/>pick → ◯ swirl → place<br/><b>Viam</b>"]
+  TORQ["📉&nbsp;&nbsp;<b>Joint torques</b><br/>6 joints · one CSV per run"]
+  SIG["🔢&nbsp;&nbsp;<b>10-D signature</b><br/>feature_extractor.py"]
+  ATLAS["🍃&nbsp;&nbsp;<b>Vector search</b><br/>k-NN vs. taught cups<br/><b>MongoDB Atlas</b>"]
+  OUT["🖥️&nbsp;&nbsp;<b>Verdict</b><br/>“water · 0.93”<br/>operator dashboard"]
+
+  MOD["⚙️&nbsp;&nbsp;<b>3 on-robot Viam modules</b><br/>torque · pick · classify<br/>50 Hz, on the machine"]
+  CAS["🧪&nbsp;&nbsp;<b>Cascade classifier</b><br/>empty / solid / liquid"]
+
+  CUP --> ROBOT --> TORQ --> SIG
+  SIG -->|"identify"| ATLAS --> OUT
+  SIG -. "teach · one-shot, no retrain" .-> ATLAS
+
+  MOD -.-> ROBOT
+  SIG -.-> CAS
+
+  classDef viam fill:#dbeafe,stroke:#1d4ed8,color:#0b1b3a;
+  classDef mongo fill:#d1fae5,stroke:#047857,color:#042f21;
+  classDef ours fill:#f1f5f9,stroke:#475569,color:#0f172a;
+  classDef ui fill:#ede9fe,stroke:#6d28d9,color:#2e1065;
+  classDef thing fill:#ffffff,stroke:#cbd5e1,color:#334155;
+  class ROBOT,MOD viam;
+  class ATLAS mongo;
+  class TORQ,SIG,CAS ours;
+  class OUT ui;
+  class CUP thing;
 ```
-                  ┌───────────────────────────────────────────────────────────────┐
-                  │                     sfhack12  (Viam machine)                   │
-   PHYSICAL       │   xArm850 ──┬── gripper ──┬── RealSense cam                    │
-   cup on taped ─▶│   arm-position-saver switches: approach/grasp/travel/place     │
-   square         │                                                                │
-                  │   ON-ROBOT MODULES  (braveorangerover:object-picker @ 50 Hz)   │
-                  │   ├─ sensing:torque-features   torque + force/weight + FFT      │
-                  │   ├─ pick_logic:yolo3d-pick    vision detect / pick             │
-                  │   └─ content:classifier        solid / liquid / empty cascade   │
-                  └───────────────────────────────┬───────────────────────────────┘
-                                                  │ Viam Python SDK (gRPC/WebRTC)
-                                                  ▼
-        ┌──────────────────────────────────────────────────────────────────────┐
-        │  MOTION  repeatable_grasp.py / safe_pick.py                            │
-        │  pick → lift → ◯ swirl → place     (arm.do_command{"load"} telemetry)  │
-        └───────────────────────────────┬──────────────────────────────────────┘
-                                         │  24-ch torque+pose CSV  (recordings/)
-                                         │  ──────────────────────────────────────▶  🤗 Hugging Face
-                                         │          split_dataset.py + push_to_hf.py   feels-cup-dynamics
-                                         ▼
-        ┌──────────────────────────────────────────────────────────────────────┐
-        │  FEATURES  feature_extractor.py  →  10-D vector  +  unit embedding e   │
-        └──────────────┬──────────────────────────────────┬────────────────────┘
-                       │                                   │
-          classify     ▼                        teach /    ▼  identify
-        ┌───────────────────────────┐          ┌───────────────────────────────┐
-        │  CLASSIFIER                │          │  MONGODB ATLAS  (atlas.py)     │
-        │  train_classifier.py       │          │  Vector Search  $vectorSearch  │
-        │  cascade: empty→loaded     │◀────────▶│  cup_dynamics_index (cosine)   │
-        │          →solid/liquid     │ class-   │  openset.py: teach / novelty   │
-        │  state_spectrum.py (2-D)   │ filtered │  one-shot new-item learning    │
-        └──────────────┬─────────────┘          └───────────────┬───────────────┘
-                       │                                         │
-                       └────────────────┬────────────────────────┘
-                                        ▼
-        ┌──────────────────────────────────────────────────────────────────────┐
-        │  DASHBOARD  realtime_plot.py + static/index.html  (http://localhost:8080)│
-        │  live 6-joint torques · coarse→fine classify · Atlas feature-space PCA  │
-        └──────────────────────────────────────────────────────────────────────┘
+
+*Solid = the live identify path · dotted = everything hanging off it.*
+
+### Full component view
+
+Every layer, module and collection — robot host, laptop SDK, local models, cloud.
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"clusterBkg":"#ffffff","clusterBorder":"#94a3b8","lineColor":"#64748b","textColor":"#0f172a","edgeLabelBackground":"#ffffff","fontSize":"15px"},"flowchart":{"curve":"basis","nodeSpacing":40,"rankSpacing":55,"padding":14}}}%%
+flowchart TB
+
+  subgraph ROBOT["🤖 &nbsp;1 · ROBOT HOST &nbsp;—&nbsp; Viam machine 'sfhack12'"]
+    direction LR
+    RMOD["<b>Viam Registry modules</b> — 3rd-party<br/>erh:vmodutils — arm-position-saver switches<br/>home-pose · approach · grasp · travel · place<br/>+ obstacle walls<br/>viam-labs:vision:yolov8 → 'yolo'<br/>viam:vision:detections-to-segments → 'yolo-3d'"]
+    OMOD["<b>OUR Viam module</b> — braveorangerover:object-picker<br/>meta.json · run.sh · src/module_main.py<br/>sensing:torque-features — 50 Hz torque + force + FFT<br/>pick_logic:yolo3d-pick — vision detect / pick<br/>content:classifier — runs models/cascade.joblib"]
+    COMP["<b>Viam components</b><br/>arm — xArm850 6-DOF<br/>gripper<br/>cam — RealSense D435"]
+  end
+
+  subgraph LAPTOP["💻 &nbsp;2 · LAPTOP &nbsp;—&nbsp; Viam Python SDK over gRPC / WebRTC"]
+    direction LR
+    MACRO["<b>Motion macro</b> — repeatable_grasp.py<br/>pick → lift → ◯ swirl → place"]
+    CLI["<b>Module clients</b> — use_modules.py<br/>main.py · sensors.py · vision_grasp.py · tools/*"]
+  end
+
+  subgraph LOCAL["🧠 &nbsp;3 · FEATURES &amp; MODELS &nbsp;—&nbsp; local files"]
+    direction LR
+    CSV["<b>recordings/*.csv</b><br/>phase · tcp_* · q1–q6<br/>tau1–tau6 · gripper"]
+    FX["<b>feature_extractor.py</b><br/>z = 10 physical features<br/>e = unit-norm 10-D embedding"]
+    CAS["<b>train_classifier.py</b><br/>→ models/cascade.joblib<br/>empty → solid / liquid"]
+    AW["<b>Atlas writers</b><br/>teach_csv.py · openset.py<br/>push_to_atlas.py"]
+    CSV --> FX
+    FX --> CAS
+    FX --> AW
+  end
+
+  subgraph CLOUD["☁️ &nbsp;4 · CLOUD"]
+    direction LR
+    ATLAS["<b>MongoDB Atlas</b> — physical_ai_db<br/>only surface: src/atlas.py<br/>collections: signatures · runs · items<br/>vector index cup_dynamics_index — 10-D cosine<br/>$vectorSearch k-NN → teach / identify"]
+    HF["<b>🤗 Hugging Face</b><br/>dhyuti-n/feels-cup-dynamics<br/>106 runs · 85 train / 21 test"]
+  end
+
+  DASH["<b>🖥️ 5 · OPERATOR DASHBOARD</b> — realtime_plot.py :8080 + static/index.html<br/>live 6-joint torques (SSE) · ↺ spawns the macro · extracts e · predict / teach · PCA vector space"]
+
+  RMOD -.->|"provides switches + vision services"| COMP
+  OMOD -.->|"samples torque · drives arm + gripper"| COMP
+  COMP -->|"arm load → 6 joint torques @ 4–5 Hz"| MACRO
+  OMOD -->|"do_command → features · detections · class"| CLI
+  MACRO -->|"appends one labeled run"| CSV
+  CSV -->|"split_dataset.py → tools/push_to_hf.py"| HF
+  AW -->|"insert 10-D signature"| ATLAS
+  FX -.->|"same extractor runs live"| DASH
+  ATLAS -->|"label · confidence · top-3 neighbors"| DASH
+
+  classDef viam fill:#dbeafe,stroke:#1d4ed8,color:#0b1b3a;
+  classDef mongo fill:#d1fae5,stroke:#047857,color:#042f21;
+  classDef hf fill:#fef3c7,stroke:#b45309,color:#3b2606;
+  classDef ours fill:#f1f5f9,stroke:#475569,color:#0f172a;
+  classDef ui fill:#ede9fe,stroke:#6d28d9,color:#2e1065;
+  class COMP,RMOD,OMOD viam;
+  class MACRO,CLI,CSV,FX,CAS,AW ours;
+  class ATLAS mongo;
+  class HF hf;
+  class DASH ui;
 ```
+
+### Model architecture
+
+Two models read the **same** swirl recording in parallel. An **open-set vector
+memory** (MongoDB Atlas) answers *which cup, and how sure* and learns a new item
+from one example — no retrain. A **closed-set cascade** (`models/cascade.joblib`)
+answers *empty / solid / liquid* as an independent cross-check.
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"clusterBkg":"#ffffff","clusterBorder":"#94a3b8","lineColor":"#64748b","textColor":"#0f172a","edgeLabelBackground":"#ffffff","fontSize":"16px"},"flowchart":{"curve":"basis","nodeSpacing":45,"rankSpacing":60,"padding":16,"wrappingWidth":400}}}%%
+flowchart LR
+
+  REC["📄&nbsp;&nbsp;<b>One swirl recording</b><br/>phase-tagged torque CSV<br/>INIT · GRASP · LIFT · <b>SWIRL</b> · PLACE"]
+
+  subgraph MEM["🍃 &nbsp;OPEN-SET VECTOR MEMORY &nbsp;—&nbsp; MongoDB Atlas"]
+    direction TB
+    F2["<b>10-D z</b> · feature_extractor.py<br/>mass J2/J3 · swirl var J2/J3 · swirl ptp J3<br/>phase lag · rattle · grip compliance<br/>lift · swirl speed"]
+    EMB["<b>scale, then L2-normalize</b><br/>÷ frozen FEATURE_SCALES<br/>→ unit embedding e ∈ 𝕊⁹"]
+    VS["<b>$vectorSearch</b> · cup_dynamics_index<br/>cosine · 10 dims<br/>k-NN, numCandidates = 4k"]
+    VOTE["<b>group by label</b> → mean cosine<br/><b>material_of()</b> → material vote<br/>water_025pct + water_100pct → water"]
+    F2 --> EMB --> VS --> VOTE
+  end
+
+  subgraph CASC["🧪 &nbsp;CLOSED-SET CASCADE &nbsp;—&nbsp; models/cascade.joblib"]
+    direction TB
+    F1["<b>30 features</b> · train_classifier.features()<br/>per joint J2–J6: hold · grip-delta<br/>swirl std / ptp · lift ptp<br/>+ effective force · settle · phase lag<br/>swirl speed · grip std"]
+    S1["<b>Stage 1</b> — StandardScaler → GradientBoosting<br/><i>empty vs loaded</i> — mass contrast"]
+    S2["<b>Stage 2</b> — StandardScaler → LogisticRegression<br/>balanced, fit on loaded only<br/><i>solid vs liquid</i> — slosh vs rigid"]
+    F1 --> S1
+    S1 -->|"loaded"| S2
+  end
+
+  V1["🎯&nbsp;&nbsp;<b>empty · solid · liquid</b><br/>+ per-stage probability<br/><i>no swirl → liquid/solid flagged low-confidence</i>"]
+  V2["🎯&nbsp;&nbsp;<b>which cup, and how sure</b><br/>label + material + top-k neighbours<br/><i>conf &lt; 0.82 or margin &lt; 0.02 → ambiguous</i>"]
+
+  REC --> F1
+  REC --> F2
+  S1 -->|"empty"| V1
+  S2 --> V1
+  VOTE --> V2
+  EMB -. "teach · insert signature, no retrain" .-> VS
+
+  classDef mongo fill:#d1fae5,stroke:#047857,color:#042f21;
+  classDef ours fill:#f1f5f9,stroke:#475569,color:#0f172a;
+  classDef ui fill:#ede9fe,stroke:#6d28d9,color:#2e1065;
+  classDef thing fill:#ffffff,stroke:#cbd5e1,color:#334155;
+  class F1,S1,S2 ours;
+  class F2,EMB,VS,VOTE mongo;
+  class V1,V2 ui;
+  class REC thing;
+```
+
+*Source of truth for this block: [`docs/05-ml-pipeline.md`](docs/05-ml-pipeline.md). Slide export: [`docs/img/model-architecture.png`](docs/img/model-architecture.png).*
+
+### Where each dependency is used
+
+| Tech | What it does here | In the code |
+|---|---|---|
+| **Viam Python SDK** (laptop side) | connect to `sfhack12`, drive the arm through arm-position-saver switches, poll joint load, read camera + vision | [repeatable_grasp.py](src/repeatable_grasp.py), [vision_grasp.py](src/vision_grasp.py), [safe_pick.py](src/safe_pick.py), [record_dataset.py](src/record_dataset.py), [sensors.py](src/sensors.py), [realtime_plot.py](src/realtime_plot.py), [main.py](src/main.py), `tools/*` |
+| **Viam modules — ours** (`braveorangerover:object-picker`: 3 × `rdk:service:generic`) | on-robot work that can't tolerate cloud latency — 50 Hz torque sampling, vision picking, cascade inference | [torque_service.py](src/torque_service.py), [pick_service.py](src/pick_service.py), [content_service.py](src/content_service.py), served by [module_main.py](src/module_main.py); called from [use_modules.py](src/use_modules.py) |
+| **Viam modules — registry** (`erh:vmodutils`, `viam-labs:YOLOv8`, `viam:detections-to-segments`) | saved-pose switches + obstacle walls, 2-D YOLO detection, 2-D→3-D detection lift | configured in [sfhack12_config.json](sfhack12_config.json); consumed as `Switch` / `VisionClient` resources |
+| **MongoDB Atlas Vector Search** | the signature memory — `$vectorSearch` k-NN identify, plus one-shot teach of a new item with no retraining | [atlas.py](src/atlas.py) is the **only** Mongo surface; used by [openset.py](src/openset.py), [teach_csv.py](src/teach_csv.py), [push_to_atlas.py](src/push_to_atlas.py), [realtime_plot.py](src/realtime_plot.py) |
+| **scikit-learn / joblib** | offline 2-stage cascade (empty → solid/liquid) as a cross-check on the vector memory | [train_classifier.py](src/train_classifier.py) → `models/cascade.joblib` |
+| **Hugging Face Datasets** | publishing the labeled telemetry, stratified at the recording level | [split_dataset.py](src/split_dataset.py) → `recordings/split_manifest.csv` → [tools/push_to_hf.py](tools/push_to_hf.py) |
+| **aiohttp + static HTML** | operator dashboard — SSE telemetry, `/api/cycle/predict`, `/api/cycle/teach`, PCA vector-space view | [realtime_plot.py](src/realtime_plot.py) + [static/index.html](static/index.html) |
 
 **Flow:** the robot runs a fixed *pick → swirl → place* macro while streaming joint
 torques → `feature_extractor` turns each run into a 10-D embedding → that embedding
@@ -99,7 +223,8 @@ or k-NN identify). The same sensing + pick + classify logic also ships as three
 that run on the machine host at 50 Hz to beat cloud latency. Labeled recordings are
 split and published to the [**Hugging Face dataset**](https://huggingface.co/datasets/dhyuti-n/feels-cup-dynamics).
 The **dashboard** drives and visualizes the whole loop.
-See [`PROJECT_MAP.md`](PROJECT_MAP.md) for per-module detail.
+See [`PROJECT_MAP.md`](PROJECT_MAP.md) for per-module detail and
+[`ARCHITECTURE.md`](ARCHITECTURE.md) for the reuse seams.
 
 ---
 

@@ -6,6 +6,68 @@
 
 ---
 
+## 0. Two models, one recording
+
+A single swirl recording feeds **two independent heads**. The cascade answers the
+*closed-set* question (empty / solid / liquid) from 30 protocol-robust features;
+Atlas answers the *open-set* question (which exact cup is this, and is it something
+I've never felt before) from the 10-D unit embedding. They share no parameters —
+the cascade is the cross-check, Atlas is the memory.
+
+*Slide export: [PNG](img/model-architecture.png).*
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"clusterBkg":"#ffffff","clusterBorder":"#94a3b8","lineColor":"#64748b","textColor":"#0f172a","edgeLabelBackground":"#ffffff","fontSize":"16px"},"flowchart":{"curve":"basis","nodeSpacing":45,"rankSpacing":60,"padding":16,"wrappingWidth":400}}}%%
+flowchart LR
+
+  REC["📄&nbsp;&nbsp;<b>One swirl recording</b><br/>phase-tagged torque CSV<br/>INIT · GRASP · LIFT · <b>SWIRL</b> · PLACE"]
+
+  subgraph MEM["🍃 &nbsp;OPEN-SET VECTOR MEMORY &nbsp;—&nbsp; MongoDB Atlas"]
+    direction TB
+    F2["<b>10-D z</b> · feature_extractor.py<br/>mass J2/J3 · swirl var J2/J3 · swirl ptp J3<br/>phase lag · rattle · grip compliance<br/>lift · swirl speed"]
+    EMB["<b>scale, then L2-normalize</b><br/>÷ frozen FEATURE_SCALES<br/>→ unit embedding e ∈ 𝕊⁹"]
+    VS["<b>$vectorSearch</b> · cup_dynamics_index<br/>cosine · 10 dims<br/>k-NN, numCandidates = 4k"]
+    VOTE["<b>group by label</b> → mean cosine<br/><b>material_of()</b> → material vote<br/>water_025pct + water_100pct → water"]
+    F2 --> EMB --> VS --> VOTE
+  end
+
+  subgraph CASC["🧪 &nbsp;CLOSED-SET CASCADE &nbsp;—&nbsp; models/cascade.joblib"]
+    direction TB
+    F1["<b>30 features</b> · train_classifier.features()<br/>per joint J2–J6: hold · grip-delta<br/>swirl std / ptp · lift ptp<br/>+ effective force · settle · phase lag<br/>swirl speed · grip std"]
+    S1["<b>Stage 1</b> — StandardScaler → GradientBoosting<br/><i>empty vs loaded</i> — mass contrast"]
+    S2["<b>Stage 2</b> — StandardScaler → LogisticRegression<br/>balanced, fit on loaded only<br/><i>solid vs liquid</i> — slosh vs rigid"]
+    F1 --> S1
+    S1 -->|"loaded"| S2
+  end
+
+  V1["🎯&nbsp;&nbsp;<b>empty · solid · liquid</b><br/>+ per-stage probability<br/><i>no swirl → liquid/solid flagged low-confidence</i>"]
+  V2["🎯&nbsp;&nbsp;<b>which cup, and how sure</b><br/>label + material + top-k neighbours<br/><i>conf &lt; 0.82 or margin &lt; 0.02 → ambiguous</i>"]
+
+  REC --> F1
+  REC --> F2
+  S1 -->|"empty"| V1
+  S2 --> V1
+  VOTE --> V2
+  EMB -. "teach · insert signature, no retrain" .-> VS
+
+  classDef mongo fill:#d1fae5,stroke:#047857,color:#042f21;
+  classDef ours fill:#f1f5f9,stroke:#475569,color:#0f172a;
+  classDef ui fill:#ede9fe,stroke:#6d28d9,color:#2e1065;
+  classDef thing fill:#ffffff,stroke:#cbd5e1,color:#334155;
+  class F1,S1,S2 ours;
+  class F2,EMB,VS,VOTE mongo;
+  class V1,V2 ui;
+  class REC thing;
+```
+
+> **Training is leak-free by construction.** Recordings were collected in
+> time-blocks per class, so a label-stratified split leaks the label through
+> recording time. Both stages are evaluated on a *within-class time split*
+> (earliest 70 % train / latest 30 % test). Test folds are small — treat the
+> numbers in `train_classifier.py` as approximate.
+
+---
+
 ## 1. Feature Extraction Pipeline (`feature_extractor.py`)
 
 The feature extraction engine transforms variable-length time-series rollouts $D = \{s_t\}_{t=0}^T$ into a fixed 10-dimensional physical feature vector $z \in \mathbb{R}^{10}$, then calculates the normalized metric embedding $e \in \mathbb{S}^9$.
