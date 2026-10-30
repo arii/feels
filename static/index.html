@@ -203,6 +203,22 @@
   <div class="grid-kpi" style="grid-template-columns: 1fr 1fr;">
     <div class="kpi-card">
       <div class="kpi-label">Mode 1 &mdash; Identify mystery object</div>
+      <div style="display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; align-items:center;">
+        <select id="run-mode" onchange="updateRunMode()" style="background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem;">
+          <option value="live">Live robot</option>
+          <option value="simulate">Simulated replay</option>
+        </select>
+        <select id="sim-csv" style="display:none; background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem; max-width:280px;"></select>
+        <select id="sim-speed" style="display:none; background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem;">
+          <option value="1">1&times;</option>
+          <option value="2" selected>2&times;</option>
+          <option value="4">4&times;</option>
+        </select>
+      </div>
+      <div id="stage-strip" style="display:flex; gap:4px; margin:8px 0; align-items:center; font-size:0.72rem; color:#6e7681;"></div>
+      <div style="background:#21262d; border-radius:6px; height:8px; margin:6px 0; overflow:hidden; display:none;" id="sim-progress-wrap">
+        <div id="sim-progress" style="height:100%; width:0%; background:#58a6ff; transition:width 0.3s;"></div>
+      </div>
       <button class="tare-btn" id="predict-btn" onclick="runPredict()" style="font-size:1rem; padding:10px 20px; margin:8px 0;">RUN SWIRL MACRO &amp; PREDICT</button>
       <div id="decision-card" style="display:none; margin-top:8px; border-top:1px solid var(--border); padding-top:8px;">
         <div class="kpi-label">Predicted category</div>
@@ -454,6 +470,8 @@
           const jSign = activeVals[i] >= 0 ? '+' : '';
           document.getElementById(`val-j${i+1}`).innerText = `${jSign}${activeVals[i].toFixed(3)} ${unit}`;
         }
+
+        if (d.stage) renderStageStrip(d.stage);
 
         // Drop oldest data to strictly preserve ONLY 10 seconds
         if (history.t.length > MAX_POINTS) {
@@ -721,6 +739,7 @@
         ctxt += ' — LOW, consider teaching this item';
       }
       if (data.mock) ctxt += '  (MOCK)';
+      if (data.simulated) ctxt += '  (SIMULATED REPLAY)';
       document.getElementById('pred-conf-text').innerText = ctxt;
       document.getElementById('pred-fine').innerText =
         `material: ${data.material || '—'} · closest taught item: ${data.prediction || '—'}` +
@@ -735,6 +754,7 @@
       const dq = data.diagnostics || {};
       document.getElementById('predict-status').innerText = `Done — ${data.csv}` +
         (data.mock ? '  (MOCK data, not live hardware)' : '') +
+        (data.simulated ? `  (SIMULATED replay${data.true_label ? ` — true contents: ${data.true_label}` : ''})` : '') +
         (dq.tare_flags && dq.tare_flags.length ? `  ⚠ tare flags: ${dq.tare_flags.join(',')}` : '');
     }
 
@@ -755,7 +775,13 @@
           if (btn) btn.disabled = busy;
         }
         if (busy) {
-          document.getElementById('predict-status').innerText = 'Swirl macro running on the robot…';
+          document.getElementById('predict-status').innerText = s.sim
+            ? `Simulating — replaying ${s.sim.csv} (${s.sim.stage}…)`
+            : 'Swirl macro running on the robot…';
+        }
+        if (s.sim) {
+          document.getElementById('sim-progress').style.width = Math.round((s.sim.progress || 0) * 100) + '%';
+          renderStageStrip(s.sim.stage);
         }
       } catch (e) { /* dashboard stays usable offline */ }
     }
@@ -766,19 +792,62 @@
       ).join('');
     }
 
+    const SIM_STAGES = ['home', 'approach', 'grasp', 'travel', 'swirl', 'place', 'predict'];
+    function renderStageStrip(active) {
+      const el = document.getElementById('stage-strip');
+      el.innerHTML = SIM_STAGES.map((s, i) => {
+        const on = s === active;
+        const done = active && SIM_STAGES.indexOf(active) > i;
+        const color = on ? '#58a6ff' : (done ? '#3fb950' : '#6e7681');
+        const sep = i < SIM_STAGES.length - 1 ? '<span style="color:#30363d;">&rarr;</span>' : '';
+        return `<span style="color:${color};${on ? 'font-weight:700;' : ''}">${on ? '&#9679;' : '&#9675;'} ${s}</span>${sep}`;
+      }).join('');
+    }
+    function updateRunMode() {
+      const mode = document.getElementById('run-mode').value;
+      const sim = mode === 'simulate';
+      document.getElementById('sim-csv').style.display = sim ? '' : 'none';
+      document.getElementById('sim-speed').style.display = sim ? '' : 'none';
+      document.getElementById('sim-progress-wrap').style.display = sim ? '' : 'none';
+      document.getElementById('predict-btn').innerText = sim ? 'REPLAY RECORDING & PREDICT' : 'RUN SWIRL MACRO & PREDICT';
+      renderStageStrip(sim ? 'home' : null);
+      if (sim) loadSimCandidates();
+    }
+    async function loadSimCandidates() {
+      try {
+        const res = await fetch('/api/simulate/candidates');
+        const data = await res.json();
+        const sel = document.getElementById('sim-csv');
+        sel.innerHTML = (data.candidates || []).map(c =>
+          `<option value="${c.csv}">${c.label} — ${c.seconds}s</option>`).join('');
+      } catch (e) { /* offline */ }
+    }
     async function runPredict() {
       const btn = document.getElementById('predict-btn');
       const status = document.getElementById('predict-status');
+      const simMode = document.getElementById('run-mode').value === 'simulate';
+      const simCsv = document.getElementById('sim-csv').value;
+      const simSpeed = parseFloat(document.getElementById('sim-speed').value || '1');
       btn.disabled = true;
       document.getElementById('decision-card').style.display = 'none';
+      renderStageStrip(simMode ? 'home' : null);
       const t0 = Date.now();
-      const tick = () => { status.innerText = `Running pick-up → swirl → place… ${Math.round((Date.now() - t0) / 1000)}s elapsed`; };
+      const tick = () => {
+        status.innerText = simMode
+          ? `Simulating — replaying ${simCsv || 'recording'} at ${simSpeed}×… ${Math.round((Date.now() - t0) / 1000)}s elapsed`
+          : `Running pick-up → swirl → place… ${Math.round((Date.now() - t0) / 1000)}s elapsed`;
+      };
       tick();
       const timer = setInterval(tick, 1000);
       try {
-        const res = await fetch('/api/cycle/predict', { method: 'POST' });
+        const res = await fetch('/api/cycle/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(simMode ? { mode: 'simulate', csv: simCsv, speed: simSpeed } : { mode: 'live' }),
+        });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'prediction failed');
+        renderStageStrip('predict');
         renderDecision(data);
       } catch (e) {
         status.innerText = 'Error: ' + e.message;

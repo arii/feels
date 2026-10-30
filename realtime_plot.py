@@ -58,6 +58,19 @@ GIT_SHA = _git_sha()
 _cycle_lock = asyncio.Lock()
 _cycle_proc: Optional[subprocess.Popen] = None
 _cycle_status: str = "idle"   # idle | running | done | error | aborted
+_sim_state = None  # {"csv": str, "stage": str, "phase": str, "progress": float, "speed": float} while simulating
+
+# Macro phases (recordings' `phase` column) → the demo's canonical stages.
+_PHASE_TO_STAGE = {
+    "INIT": "home", "APPROACH": "approach",
+    "REACH_GRASP": "grasp", "GRIPPER_CLOSE": "grasp",
+    "LIFT_TO_TRAVEL": "travel", "TRAVEL_SETTLING": "travel",
+    "TRAVEL_STABLE_HOLD": "travel",
+    "SWIRL": "swirl",
+    "DESCEND_PLACE": "place", "GRIPPER_OPEN": "place",
+    "BACK_OFF": "place",
+}
+_SIM_STAGES = ["home", "approach", "grasp", "travel", "swirl", "place", "predict"]
 _last_prediction: Optional[dict] = None   # last successful Mode-1 result (survives refresh)
 
 # MOCK MODE: FEELS_MOCK=1 serves the 2-mode UI from recorded data instead of
@@ -555,39 +568,175 @@ async def _mock_teach(label: str):
             "note": "mock mode — not saved to Atlas"}
 
 
+async def handle_simulate_candidates(request):
+    """List recordings suitable for simulated replay (have a SWIRL phase)."""
+    import pandas as pd
+    out = []
+    for path in sorted(glob.glob(os.path.join(RECORDINGS_DIR, "recording_*.csv"))):
+        try:
+            df = pd.read_csv(path, usecols=["phase", "object_label", "elapsed_sec"])
+        except Exception:
+            continue
+        if "SWIRL" not in set(df["phase"]):
+            continue
+        out.append({
+            "csv": os.path.basename(path),
+            "label": str(df["object_label"].iloc[0]),
+            "seconds": round(float(df["elapsed_sec"].max()), 1),
+            "rows": len(df),
+        })
+    out.sort(key=lambda r: r["csv"], reverse=True)
+    return web.json_response({"ok": True, "candidates": out})
+
+
+async def _simulate_run(csv_path: str, speed: float = 1.0):
+    """Simulated demo mode: replay a recording through the SSE stream at
+    native cadence (scaled by `speed`), then run the REAL extract → Atlas
+    pipeline on it. No robot needed; the dashboard animates like a live run.
+    Returns the full prediction payload with mode="simulate" and the true
+    label (from the recording) for the demo reveal.
+    """
+    global _cycle_status, _sim_state
+    import pandas as pd
+    df = pd.read_csv(csv_path)
+    label = str(df["object_label"].iloc[0]) if "object_label" in df.columns else "unknown"
+    taus = df[[f"tau{i}_nm" for i in range(1, 7)]].to_numpy(dtype=float)
+    base = taus[0]
+    qs = df[[f"q{i}_deg" for i in range(1, 7)]].to_numpy(dtype=float) if "q1_deg" in df.columns else None
+    tcps = df[["tcp_x_mm", "tcp_y_mm", "tcp_z_mm"]].to_numpy(dtype=float) if "tcp_x_mm" in df.columns else None
+    times = df["elapsed_sec"].to_numpy(dtype=float) if "elapsed_sec" in df.columns else None
+    phases = df["phase"].tolist() if "phase" in df.columns else ["SWIRL"] * len(df)
+
+    _cycle_status = "running"
+    total = float(times[-1] - times[0]) if times is not None else len(df) * 0.3
+    t0 = __import__("time").monotonic()
+    for i in range(len(df)):
+        if _cycle_status == "aborted":
+            _sim_state = None
+            return {"ok": False, "error": "simulation aborted"}
+        tau = [round(float(v), 3) for v in taus[i]]
+        sample = {
+            "t": round(float(times[i]), 2) if times is not None else round(i * 0.3, 2),
+            "raw": tau,
+            "smooth": tau,
+            "deltas": [round(float(taus[i][j] - base[j]), 4) for j in range(6)],
+            "phase": phases[i],
+            "stage": _PHASE_TO_STAGE.get(phases[i], "travel"),
+            "simulated": True,
+            "connected": True,
+        }
+        if qs is not None:
+            sample["q_deg"] = [round(float(v), 2) for v in qs[i]]
+        if tcps is not None:
+            sample["tcp_mm"] = [round(float(v), 1) for v in tcps[i]]
+        for q in list(state.subscribers):
+            try:
+                q.put_nowait(sample)
+            except asyncio.QueueFull:
+                pass
+        _sim_state = {"csv": os.path.basename(csv_path), "label": label,
+                      "stage": sample["stage"], "phase": phases[i],
+                      "progress": min(1.0, (float(times[i]) - float(times[0])) / total) if total > 0 else 0,
+                      "speed": speed}
+        if i + 1 < len(df) and times is not None:
+            dt = (float(times[i + 1]) - float(times[i])) / max(speed, 0.1)
+            if dt > 0:
+                await asyncio.sleep(min(dt, 1.0))
+    # Replay done — run the real pipeline on the replayed recording.
+    _sim_state = {"csv": os.path.basename(csv_path), "label": label,
+                  "stage": "predict", "phase": "PREDICT",
+                  "progress": 1.0, "speed": speed}
+    try:
+        feats = feature_extractor.extract_features(df)
+        ts = feature_extractor.swirl_window_series(df)
+        a = _atlas()
+        q = embedder.embed(df)
+        res = a.identify(q, top_k=7)
+        if embedder.EMBEDDER == "hand":
+            try:
+                res = a.predict_lda(feats["z"])
+            except Exception as e:
+                print(f"[simulate] LDA unavailable ({e}); using vector search")
+    except Exception:
+        _sim_state = None
+        _cycle_status = "error"
+        raise
+    _sim_state = None
+    _cycle_status = "done"
+    return {
+        "ok": True,
+        "mode": "simulate",
+        "simulated": True,
+        "true_label": label,
+        "csv": os.path.basename(csv_path),
+        "decider": res.get("decider", "vector"),
+        "embedder": embedder.EMBEDDER,
+        "prediction": res["label"],
+        "confidence": round(res["confidence"], 3),
+        "low_confidence": res["low_confidence"],
+        "ambiguous": res.get("ambiguous", False),
+        "margin": res.get("margin", 1.0),
+        "material": res["material"],
+        "material_confidence": round(res["material_confidence"], 3),
+        "material_low_confidence": res["material_low_confidence"],
+        "material_ambiguous": res.get("material_ambiguous", False),
+        "material_margin": res.get("material_margin", 1.0),
+        "material_matches": res.get("material_matches", []),
+        "category": res["category"],
+        "category_confidence": round(res["category_confidence"], 3),
+        "category_low_confidence": res["category_low_confidence"],
+        "category_ambiguous": res.get("category_ambiguous", False),
+        "category_margin": res.get("category_margin", 1.0),
+        "category_matches": res.get("category_matches", []),
+        "matches": [{"label": m["label"], "similarity": round(m["score"], 3)}
+                    for m in res["matches"]],
+        "features": {"names": feature_extractor.FEATURE_NAMES,
+                     "z": [round(float(v), 4) for v in feats["z"]],
+                     "descriptions": feature_extractor.FEATURE_DESCRIPTIONS},
+        "e": [float(v) for v in feats["e"]],
+        "timeseries": ts,
+        "diagnostics": feats["diagnostics"],
+    }
+
+
 async def handle_cycle_predict(request):
     """Mode 1: run the swirl macro on a mystery cup → features → Atlas $vectorSearch."""
     global _last_prediction
     if _cycle_lock.locked():
         return web.json_response({"ok": False, "error": "a cycle is already running"}, status=409)
     global _cycle_status
-    # Demo mode: "live" runs the robot; "playback" replays a recorded swirl
-    # through the real extract → Atlas pipeline (the fallback when the
-    # robot misbehaves). Chosen per-request so the presenter can switch
-    # between them without restarting.
+    # Demo mode: "live" runs the robot; "simulate" replays a recorded
+    # swirl through the SSE stream AND the real extract → Atlas pipeline
+    # (the no-robot fallback). Chosen per-request so the presenter can
+    # switch between them without restarting.
     mode = "live"
+    sim_csv = None
+    sim_speed = 1.0
     if not MOCK_MODE:
         try:
             body = await request.json()
-            if isinstance(body, dict) and body.get("mode") == "playback":
-                mode = "playback"
+            if isinstance(body, dict) and body.get("mode") in ("simulate", "playback"):
+                mode = "simulate"
+                sim_speed = float(body.get("speed", 1.0) or 1.0)
+                req_csv = body.get("csv")
+                if req_csv:
+                    cand = os.path.join(RECORDINGS_DIR, os.path.basename(req_csv))
+                    sim_csv = cand if os.path.isfile(cand) else None
         except Exception:
             pass
     async with _cycle_lock:
         try:
             if MOCK_MODE:
                 result = await _mock_predict()
-            elif mode == "playback":
-                csv_path = _playback_csv()
+            elif mode == "simulate":
+                csv_path = sim_csv or _playback_csv()
                 if not csv_path:
                     return web.json_response(
-                        {"ok": False, "error": "no recordings available for playback"},
+                        {"ok": False, "error": "no recordings available for simulation"},
                         status=409)
-                # Presentation beat: hold the "swirl" stage so the audience
-                # sees the pipeline move, then run the real pipeline below.
-                _cycle_status = "running"
-                await asyncio.sleep(4)
-                _cycle_status = "done"
+                result = await _simulate_run(csv_path, speed=sim_speed)
+                if not result.get("ok"):
+                    return web.json_response(result, status=409)
             else:
                 csv_path = await _run_swirl_macro("mystery")
                 df = pd.read_csv(csv_path)
@@ -761,6 +910,9 @@ async def handle_cycle_abort(request):
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             proc.kill()
+    if _cycle_lock.locked():
+        # A cycle is running (live macro or simulated replay) — the
+        # simulate loop watches _cycle_status and bails on "aborted".
         _cycle_status = "aborted"
         return web.json_response({"ok": True, "aborted": True})
     return web.json_response({"ok": True, "aborted": False, "note": "no cycle running"})
@@ -773,6 +925,8 @@ async def handle_api_status(request):
         "viam_address": VIAM_MACHINE_ADDRESS,
         "atlas_configured": bool(os.getenv("MONGODB_URI")),
         "mock": MOCK_MODE,
+        "sim": _sim_state,
+        "stages": _SIM_STAGES,
         "git_sha": GIT_SHA,
         "last_prediction": _last_prediction,
     })
@@ -832,6 +986,7 @@ async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_post("/api/cycle/abort", handle_cycle_abort)
     app.router.add_post("/api/cycle/correct", handle_cycle_correct)
     app.router.add_get("/api/status", handle_api_status)
+    app.router.add_get("/api/simulate/candidates", handle_simulate_candidates)
     app.router.add_post("/api/vectorspace", handle_vspace)
 
     runner = web.AppRunner(app)
