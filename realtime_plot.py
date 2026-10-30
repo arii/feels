@@ -313,7 +313,6 @@ HTML_PAGE = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <title>Viam xArm850 — 10s Rolling Real-Time Visualizer</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     :root {
       --bg: #0d1117;
@@ -522,54 +521,10 @@ HTML_PAGE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <div class="grid-kpi">
-    <div class="kpi-card">
-      <div class="kpi-label">Effective Payload Weight</div>
-      <div class="kpi-val highlight-red" id="kpi-weight">+0.0 g</div>
-      <div class="kpi-sub">End-Effector Mass</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Vertical Force Fz</div>
-      <div class="kpi-val highlight-blue" id="kpi-force">0.00 N</div>
-      <div class="kpi-sub">External Load</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Shoulder Torque (J2)</div>
-      <div class="kpi-val highlight-green" id="kpi-j2">-16.05 Nm</div>
-      <div class="kpi-sub" id="kpi-delta-j2">Δ: 0.0000 Nm</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Elbow Torque (J3)</div>
-      <div class="kpi-val" id="kpi-j3">-16.82 Nm</div>
-      <div class="kpi-sub" id="kpi-j3-sub">Cantilever Moment</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Recording Status</div>
-      <div class="kpi-val" id="kpi-rec" style="font-size: 1.25rem;">IDLE</div>
-      <div class="kpi-sub" id="kpi-rec-sub">0 samples</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Cloud Latency (RTT)</div>
-      <div class="kpi-val" id="kpi-rtt" style="color: #39c5cf;">-- ms</div>
-      <div class="kpi-sub">Round-trip Query Time</div>
-    </div>
-  </div>
-
-  <!-- Primary Force & Weight Chart (Optimized 10s Window) -->
-  <div class="chart-container">
-    <div class="chart-header">
-      <span>Effective End-Effector Force & Weight (Rolling 10s Window)</span>
-      <span style="font-size: 0.8rem; color: #8b949e;">Derived from Shoulder Pitch Δτ</span>
-    </div>
-    <div style="height: 220px;">
-      <canvas id="forceChart"></canvas>
-    </div>
-  </div>
-
-  <!-- High-Performance Separated 6-Joint Sparklines (Pure Native Canvas) -->
+  <!-- Live joint torques (native canvas sparklines) -->
   <div class="section-title">
-    <span>Individual Actuator Torques (Independent Auto-Scaling 10s Windows)</span>
-    <span style="font-size: 0.8rem; color: #8b949e;">Ultra-fast native canvas (<0.1ms render)</span>
+    <span>Live Joint Torques (10s Rolling Windows)</span>
+    <span style="font-size: 0.8rem; color: #8b949e;">Ultra-fast native canvas (&lt;0.1ms render)</span>
   </div>
 
   <div class="grid-joints">
@@ -638,59 +593,7 @@ HTML_PAGE = """<!DOCTYPE html>
       joints: [[], [], [], [], [], []]
     };
 
-    // Primary Chart.js optimized (zero animations, fast line)
-    const ctxForce = document.getElementById('forceChart').getContext('2d');
-    const forceChart = new Chart(ctxForce, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [
-          {
-            label: 'Weight (g)',
-            data: [],
-            borderColor: '#ff7b72',
-            backgroundColor: 'rgba(255, 123, 114, 0.08)',
-            borderWidth: 2,
-            pointRadius: 0,
-            tension: 0,
-            fill: true,
-            yAxisID: 'yWeight'
-          },
-          {
-            label: 'Force Fz (N)',
-            data: [],
-            borderColor: '#58a6ff',
-            borderWidth: 1.5,
-            borderDash: [4, 4],
-            pointRadius: 0,
-            tension: 0,
-            yAxisID: 'yForce'
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        elements: { line: { tension: 0 } },
-        scales: {
-          x: { grid: { color: '#21262d' }, ticks: { color: '#8b949e', maxTicksLimit: 6 } },
-          yWeight: {
-            position: 'left',
-            grid: { color: '#21262d' },
-            ticks: { color: '#ff7b72', font: { size: 10 } },
-            title: { display: true, text: 'Weight (g)', color: '#ff7b72' }
-          },
-          yForce: {
-            position: 'right',
-            grid: { drawOnChartArea: false },
-            ticks: { color: '#58a6ff', font: { size: 10 } },
-            title: { display: true, text: 'Force (N)', color: '#58a6ff' }
-          }
-        },
-        plugins: { legend: { labels: { color: '#c9d1d9', boxWidth: 12 } } }
-      }
-    });
+    // (force/weight chart removed — derived mass was tare-contaminated; see BASELINE_FINDINGS.md)
 
     // Native High-Performance Sparkline Renderer (<0.1ms per canvas)
     const sparkCanvases = [
@@ -758,12 +661,6 @@ HTML_PAGE = """<!DOCTYPE html>
     let needsRender = false;
     function animLoop() {
       if (needsRender) {
-        // Update Chart.js (10s rolling window)
-        forceChart.data.labels = history.t;
-        forceChart.data.datasets[0].data = history.grams;
-        forceChart.data.datasets[1].data = history.fz;
-        forceChart.update();
-
         // Render 6 native sparklines
         for (let i = 0; i < 6; i++) {
           renderSparkline(sparkCanvases[i], history.joints[i], jointColors[i]);
@@ -787,35 +684,8 @@ HTML_PAGE = """<!DOCTYPE html>
       eventSource.onmessage = (event) => {
         const d = JSON.parse(event.data);
 
-        // Update KPIs immediately
-        const sign = d.grams >= 0 ? '+' : '';
-        document.getElementById('kpi-weight').innerText = `${sign}${d.grams.toFixed(1)} g`;
-        document.getElementById('kpi-force').innerText = `${d.fz.toFixed(2)} N`;
-        document.getElementById('kpi-j2').innerText = `${(useFilter ? d.smooth[1] : d.raw[1]).toFixed(3)} Nm`;
-        document.getElementById('kpi-delta-j2').innerText = `Δ: ${(d.delta_tau_j2 >= 0 ? '+' : '') + d.delta_tau_j2.toFixed(4)} Nm`;
-        document.getElementById('kpi-j3').innerText = `${(useFilter ? d.smooth[2] : d.raw[2]).toFixed(3)} Nm`;
-
-        if (d.rtt_ms !== undefined) {
-          const rttEl = document.getElementById('kpi-rtt');
-          rttEl.innerText = `${d.rtt_ms.toFixed(0)} ms`;
-          if (d.rtt_ms < 100) rttEl.style.color = '#3fb950';
-          else if (d.rtt_ms < 300) rttEl.style.color = '#d29922';
-          else rttEl.style.color = '#ff7b72';
-        }
-
-        if (d.is_recording) {
-          document.getElementById('kpi-rec').innerText = 'REC ●';
-          document.getElementById('kpi-rec').style.color = '#ff7b72';
-          document.getElementById('kpi-rec-sub').innerText = `${d.rec_count} samples`;
-        } else {
-          document.getElementById('kpi-rec').innerText = 'IDLE';
-          document.getElementById('kpi-rec').style.color = '#c9d1d9';
-        }
-
         // Manage rolling 10-second buffer
         history.t.push(`${d.t}s`);
-        history.grams.push(d.grams);
-        history.fz.push(d.fz);
 
         const activeVals = viewModeDelta ? d.deltas : (useFilter ? d.smooth : d.raw);
         for (let i = 0; i < 6; i++) {

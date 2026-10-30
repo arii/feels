@@ -303,5 +303,5 @@ python repeatable_grasp.py --dry-run
 - [**04-Implementation Phases**](docs/04-implementation-phases.md) — Minimal viable demo, swirl routine, and what was cut.
 - [**05-ML Pipeline**](docs/05-ml-pipeline.md) — 10D feature extraction, metric embedding, and Atlas Vector Search.
 - [**06-Formal Problem Definition**](docs/06-formal-problem-definition.md) — Mathematical state, action space, and non-parametric metric retrieval.
-- [**PLAN.md**](plan.md) — Concrete finish plan and verification steps.
+- [**PLAN.md**](PLAN.md) — Concrete finish plan and verification steps.
 - [**TODO.md**](TODO.md) — Active task backlog and archived exploration avenues.
