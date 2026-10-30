@@ -51,7 +51,7 @@
 ### 3. Signal Processing & Feature Extraction Engine (`feature_extractor.py`)
 - Direct algorithmic transformation of the multi-phase rollout into the real
   10-dimensional physical feature vector $z$ (`FEATURE_NAMES` in code):
-  `mass_j2`, `mass_j3` (static gravity offsets — tare-dominated, see the audit),
+  `mass_j2`, `mass_j3` (static gravity offsets — baseline-dominated, see the audit),
   `swirl_var_j2`, `swirl_var_j3` (torque variance during swirl),
   `swirl_ptp_j3` (peak-to-peak swing), `phase_lag_s` (xcorr lag of TCP speed
   vs J3 residual, ±2 s), `rattle_e` (observable band only — 5–25 Hz **not**

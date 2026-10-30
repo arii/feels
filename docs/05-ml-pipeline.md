@@ -29,9 +29,9 @@ Telemetry Rollout D
 ### Phase 1: Static Hold (NOT discriminative — audit finding)
 Static hold torques were verified identical across contents to 3 decimals
 ($\tau_2 = 43.566$, $\tau_3 = -13.269$ N·m): at this pose the payload does not
-move the static joint torques above the tare-noise floor. The `mass_j2` /
+move the static joint torques above the baseline-noise floor. The `mass_j2` /
 `mass_j3` features are kept in the vector but carry no payload signal until
-the tare is stability-gated. Everything discriminative comes from the swirl
+the baseline is stability-gated. Everything discriminative comes from the swirl
 *dynamics* below. See `BASELINE_FINDINGS.md`.
 
 ### Phase 2: Horizontal Orbital Swirl (Slosh, Chatter, and Viscosity)
