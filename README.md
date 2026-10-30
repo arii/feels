@@ -3,6 +3,8 @@
 **Proprioceptive Dynamic Identification of Sealed Container Payloads**  
 Powered by the [Viam Python SDK](https://github.com/viamrobotics/viam-python-sdk) and [MongoDB Atlas Vector Search](https://www.mongodb.com/products/platform/atlas-vector-search).
 
+> 🗺️ **New here? See [`PROJECT_MAP.md`](PROJECT_MAP.md)** — every module grouped by purpose, how to run it, and how to reuse it for your own robot.
+
 ---
 
 > [!IMPORTANT]
