@@ -456,6 +456,7 @@ HTML_PAGE = """<!DOCTYPE html>
       margin-bottom: 6px;
     }
     .joint-name { font-size: 0.85rem; font-weight: 600; color: var(--text-bright); }
+    .joint-range { font-size: 0.65rem; color: #6e7681; margin-left: 6px; }
     .joint-val { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; }
     .canvas-wrap {
       position: relative;
@@ -539,7 +540,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #39c5cf;">Joint 1 — Base (Yaw)</span>
-        <span class="joint-val" id="val-j1" style="color: #39c5cf;">0.000</span>
+        <span class="joint-val" id="val-j1" style="color: #39c5cf;">0.000</span><span class="joint-range">±5 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j1" class="sparkline"></canvas></div>
     </div>
@@ -547,7 +548,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #3fb950;">Joint 2 — Shoulder (Pitch) [Weight]</span>
-        <span class="joint-val" id="val-j2" style="color: #3fb950;">-16.05</span>
+        <span class="joint-val" id="val-j2" style="color: #3fb950;">-16.05</span><span class="joint-range">±25 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j2" class="sparkline"></canvas></div>
     </div>
@@ -555,7 +556,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #d29922;">Joint 3 — Elbow (Pitch)</span>
-        <span class="joint-val" id="val-j3" style="color: #d29922;">-16.82</span>
+        <span class="joint-val" id="val-j3" style="color: #d29922;">-16.82</span><span class="joint-range">±20 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j3" class="sparkline"></canvas></div>
     </div>
@@ -563,7 +564,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #f0883e;">Joint 4 — Forearm (Roll)</span>
-        <span class="joint-val" id="val-j4" style="color: #f0883e;">0.778</span>
+        <span class="joint-val" id="val-j4" style="color: #f0883e;">0.778</span><span class="joint-range">±5 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j4" class="sparkline"></canvas></div>
     </div>
@@ -571,7 +572,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #bc8cff;">Joint 5 — Wrist (Pitch)</span>
-        <span class="joint-val" id="val-j5" style="color: #bc8cff;">0.373</span>
+        <span class="joint-val" id="val-j5" style="color: #bc8cff;">0.373</span><span class="joint-range">±5 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j5" class="sparkline"></canvas></div>
     </div>
@@ -579,7 +580,7 @@ HTML_PAGE = """<!DOCTYPE html>
     <div class="joint-card">
       <div class="joint-header">
         <span class="joint-name" style="color: #58a6ff;">Joint 6 — Flange (Roll)</span>
-        <span class="joint-val" id="val-j6" style="color: #58a6ff;">0.001</span>
+        <span class="joint-val" id="val-j6" style="color: #58a6ff;">0.001</span><span class="joint-range">±5 N·m</span>
       </div>
       <div class="canvas-wrap"><canvas id="c-j6" class="sparkline"></canvas></div>
     </div>
@@ -613,6 +614,10 @@ HTML_PAGE = """<!DOCTYPE html>
       document.getElementById('c-j6')
     ];
     const jointColors = ['#39c5cf', '#3fb950', '#d29922', '#f0883e', '#bc8cff', '#58a6ff'];
+    // Fixed y-axis half-ranges (N·m) per joint for the delta view: the axis never
+    // gets narrower than ±this around 0, so a still joint draws a flat line
+    // instead of stretching sensor noise full-height. Expands if data exceeds it.
+    const SPARK_HALF_RANGES = [5, 25, 20, 5, 5, 5];
 
     function resizeCanvases() {
       sparkCanvases.forEach(c => {
@@ -623,7 +628,7 @@ HTML_PAGE = """<!DOCTYPE html>
     window.addEventListener('resize', resizeCanvases);
     resizeCanvases();
 
-    function renderSparkline(canvas, data, color) {
+    function renderSparkline(canvas, data, color, halfRange) {
       if (!data || data.length < 2) return;
       const ctx = canvas.getContext('2d');
       const w = canvas.width;
@@ -632,10 +637,10 @@ HTML_PAGE = """<!DOCTYPE html>
 
       let min = Math.min(...data);
       let max = Math.max(...data);
-      if (max - min < 0.02) {
-        min -= 0.05;
-        max += 0.05;
-      }
+      // Fixed axis: at least ±halfRange around 0. A constant signal then draws
+      // as a flat line at its true offset instead of filling the canvas.
+      min = Math.min(min, -halfRange);
+      max = Math.max(max, halfRange);
       const padding = 6;
       const range = max - min;
 
@@ -671,7 +676,7 @@ HTML_PAGE = """<!DOCTYPE html>
       if (needsRender) {
         // Render 6 native sparklines
         for (let i = 0; i < 6; i++) {
-          renderSparkline(sparkCanvases[i], history.joints[i], jointColors[i]);
+          renderSparkline(sparkCanvases[i], history.joints[i], jointColors[i], SPARK_HALF_RANGES[i]);
         }
         needsRender = false;
       }
