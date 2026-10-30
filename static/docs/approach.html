@@ -32,7 +32,6 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
     <a class="active" href="/docs/approach">Approach</a>
     <a href="/docs/force">Extracting Force</a>
     <a href="/docs/figures">Figures</a>
-    <a href="/docs/recording">Recording</a>
     <a href="/docs/api">API</a>
     <a href="/">← Dashboard</a>
   </span>
@@ -85,6 +84,15 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   <h2>4. Teach by example</h2>
   <p>A new item is one stored embedding &mdash; <code>atlas.teach(label,
   e)</code>. The next query searches it.</p>
+  <p>Teach the items the demo needs: <code>solid_150g</code>,
+  <code>water_150g</code>, <code>candy_150g</code>, <code>soap_150g</code> —
+  the labels are names, not measured weights. Then the basics:
+  <code>empty_cup</code>, <code>water_half</code>, <code>solid_020g</code>,
+  <code>screws_100g</code>. Record 2–3 repetitions per item; repeats let the
+  matcher average out run-to-run noise.</p>
+  <p>Use the tool: the dashboard's Mode 2 button runs the fixed macro.
+  Acceptance: the <code>SWIRL</code> phase is present and the baseline flags
+  are clean — the tool refuses the rest.</p>
 
   <h2>5. Keep the protocol fixed</h2>
   <p>Same cup, ~0.4 cosine across swirl/non-swirl protocols; <em>different</em>
