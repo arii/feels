@@ -66,13 +66,13 @@
 - **Non-Parametric Classification:** Fast `$vectorSearch` pipeline performs k-NN classification with mean similarity scoring across nearest neighbors.
 
 ### 5. Operator Web Dashboard UX (`realtime_plot.py`)
-- **Real-Time Rolling Visualizer:** 10-second high-efficiency rolling chart of effective weight (g) and vertical force (N) alongside 6 native HTML5 canvas sparklines for individual joint torques.
-- **Live Phase Timeline:** Real-time badge tracking the active step of the pick-swirl-place routine.
-- **Detection Reporting Panel:** Prominent verdict card presenting predicted item label, confidence bar (0–100%), and top-3 k-NN matches.
-- **Online Recording & Teaching:**
-  - One-click "Teach / Save to Atlas" to register newly calibrated items on the fly.
-  - Manual start/stop recording with automatic feature extraction.
-  - Saved datasets browser with 1-click CSV download.
+- **Real-Time Rolling Visualizer:** 6 native HTML5 canvas sparklines for individual joint torques (10 s rolling, fixed ±N·m axes).
+- **Detection Reporting Panel (Mode 1):** Verdict card with predicted label, confidence bar, top-3 Atlas `$vectorSearch` neighbors with similarities; 10-D feature-space panel; "why" physics (swirl torque residuals + phase lag, honest observable-band spectrum); persists across refreshes.
+- **Vector space card:** 2-D PCA of the Atlas signature library with hover tooltips, per-label counts, and gold/silver/bronze rings on the top-3 neighbor labels after a prediction.
+- **Online Recording & Teaching (Mode 2):**
+  - One-click "RUN SWIRL MACRO & PREDICT" / "RUN SWIRL & SAVE TO ATLAS" with elapsed-second tickers; "■ Stop" for the macro subprocess.
+  - Preset label chips (confound set + basics); `teach_csv.py` batch-teaches labeled CSVs without the robot.
+  - Manual start/stop recording with CSV download.
 
 ---
 
@@ -80,9 +80,9 @@
 
 | Step | User Action | Robot Action | UI Screen State | Backend / Atlas State |
 |------|-------------|--------------|-----------------|----------------------|
-| 1. Standby & Tare | Places cup on taped square; clicks "Tare" | Holds home pose; samples resting torques | **Status**: "IDLE", baseline calibrated | Computes $\tau_{\text{tare}}$ baseline |
-| 2. Run Routine | Clicks "▶ Run Pick & Place Cycle" | Executes fixed pick up $\to$ lift to travel | **Phase**: `APPROACH` $\to$ `GRASP` $\to$ `LIFT` | Telemetry streaming at 4–5 Hz |
-| 3. Swirl Excitation | Observes smooth circular swirl | Sweeps circular orbit in horizontal plane | **Phase**: `SWIRL_EXCITATION`, live torque waveforms | Buffers telemetry with phase tags |
-| 4. Placement & Settle | Robot places cup on square | Descends, opens gripper, retracts to home | **Phase**: `DESCEND_PLACE` $\to$ `RETURN_HOME` | Finalizes CSV dataset in `recordings/` |
-| 5. Detection Report | Inspects verdict card on dashboard | Stationary at home pose | **Verdict**: Displays detected object, confidence score, and top matches | `feature_extractor.py` generates $e$; Atlas `$vectorSearch` returns k-NN results |
-| 6. Online Teaching (Optional) | Selects label and clicks "Save to Atlas" | Stationary | **Toast**: "Signature indexed in MongoDB Atlas!" | Inserts embedding into `signatures` |
+| 1. Standby & Tare | Places cup on taped square | Holds home pose | **Status**: live torque sparklines | Telemetry streaming at 4–5 Hz |
+| 2. Run Routine | Clicks "RUN SWIRL MACRO & PREDICT" | Executes pick up → swirl → place | **Status**: elapsed-second ticker | Buffers telemetry with phase tags |
+| 3. Swirl Excitation | Observes smooth circular swirl | Sweeps circular orbit in horizontal plane | Live joint-torque sparklines react | Buffers telemetry with phase tags |
+| 4. Placement & Settle | Robot places cup on square | Descends, opens gripper, retracts to home | Macro completes | Finalizes CSV dataset in `recordings/` |
+| 5. Detection Report | Inspects verdict card on dashboard | Stationary at home pose | **Verdict**: predicted label, confidence, top-3 neighbors, feature-space bars, "why" physics, query in vector-space plot | `feature_extractor.py` generates $e$; Atlas `$vectorSearch` returns k-NN results |
+| 6. Online Teaching (Optional) | Picks a preset chip or types a label, clicks "RUN SWIRL & SAVE TO ATLAS" | Stationary | **Status**: "Signature saved — indexed in MongoDB" | Inserts embedding into `signatures` |

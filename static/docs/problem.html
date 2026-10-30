@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>feels docs — the formal problem</title>
+<style>
+:root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
+body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
+.docnav { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); position:sticky; top:0; flex-wrap:wrap; gap:8px; }
+.docnav a { color:var(--muted); text-decoration:none; margin-left:18px; font-size:0.9rem; }
+.docnav a:hover, .docnav a.active { color:var(--text); }
+.docnav a.brand { margin-left:0; color:var(--text); font-weight:700; }
+main { max-width:780px; margin:0 auto; padding:36px 24px 80px; }
+h1 { font-size:2rem; margin-bottom:0.3em; }
+h2 { font-size:1.3rem; margin-top:2em; border-bottom:1px solid var(--border); padding-bottom:0.3em; }
+p, li { color:#c9d1d9; }
+code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em; }
+pre { background:#161b22; border:1px solid var(--border); border-radius:8px; padding:16px; overflow-x:auto; }
+.honest { background:rgba(210,153,34,0.08); border:1px solid #9e6a03; border-radius:8px; padding:12px 16px; margin:1.5em 0; }
+.honest strong { color:#d29922; }
+</style>
+</head>
+<body>
+<nav class="docnav">
+  <a class="brand" href="/docs">feels · docs</a>
+  <span>
+    <a class="active" href="/docs/problem">Problem</a>
+    <a href="/docs/approach">Approach</a>
+    <a href="/docs/force">Force without a sensor</a>
+    <a href="/docs/relevance">Why it matters</a>
+    <a href="/">← Dashboard</a>
+  </span>
+</nav>
+<main>
+  <h1>The formal problem</h1>
+
+  <h2>Setup</h2>
+  <p>A 6-DOF arm holds a <strong>lidded, opaque cup</strong>. The contents
+  <code>c</code> belong to a set of classes <code>C</code> — empty, water, dish
+  soap, loose candy, a rigid weight — but are never directly observed. The arm
+  reports joint angles <code>q<sub>t</sub></code> and actuator torques
+  <code>τ<sub>t</sub></code> at 4–5 Hz. No camera sees inside; no force-torque
+  sensor is mounted.</p>
+
+  <h2>Observation and decision</h2>
+  <p>The robot executes one <strong>fixed probing motion</strong> (pick up → swirl →
+  place) and records the rollout <code>D = {(q<sub>t</sub>, τ<sub>t</sub>)}</code>.
+  The task is to map the rollout to a contents label:</p>
+  <pre>ψ: D → ℝ¹⁰        (feature map: time series → 10-D signature)
+e = Wz / ‖Wz‖₂      (per-feature scaling + L2 normalization)
+ĉ = argmax over taught signatures of cosine(e, eᵢ)</pre>
+  <p>Classification is <strong>non-parametric</strong>: there is no trained
+  classifier. A new item is learned by storing one embedding — the next query
+  simply finds its nearest neighbors.</p>
+
+  <h2>Why vision can't solve it</h2>
+  <p>The lid is the whole problem. A camera sees a cup; every class looks
+  identical. Any vision-based method is capped at chance.</p>
+
+  <h2>Why a scale can't solve it</h2>
+  <p>Our confound set — <code>solid_150g</code>, <code>water_150g</code>,
+  <code>candy_150g</code>, <code>soap_150g</code> — holds mass fixed at 150 g
+  across four contents. A scale, or any static weight estimate, is capped at
+  chance on this set by construction. Only <em>dynamics</em> — how the contents
+  move when swirled — separates them.</p>
+
+  <h2>What makes it hard</h2>
+  <ul>
+    <li><strong>Coarse sensing:</strong> 4–5 Hz torque telemetry. The true 5–25 Hz
+      rattle band is below the Nyquist limit — we work with what the channel
+      actually carries.</li>
+    <li><strong>Tare drift:</strong> joint-torque baselines wander with pose and
+      temperature; static offsets are unreliable, so the signal must come from
+      motion.</li>
+    <li><strong>No ground truth at runtime:</strong> the contents are hidden by
+      definition. The only supervision is the label the operator teaches.</li>
+  </ul>
+
+  <div class="honest"><strong>Honest limits.</strong> Static hold torques carry no
+  payload signal at our operating pose (verified identical across contents).
+  Everything discriminative comes from the swirl dynamics — which is exactly why
+  the fixed-protocol swirl, not the static lift, is the measurement.</div>
+</main>
+</body>
+</html>
