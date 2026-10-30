@@ -506,28 +506,50 @@ async def _mock_teach(label: str):
 
 
 def _gate_prediction_to_coarse(result):
-    """Restrict neighbors + material votes to the predicted coarse class, so a
-    solid verdict never surfaces liquid options (and vice-versa). The trained
-    cascade (empty→loaded→solid/liquid) decides the coarse class; the Atlas
-    material vote is the fallback. Falls back to the unfiltered list if
-    filtering would leave nothing (never show empty)."""
+    """HARD class gate: the trained cascade (empty→loaded→solid/liquid) decides
+    the coarse class, and Atlas is restricted to ONLY that class — a liquid
+    verdict looks at liquid options only, never solids (and vice-versa). No
+    cross-class fallback: if nothing is taught in that class, we say so instead
+    of borrowing a neighbor from another class."""
     import atlas as _a
-    coarse = (result.get("cascade") or {}).get("coarse")
+    casc = (result.get("cascade") or {}).get("coarse")
+    mat = result.get("material")
+    coarse = casc or (_a.coarse_class(mat) if mat else None)
     if not coarse:
-        mat = result.get("material")
-        if not mat:
-            return result
-        coarse = _a.coarse_class(mat)
+        return result
     result["coarse"] = coarse
+
+    # Keep only same-class neighbors / material votes (hard — no fallback).
     same = [m for m in result.get("matches", [])
-            if _a.resolve_coarse(m["label"], m.get("coarse")) == coarse]
-    if same:
-        result["matches"] = same
+            if _a.resolve_coarse(m["label"], m.get("coarse")) == coarse][:3]
     mm = [m for m in result.get("material_matches", [])
           if _a.coarse_class(m["material"]) == coarse]
+    result["matches"] = same
+    result["material_matches"] = mm
+
+    # Headline follows the best in-class option only.
+    if same:
+        result["prediction"] = same[0]["label"]
+        result["confidence"] = same[0].get("similarity", result.get("confidence", 0.0))
+        result["low_confidence"] = result["confidence"] < 0.82
     if mm:
-        result["material_matches"] = mm
-        result["material"] = mm[0]["material"]   # keep material consistent with coarse
+        result["material"] = mm[0]["material"]
+        result["material_confidence"] = round(mm[0]["score"], 3)
+        result["material_low_confidence"] = mm[0]["score"] < 0.82
+    else:
+        result["material"] = None
+        result["no_match_in_class"] = True
+
+    # An empty cup has no contents, so "empty" is the verdict regardless; report
+    # the model's emptiness confidence directly.
+    if coarse == "empty":
+        result["material"] = "empty"
+        result.pop("no_match_in_class", None)
+        load = (result.get("cascade") or {}).get("loadedness")
+        if load is not None:
+            emptiness = round(1.0 - load, 3)
+            result["material_confidence"] = emptiness
+            result["material_low_confidence"] = emptiness < 0.82
     return result
 
 
@@ -546,7 +568,7 @@ async def handle_cycle_predict(request):
                 feats = feature_extractor.extract_features(df)
                 ts = feature_extractor.swirl_window_series(df)
                 a = _atlas()
-                res = a.identify(feats["e"], top_k=3)
+                res = a.identify(feats["e"], top_k=10)   # retrieve broadly; hard-gated to the cascade class below
                 result = {
                     "ok": True,
                     "csv": os.path.basename(csv_path),
@@ -561,7 +583,8 @@ async def handle_cycle_predict(request):
                     "material_ambiguous": res.get("material_ambiguous", False),
                     "material_margin": res.get("material_margin", 1.0),
                     "material_matches": res.get("material_matches", []),
-                    "matches": [{"label": m["label"], "similarity": round(m["score"], 3)}
+                    "matches": [{"label": m["label"], "similarity": round(m["score"], 3),
+                                 "coarse": m.get("coarse")}
                                 for m in res["matches"]],
                     "features": {"names": feature_extractor.FEATURE_NAMES,
                                  "z": [round(float(v), 4) for v in feats["z"]],
@@ -701,6 +724,31 @@ async def handle_prediction_clear(request):
     return web.json_response({"ok": True, "cleared": True})
 
 
+async def handle_signature_delete(request):
+    """Delete a just-taught signature from Atlas by its sig_id (undo a teach)."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    sig_id = str(body.get("sig_id", "")).strip()
+    if not sig_id:
+        return web.json_response({"ok": False, "error": "provide sig_id"}, status=400)
+    if MOCK_MODE or sig_id.startswith("mock-"):
+        return web.json_response({"ok": True, "deleted": 0, "mock": True})
+    try:
+        from bson import ObjectId
+        from bson.errors import InvalidId
+        import atlas as _a
+        try:
+            oid = ObjectId(sig_id)
+        except InvalidId:
+            return web.json_response({"ok": False, "error": f"bad sig_id: {sig_id}"}, status=400)
+        res = _a.get_db().signatures.delete_one({"_id": oid})
+        return web.json_response({"ok": True, "deleted": res.deleted_count})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)[:300]}, status=500)
+
+
 async def handle_api_status(request):
     return web.json_response({
         "cycle": _cycle_status,
@@ -815,18 +863,24 @@ async def handle_classes(request):
     try:
         import atlas as _a
         db = _a.get_db()
-        from collections import Counter
-        # Group by the stored coarse class (per label), falling back to the
-        # label heuristic for pre-coarse signatures.
+        from collections import Counter, defaultdict
+        # Group each label by the MAJORITY stored coarse across its signatures
+        # (so one stray/mislabeled tag can't flip the whole label), falling
+        # back to the name heuristic when no signature has a stored coarse.
         labels = Counter()
-        label_coarse = {}
+        coarse_votes = defaultdict(Counter)
         for s in db.signatures.find({}, {"label": 1, "coarse": 1, "_id": 0}):
             lbl = s["label"]
             labels[lbl] += 1
-            label_coarse.setdefault(lbl, _a.resolve_coarse(lbl, s.get("coarse")))
+            if s.get("coarse") in _a.VALID_COARSE:
+                coarse_votes[lbl][s["coarse"]] += 1
+
+        def group_of(lbl):
+            votes = coarse_votes.get(lbl)
+            return votes.most_common(1)[0][0] if votes else _a.coarse_class(lbl)
         groups = {"empty": {}, "solid": {}, "liquid": {}}
         for lbl, n in labels.items():
-            groups.setdefault(label_coarse[lbl], {})[lbl] = n
+            groups.setdefault(group_of(lbl), {})[lbl] = n
         return web.json_response({"ok": True, "total": sum(labels.values()),
                                   "n_labels": len(labels), "groups": groups})
     except Exception as e:
@@ -937,6 +991,7 @@ async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_post("/api/cycle/correct", handle_cycle_correct)
     app.router.add_get("/api/status", handle_api_status)
     app.router.add_post("/api/prediction/clear", handle_prediction_clear)
+    app.router.add_post("/api/signature/delete", handle_signature_delete)
     app.router.add_post("/api/vectorspace", handle_vspace)
 
     runner = web.AppRunner(app)

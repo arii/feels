@@ -774,11 +774,13 @@
     function renderDecision(data) {
       document.getElementById('decision-card').style.display = 'block';
       // Material is the primary prediction; the fine-grained taught label is secondary.
-      const mat = data.material || data.prediction || 'unknown';
       const coarse = data.coarse || '';
       const COARSE_EMOJI = { empty: '👻', solid: '🍬', liquid: '💧' };
-      document.getElementById('pred-material').innerText =
-        (coarse ? (COARSE_EMOJI[coarse] || '') + ' ' : '') + mat + (coarse ? '  ·  ' + coarse : '');
+      const mat = data.material || data.prediction || 'unknown';
+      document.getElementById('pred-material').innerText = (coarse ? (COARSE_EMOJI[coarse] || '') + ' ' : '') +
+        (data.no_match_in_class
+          ? `${coarse} — no ${coarse} item taught yet`
+          : mat + (coarse ? '  ·  ' + coarse : ''));
       // Gate the correction UI to the predicted coarse class: a solid verdict
       // suggests a solid example and pre-selects solid, never liquid options.
       const COARSE_EG = { solid: 'solid_150g', liquid: 'water_025pct', empty: 'empty_cup' };
@@ -791,7 +793,8 @@
       if (cascEl) {
         const cc = data.cascade;
         cascEl.innerText = cc
-          ? `classifier → ${cc.coarse}  (loaded ${Math.round(cc.loadedness * 100)}% · solid ${Math.round(cc.rigidity * 100)}%)`
+          ? `classifier → ${cc.coarse}` + (coarse && cc.coarse !== coarse ? ` (overridden by nearest match: ${coarse})` : '')
+            + `  (loaded ${Math.round(cc.loadedness * 100)}% · solid ${Math.round(cc.rigidity * 100)}%)`
           : (data.cascade_error ? 'classifier unavailable' : '');
       }
       const mpct = Math.round(((data.material_confidence ?? data.confidence) || 0) * 100);
@@ -860,6 +863,25 @@
       try { await fetch('/api/prediction/clear', { method: 'POST' }); } catch (e) { /* offline ok */ }
     }
 
+    // Show a save confirmation with a one-click "Undo" that deletes the
+    // just-added signature from Atlas.
+    function savedMsg(el, text, sigId) {
+      el.innerHTML = text + (sigId && !String(sigId).startsWith('mock-')
+        ? ` <button class="rec-stop" style="font-size:0.68rem; padding:2px 8px; margin-left:6px;" onclick="deleteSignature('${sigId}', this)" title="Remove this signature from Atlas">🗑 Undo</button>`
+        : '');
+    }
+
+    async function deleteSignature(sigId, btn) {
+      if (btn) { btn.disabled = true; btn.innerText = '…'; }
+      try {
+        const d = await (await fetch('/api/signature/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sig_id: sigId }) })).json();
+        if (btn) btn.outerHTML = d.ok
+          ? '<span style="color:#3fb950;">✓ removed from Atlas</span>'
+          : '<span style="color:#ff4d6d;">delete failed: ' + (d.error || '') + '</span>';
+        refreshVSpace(); loadClasses();
+      } catch (e) { if (btn) btn.innerText = 'error'; }
+    }
+
     async function runPredict() {
       const btn = document.getElementById('predict-btn');
       const status = document.getElementById('predict-status');
@@ -905,9 +927,10 @@
         });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'teach failed');
-        status.innerText = data.mock
+        savedMsg(status, data.mock
           ? `✓ (MOCK) "${data.label}" recorded — not saved to Atlas.`
-          : `✓ Signature saved! "${data.label}" indexed in MongoDB (sig ${String(data.sig_id).slice(-6)}).`;
+          : `✓ Signature saved! "${data.label}" indexed in MongoDB (sig ${String(data.sig_id).slice(-6)}).`,
+          data.sig_id);
         input.value = '';
         refreshVSpace();
       } catch (e) {
@@ -934,9 +957,10 @@
         });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'correction failed');
-        status.innerText = data.mock
+        savedMsg(status, data.mock
           ? `✓ (MOCK) correction "${data.label}" recorded — not saved to Atlas.`
-          : `✓ Correction saved: "${data.label}" (was "${data.was}", ${data.csv}). Re-run prediction to verify.`;
+          : `✓ Correction saved: "${data.label}" (was "${data.was}", ${data.csv}). Re-run prediction to verify.`,
+          data.sig_id);
         input.value = '';
         refreshVSpace();
       } catch (e) {
@@ -1041,8 +1065,8 @@
       st.innerText = 'teaching "' + label + '" to Atlas…';
       try {
         const d = await (await fetch('/api/teach_file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file, label, coarse }) })).json();
-        st.innerText = d.ok ? ('✓ taught "' + d.label + '" → Atlas (sig ' + d.sig_id + '). Instantly queryable.') : ('error: ' + d.error);
-        if (d.ok) loadClasses();
+        if (d.ok) { savedMsg(st, '✓ taught "' + d.label + '" → Atlas. Instantly queryable.', d.sig_id); loadClasses(); }
+        else st.innerText = 'error: ' + d.error;
       } catch (e) { st.innerText = 'error: ' + e; }
     }
 

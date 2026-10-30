@@ -127,8 +127,11 @@ def _signature_doc(
     coarse: str | None = None,
 ) -> dict:
     return {
+        # Learn under the exact name. Store a coarse subclass ONLY when one is
+        # explicitly given — teaching does not predict/assign a subclass; the
+        # coarse class is resolved lazily (from the name) at query time if needed.
         "label": label,
-        "coarse": resolve_coarse(label, coarse),
+        "coarse": coarse if coarse in VALID_COARSE else None,
         "motion_type": motion_type,
         "feature_vector": feature_vector,
         "properties": properties or {},
@@ -178,7 +181,8 @@ def teach(
         _signature_doc(label, feature_vector, motion_type, properties, session, run_id, coarse)
     )
 
-    print(f"[teach] stored '{label}' ({resolve_coarse(label, coarse)})  sig_id={sig_result.inserted_id}")
+    _c = coarse if coarse in VALID_COARSE else "unset"
+    print(f"[teach] stored '{label}' (coarse={_c})  sig_id={sig_result.inserted_id}")
     return {"run_id": str(run_id), "sig_id": str(sig_result.inserted_id)}
 
 
@@ -318,7 +322,13 @@ def identify(
     results = list(db.signatures.aggregate([vector_search_stage, project_stage]))
 
     if not results:
-        return {"label": None, "confidence": 0.0, "matches": [], "low_confidence": True}
+        # Empty memory (no signatures taught yet): return the full shape so
+        # callers can read material/* without KeyError.
+        return {"label": None, "confidence": 0.0, "matches": [],
+                "margin": 1.0, "ambiguous": False, "low_confidence": True,
+                "material": None, "material_confidence": 0.0,
+                "material_matches": [], "material_margin": 1.0,
+                "material_ambiguous": False, "material_low_confidence": True}
 
     # Resolve each label's coarse class once (stored value wins over heuristic).
     label_coarse = {r["label"]: resolve_coarse(r["label"], r.get("coarse")) for r in results}
