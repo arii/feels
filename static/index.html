@@ -798,7 +798,8 @@ function toggleJoints() {
           document.getElementById('sim-progress').style.width = Math.round((s.sim.progress || 0) * 100) + '%';
           renderStageStrip(s.sim.stage);
         }
-        if (!busy) hideRunBanner();
+        // Note: don't hide banner here — button handlers hide it on completion.
+        // Hiding on !busy causes flicker during the lock-acquisition race.
       } catch (e) { /* dashboard stays usable offline */ }
     }
 
