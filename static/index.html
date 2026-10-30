@@ -661,16 +661,17 @@ function toggleJoints() {
           body: JSON.stringify(lastQueryE ? {query: lastQueryE} : {}),
         });
         const data = await res.json();
-        if (!data.ok) throw new Error(data.error || 'vectorspace failed');
-        renderVSpace(data);
+        if (!data.ok) throw new Error('vectorspace failed');
+        renderVSpace(data, data.cached);
       } catch (e) {
-        note.innerText = 'vector space unavailable: ' + e.message;
+        note.innerText = 'vector space unavailable';
       }
     }
 
-    function renderVSpace(data) {
+    function renderVSpace(data, cached) {
       const c = document.getElementById('vspace-canvas');
       const note = document.getElementById('vspace-note');
+      if (cached) note.innerText = 'cached — Atlas unreachable';
       const { ctx, w, h, dpr } = sizeCanvas(c);
       ctx.clearRect(0, 0, w, h);
       const pts = data.points || [];

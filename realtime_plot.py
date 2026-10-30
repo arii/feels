@@ -107,22 +107,51 @@ def _vspace_2d(items):
             for (l, _), p in zip(items, coords)]
 
 
+VSPACE_CACHE = os.path.join(HERE, "hidden_files", "vspace_cache.json")
+
+
+def _vspace_cache_save(items):
+    """Persist the signature library locally after a successful Atlas sync."""
+    try:
+        os.makedirs(os.path.dirname(VSPACE_CACHE), exist_ok=True)
+        with open(VSPACE_CACHE, "w") as f:
+            json.dump([{"label": l, "v": v} for l, v in items], f)
+    except Exception:
+        pass
+
+
+def _vspace_cache_load():
+    """Load the cached signature library; [] when no cache exists."""
+    try:
+        with open(VSPACE_CACHE) as f:
+            return [(d["label"], d["v"]) for d in json.load(f)]
+    except Exception:
+        return []
+
+
 async def handle_vspace(request):
     """2-D PCA of the Atlas signature library, optionally with the query
-    vector projected in the same basis (POST {"query": [10 floats]})."""
+    vector projected in the same basis (POST {"query": [10 floats]}).
+    Falls back to the local cache when Atlas is unreachable — the venue
+    wifi dropping must not blank the plot."""
     try:
         data = await request.json()
     except Exception:
         data = {}
     query = data.get("query")
+    cached = False
     try:
         a = _atlas()
         docs = list(a.get_db().signatures.find({}, {"label": 1, "feature_vector": 1}))
         items = [(d.get("label", "?"), d["feature_vector"])
                  for d in docs if d.get("feature_vector")]
         if items:
-            # Mixed-dimension libraries (e.g. mid-migration between embedders)
-            # break PCA — keep the majority dimension.
+            _vspace_cache_save(items)
+    except Exception:
+        items = _vspace_cache_load()
+        cached = True
+    try:
+        if items:
             top_dim = max(set(len(v) for _, v in items),
                           key=lambda d: sum(1 for _, v in items if len(v) == d))
             items = [(l, v) for l, v in items if len(v) == top_dim]
@@ -133,9 +162,10 @@ async def handle_vspace(request):
         return web.json_response({
             "ok": True, "points": _vspace_2d(items),
             "query_index": qidx, "n": len(items) - (1 if qidx >= 0 else 0),
+            "cached": cached,
         })
-    except Exception as e:
-        return web.json_response({"ok": False, "error": str(e)[:300]}, status=500)
+    except Exception:
+        return web.json_response({"ok": False, "error": "vector space unavailable"}, status=500)
 
 
 def _newest_recording(after_ts: float) -> Optional[str]:
@@ -648,14 +678,33 @@ async def _simulate_run(csv_path: str, speed: float = 1.0):
     try:
         feats = feature_extractor.extract_features(df)
         ts = feature_extractor.swirl_window_series(df)
-        a = _atlas()
-        q = embedder.embed(df)
-        res = a.identify(q, top_k=7)
-        if embedder.EMBEDDER == "hand":
-            try:
-                res = a.predict_lda(feats["z"])
-            except Exception as e:
-                print(f"[simulate] LDA unavailable ({e}); using vector search")
+        try:
+            a = _atlas()
+            q = embedder.embed(df)
+            res = a.identify(q, top_k=7)
+            if embedder.EMBEDDER == "hand":
+                try:
+                    res = a.predict_lda(feats["z"])
+                except Exception as e:
+                    print(f"[simulate] LDA unavailable ({e}); using vector search")
+        except Exception as e:
+            print(f"[simulate] Atlas unreachable ({type(e).__name__}); local k-NN fallback")
+            import predict_mystery as pm
+            import atlas as _a
+            recs = pm.load_real_recordings()
+            ref, scaler = pm.build_reference(recs)
+            pred, conf, qvec, neigh, ndist = pm.predict(df, ref, scaler, k=3)
+            res = {"label": pred, "prediction": pred, "decider": "local-knn",
+                   "confidence": float(conf), "low_confidence": False, "ambiguous": False,
+                   "margin": 1.0,
+                   "material": _a.material_of(pred), "material_confidence": float(conf),
+                   "material_low_confidence": False, "material_ambiguous": False,
+                   "material_margin": 1.0, "material_matches": [],
+                   "category": _a.category_of(pred), "category_confidence": float(conf),
+                   "category_low_confidence": False, "category_ambiguous": False,
+                   "category_margin": 1.0,
+                   "neighbors": [{"label": r["label"]} for _, r in neigh.iterrows()],
+                   "matches": [{"label": r["label"], "score": 0.5} for _, r in neigh.iterrows()]}
     except Exception:
         _sim_state = None
         _cycle_status = "error"
