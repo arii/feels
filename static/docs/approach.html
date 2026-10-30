@@ -50,17 +50,20 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   explanations in the dashboard:</p>
   <table>
     <tr><th>Group</th><th>Features</th><th>What they capture</th></tr>
-    <tr><td>Static lift</td><td><code>mass_j2</code>, <code>mass_j3</code>*, <code>lift_dyn_j3</code></td><td>Inertial cue during lift (the static offsets are displayed but excluded from matching — tare noise exceeds the payload signal)</td></tr>
-    <tr><td>Swirl dynamics</td><td><code>swirl_var_j2/j3</code>, <code>swirl_ptp_j3</code>, <code>phase_lag_s</code>, <code>rattle_e</code></td><td>Slosh energy, shifting-mass swing, viscous lag of torque behind motion, high-frequency energy</td></tr>
-    <tr><td>Grip &amp; excitation</td><td><code>grip_comp</code>, <code>swirl_speed</code>*</td><td>Compliance under load (swirl speed is displayed but excluded from matching — it measures the fixed macro's drive, not the contents)</td></tr>
+    <tr><td>Static lift</td><td><code>mass_j2</code>, <code>mass_j3</code>*, <code>lift_dyn_j3</code></td><td>Gravity torque offsets = mass estimate; inertial cue from the lift</td></tr>
+    <tr><td>Swirl dynamics</td><td><code>swirl_var_j2</code>, <code>swirl_var_j3</code>, <code>swirl_ptp_j3</code>, <code>phase_lag_s</code>, <code>rattle_e</code></td><td>Slosh energy; shifting-mass swing; TCP&ndash;torque phase lag = viscous damping; rattle energy (observable band only &mdash; the 5&ndash;25&nbsp;Hz band needs 100&nbsp;Hz on-robot sampling)</td></tr>
+    <tr><td>Grip &amp; excitation</td><td><code>grip_comp</code>, <code>swirl_speed</code>*</td><td>Gripper compliance under load, squishy vs rigid; TCP swirl speed for excitation normalization</td></tr>
   </table>
-  <p style="font-size:0.85rem; color:#8b949e;">* Kept in the 10-D vector for display; zero-weighted in the embedding. The matcher effectively works in 7-D.</p>
+  <p style="font-size:0.85rem; color:#8b949e;">* Kept in the 10-D vector for display; zero-weighted in the embedding &mdash; the static offsets sit below tare noise, and swirl speed measures the fixed macro's drive rather than the contents. The matcher effectively works in 7-D.</p>
 
   <h2>3. Scale, normalize, retrieve</h2>
   <pre>e = Wz / ‖Wz‖₂          # per-feature scales W, then L2 normalization
 ĉ = vector search        # MongoDB Atlas $vectorSearch, cosine, top-k</pre>
-  <p>Per-feature scaling stops the largest-magnitude raw feature (swirl speed,
-  ~160 mm/s) from drowning the small ones (variances ~1–5). Retrieval averages
+  <p><code>W</code> is a diagonal matrix: per-feature scales stop the
+  largest-magnitude raw feature (swirl speed, ~160 mm/s) from drowning the
+  small ones (variances ~1–5), and three entries are zero &mdash; the static
+  mass offsets and swirl speed are excluded from matching (see above), so the
+  unit embedding lives in the 7 informative dimensions. Retrieval averages
   similarity per label over the top-k hits; below 0.82 the UI flags
   low confidence instead of guessing.</p>
 
