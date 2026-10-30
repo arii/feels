@@ -810,7 +810,13 @@ function toggleJoints() {
 
     let runT0 = null, runTimer = null;
     function showRunBanner(text) {
-      document.getElementById('run-banner').style.display = 'flex';
+      const banner = document.getElementById('run-banner');
+      // Don't reset if already showing (avoids flicker on poll)
+      if (banner.style.display === 'flex') {
+        document.getElementById('run-text').innerText = text;
+        return;
+      }
+      banner.style.display = 'flex';
       document.getElementById('run-text').innerText = text;
       runT0 = Date.now();
       clearInterval(runTimer);
@@ -822,6 +828,7 @@ function toggleJoints() {
     function hideRunBanner() {
       document.getElementById('run-banner').style.display = 'none';
       clearInterval(runTimer);
+      runT0 = null;
     }
 
     const SIM_STAGES = ['home', 'approach', 'grasp', 'travel', 'swirl', 'place', 'predict'];
