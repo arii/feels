@@ -68,7 +68,8 @@ _PHASE_TO_STAGE = {
     "TRAVEL_STABLE_HOLD": "travel",
     "SWIRL": "swirl",
     "DESCEND_PLACE": "place", "GRIPPER_OPEN": "place",
-    "BACK_OFF": "place",
+    "BACK_OFF": "place", "RETRACT_TRAVEL": "place",
+    "RETURN_HOME": "home",
 }
 _SIM_STAGES = ["home", "approach", "grasp", "travel", "swirl", "place", "predict"]
 _last_prediction: Optional[dict] = None   # last successful Mode-1 result (survives refresh)
@@ -240,25 +241,54 @@ def _macro_cmd(object_label: str) -> list:
             "--object", object_label, "--record", "--cycles", "1", "--swirl-smooth"]
 
 
+def _publish_stage(stage: str):
+    """Emit a stage-only SSE event so the dashboard's stage strip updates live."""
+    sample = {"stage": stage, "t": time.time()}
+    for q in list(state.subscribers):
+        try:
+            q.put_nowait(sample)
+        except asyncio.QueueFull:
+            pass
+
+
 async def _run_swirl_macro(object_label: str) -> str:
     """Run one pick-up → swirl → place cycle via repeatable_grasp.py.
 
     Returns the path of the freshly recorded CSV. Raises on failure/abort.
     Only one cycle may run at a time (guarded by _cycle_lock by callers).
+    Streams the macro's stdout to parse [REC] Phase markers and publish
+    live stage updates to the dashboard's stage strip.
     """
     global _cycle_proc, _cycle_status
     _cycle_status = "running"
     cmd = _macro_cmd(object_label)
     started = time.time()
+    out_lines = []
     try:
         _cycle_proc = subprocess.Popen(
-            cmd, cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            cmd, cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1)
+        # Stream stdout line-by-line to catch phase markers in real time.
+        # communicate() would wait for completion — we need live updates.
+        assert _cycle_proc.stdout is not None
         loop = asyncio.get_event_loop()
-        # communicate() drains stdout while waiting — wait()+read() would
-        # deadlock once the pipe buffer (~64KB) fills on a chatty macro.
-        out, _ = await loop.run_in_executor(None, _cycle_proc.communicate)
-        rc = _cycle_proc.returncode
+        while True:
+            line = await loop.run_in_executor(None, _cycle_proc.stdout.readline)
+            if not line:
+                break
+            out_lines.append(line)
+            # Parse: [REC] Phase -> SWIRL
+            if "[REC] Phase ->" in line:
+                try:
+                    phase = line.split("[REC] Phase ->", 1)[1].strip()
+                    stage = _PHASE_TO_STAGE.get(phase)
+                    if stage:
+                        _publish_stage(stage)
+                except Exception:
+                    pass
+        rc = _cycle_proc.wait()
         _cycle_proc = None
+        out = "".join(out_lines)
         if rc != 0:
             _cycle_status = "error"
             raise RuntimeError(f"swirl macro exited rc={rc}\n{out[-2000:]}")
@@ -267,6 +297,8 @@ async def _run_swirl_macro(object_label: str) -> str:
             _cycle_status = "error"
             raise RuntimeError("macro finished but no new recording CSV appeared")
         _cycle_status = "done"
+        # Final stage: predict (macro done, pipeline running)
+        _publish_stage("predict")
         return csv_path
     except Exception:
         _cycle_status = "error"
