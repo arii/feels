@@ -39,7 +39,7 @@ feature_extractor.py   # 10-D swirl signature z + unit embedding e
 atlas.py               # Atlas teach/identify, predict_lda decision head, --smoke setup
 teach_csv.py           # batch-teach recording CSVs into Atlas (no robot needed)
 predict_mystery.py     # offline classifier + tare QC (--eval, --qc)
-repeatable_grasp.py    # data-collection macro: pick → swirl → place (LOCKED — do not modify)
+repeatable_grasp.py    # data-collection macro: pick → swirl → place → back-off (LOCKED)
 control_service.py     # 100 Hz on-robot module (eliminates ~158 ms cloud latency)
 static/index.html      # dashboard frontend
 static/docs/           # presentation site (served at /docs — this IS the demo material)
@@ -52,7 +52,7 @@ Every script documents itself: `python <script>.py --help` prints examples.
 ## The loop
 
 1. **Record** — `python repeatable_grasp.py --object water_075pct --record --swirl-smooth`
-   (one continuous pick → swirl → place; see `/docs/recording` for the protocol)
+   (one continuous pick → swirl → place → back-off; see `/docs/recording` for the protocol)
 2. **Teach** — live in Mode 2 (preset chips), or batch with no robot:
    ```bash
    python teach_csv.py recordings/ --require-swirl --dry-run   # preview first
@@ -118,24 +118,15 @@ To eliminate the ~158 ms WebRTC cloud latency and sample at 50–200 Hz, deploy 
 python client_control_service.py
 ```
 
-## Experimental Findings: Weight Detection via Joint Torques
+## What the data showed
 
-> **Note (2026-10-29 audit):** static hold torques were later found identical
-> across contents to 3 decimals — the tare baseline dominates these numbers,
-> not the payload. Treat the mass estimates below as pre-audit observations;
-> the discriminative signal in the current pipeline comes from swirl *dynamics*,
-> not statics. See [`BASELINE_FINDINGS.md`](BASELINE_FINDINGS.md).
-
-Even without a dedicated 6-axis F/T flange sensor, the xArm850 reports high-resolution joint loads via `arm.do_command({"load": ""})`.
-
-1. **Posture Dynamics:**
-   - In upright postures ($q_2 \approx 86^\circ$), the upper arm acts as an axial compression column, so vertical weight creates minimal angular moment on Joint 2 (Shoulder).
-   - **Joint 3 (Elbow Pitch)** acts as the cantilever reaction pivot and absorbs the downward bending moment.
-2. **Experimental Verification (Recordings 3 vs 4):**
-   - **Empty / Resting State:** Joint 3 settles firmly to `-16.82 N·m`.
-   - **Holding Payload:** Joint 3 deflects to **`-22.0` to `-23.02 N·m`** (a **`-6.20 N·m` shift**, equivalent to $\approx 1.4\,\text{kg}$ downward force).
-   - When released, torque crisply snaps back from $-20.7 \to -16.82\,\text{N}\cdot\text{m}$.
-   - CSV datasets, schema dictionary, and comparative figures are documented in [`recordings/README.md`](recordings/README.md).
+The 2026-10-29 tare audit ([`BASELINE_FINDINGS.md`](BASELINE_FINDINGS.md)) found
+that static hold torques are identical across contents to 3 decimals — the tare
+baseline (~10 N·m noise) dwarfs the payload signal (≤2 N·m), so **everything
+discriminative comes from swirl dynamics, not statics**. The most separable item
+in the dataset is a 3/4-full water cup (maximum slosh); a brim-full cup is
+haptically a solid block. Recordings, schema, and the early force analysis live
+in [`recordings/`](recordings/).
 
 ## Repeatable Grasping Workflow (Arm Saver Positions)
 
@@ -173,11 +164,12 @@ by dynamics — mass features alone cannot distinguish them.
 ## Project Documentation Index
 
 - **`/docs`** (served by the dashboard) — the presentation site: problem, approach, force, relevance, figures, recording guide. This is the demo material.
-- [**docs/00-overview.md**](docs/00-overview.md) — Problem statement, core scope, and architecture decisions.
 - [**docs/01-hardware-and-viam-setup.md**](docs/01-hardware-and-viam-setup.md) — Robot hardware specifications and Viam configuration.
 - [**docs/02-system-architecture.md**](docs/02-system-architecture.md) — End-to-end tech stack, telemetry sync, and storyboard.
 - [**docs/05-ml-pipeline.md**](docs/05-ml-pipeline.md) — 10D feature extraction, metric embedding, and Atlas Vector Search.
+- [**docs/06-formal-problem-definition.md**](docs/06-formal-problem-definition.md) — Problem statement, action space, and retrieval objective.
 - [**BASELINE_FINDINGS.md**](BASELINE_FINDINGS.md) — The tare-baseline audit: why statics don't discriminate.
 - [**ARCHITECTURE.md**](ARCHITECTURE.md) — Module map and the CSV schema contract (the reuse interface).
-- [**PLAN.md**](PLAN.md) — Concrete finish plan and verification steps.
-- [**TODO.md**](TODO.md) — Active task backlog and archived exploration avenues.
+- [**PLAN.md**](PLAN.md) — Friday runbook.
+- [**TODO.md**](TODO.md) — Current state and post-hackathon work.
+- [**archive/**](archive/) — Superseded planning docs and exploration scripts, kept for history.

@@ -30,17 +30,25 @@ This directory contains experimental datasets captured from the physical **UFact
 
 ## 3. Telemetry Schema & Column Dictionary
 
-Every CSV row records the robot's physical state at a sample instant:
+Current recordings (from `repeatable_grasp.py --record`) use this schema —
+see `ARCHITECTURE.md` for the contract:
 
 | Column | Unit | Description |
 |---|---|---|
-| `elapsed_sec` | seconds | Time elapsed since visualizer initialization |
-| `effective_force_n` | $\text{N}$ | Calculated vertical force $F_z$ derived from shoulder pitch delta |
-| `payload_weight_g` | grams | Estimated payload mass derived from $F_z / g$ |
-| `delta_j2_nm` | $\text{N}\cdot\text{m}$ | Shoulder pitch torque deflection relative to tare baseline |
-| `r_xy_m` | meters | Planar distance from arm base origin to end-effector ($0.139\,\text{m}$) |
-| `j1_raw` – `j6_raw` | $\text{N}\cdot\text{m}$ | Instantaneous actuator torque read directly from `arm.do_command({"load": ""})` |
-| `j1_smooth` – `j6_smooth` | $\text{N}\cdot\text{m}$ | Low-pass exponentially smoothed joint torques ($\alpha = 0.35$) |
+| `elapsed_sec` | seconds | Time since recording start |
+| `phase` | tag | Macro phase: `INIT`, `APPROACH`, `REACH_GRASP`, `GRIPPER_CLOSE`, `LIFT_TO_TRAVEL`, `SWIRL`, `DESCEND_PLACE`, `GRIPPER_OPEN`, `BACK_OFF`, `RETRACT_TRAVEL`, `RETURN_HOME` |
+| `object_label` | string | Ground-truth label (e.g. `water_075pct`; `mystery` for blind runs) |
+| `tcp_x_mm`, `tcp_y_mm`, `tcp_z_mm` | mm | Tool-center-point Cartesian position |
+| `tcp_ox`, `tcp_oy`, `tcp_oz`, `tcp_theta_deg` | — | TCP orientation (axis-angle + angle deg) |
+| `q1_deg` – `q6_deg` | degrees | Joint positions |
+| `tau1_nm` – `tau6_nm` | N·m | Joint torques from `arm.do_command({"load": ""})` |
+| `gripper_pos` | — | Gripper position |
+| `gripper_holding` | bool | Whether the gripper reports holding |
+
+> Early files in this directory (e.g. `recording_20261029_122337.csv`) use a
+> legacy schema (`j1_raw…`, `effective_force_n`, …) from the first visualizer
+> sessions — see `BASELINE_FINDINGS.md` for why that era's static-load numbers
+> don't discriminate contents.
 
 ---
 
