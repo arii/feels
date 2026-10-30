@@ -459,6 +459,8 @@ async def _mock_predict():
         sim = float(np.dot(e_q, e_r))  # both L2-normalized → cosine similarity
         matches.append({"label": row["label"], "similarity": round(max(0.0, sim), 3)})
     matches.sort(key=lambda m: m["similarity"], reverse=True)
+    margin = (matches[0]["similarity"] - matches[1]["similarity"]) if len(matches) > 1 else 1.0
+    ambiguous = margin < 0.02
     feats = feature_extractor.extract_features(df)
     ts = feature_extractor.swirl_window_series(df)
     return {
@@ -466,7 +468,9 @@ async def _mock_predict():
         "csv": os.path.basename(name),
         "prediction": str(pred),
         "confidence": float(round(float(conf), 3)),
-        "low_confidence": bool(float(conf) < 0.82),
+        "low_confidence": bool(float(conf) < 0.82) or ambiguous,
+        "ambiguous": ambiguous,
+        "margin": round(margin, 4),
         "matches": matches,
         "features": {"names": feature_extractor.FEATURE_NAMES,
                      "z": [round(float(v), 4) for v in feats["z"]],
@@ -508,6 +512,8 @@ async def handle_cycle_predict(request):
                     "prediction": res["label"],
                     "confidence": round(res["confidence"], 3),
                     "low_confidence": res["low_confidence"],
+                    "ambiguous": res.get("ambiguous", False),
+                    "margin": res.get("margin", 1.0),
                     "matches": [{"label": m["label"], "similarity": round(m["score"], 3)}
                                 for m in res["matches"]],
                     "features": {"names": feature_extractor.FEATURE_NAMES,

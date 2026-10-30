@@ -683,7 +683,10 @@
       document.getElementById('pred-conf-bar').style.width = pct + '%';
       document.getElementById('pred-conf-bar').style.background = data.low_confidence ? '#d29922' : '#3fb950';
       document.getElementById('pred-conf-text').innerText =
-        `confidence ${pct}%${data.low_confidence ? ' — LOW, consider teaching this item' : ''}` +
+        `confidence ${pct}%` +
+        (data.ambiguous && data.matches && data.matches[1]
+          ? ` — AMBIGUOUS, ${data.matches[1].label} within ${(data.margin * 100).toFixed(1)}% — teach more examples of both`
+          : (data.low_confidence ? ' — LOW, consider teaching this item' : '')) +
         (data.mock ? '  (MOCK)' : '');
       setNeighbors(document.getElementById('pred-neighbors'), data.matches || []);
       renderFeatureSpace(data);

@@ -251,13 +251,21 @@ def swirl_window_series(df):
     }
 
 
-def _calibrate():
-    """Recompute FEATURE_SCALES from all real recordings; print the dict."""
+def _calibrate(require_swirl: bool = False):
+    """Recompute FEATURE_SCALES from real recordings; print the dict.
+
+    With require_swirl, only recordings containing a true SWIRL phase are used —
+    mixing protocols confounds motion with contents (same item scores ~0.4
+    cosine across protocols), so scales must come from one protocol.
+    """
     import glob
     rows = []
     for f in sorted(glob.glob("recordings/**/*.csv", recursive=True)):
         d = pd.read_csv(f)
         if not {"phase", "tau3_nm"}.issubset(d.columns):
+            continue
+        if require_swirl and not (d["phase"] == "SWIRL").any():
+            print(f"skip {f}: no SWIRL phase", file=sys.stderr)
             continue
         try:
             rows.append(np.abs(extract_features(d)["z"]))
@@ -266,7 +274,8 @@ def _calibrate():
     if not rows:
         sys.exit("no usable recordings under recordings/")
     A = np.array(rows)
-    print(f"# calibrated on {len(rows)} recordings")
+    print(f"# calibrated on {len(rows)} recordings"
+          + (" (SWIRL protocol only)" if require_swirl else ""))
     print("FEATURE_SCALES = {")
     for n, s in zip(FEATURE_NAMES, np.percentile(A, 90, axis=0)):
         print(f'    "{n}": {s:.4g},')
@@ -278,9 +287,11 @@ def main():
     ap.add_argument("csv", nargs="?", help="Telemetry CSV from repeatable_grasp.py --record")
     ap.add_argument("--calibrate", action="store_true",
                     help="recompute FEATURE_SCALES from recordings/ and print them")
+    ap.add_argument("--require-swirl", action="store_true",
+                    help="with --calibrate: use only recordings with a true SWIRL phase")
     args = ap.parse_args()
     if args.calibrate:
-        _calibrate()
+        _calibrate(require_swirl=args.require_swirl)
         return
     if not args.csv:
         ap.error("pass a CSV path (or --calibrate)")

@@ -7,6 +7,7 @@ Collections:
   items       — ground-truth item catalogue (label, description, photo_url)
 """
 
+import argparse
 import os
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -240,9 +241,15 @@ def identify(
     )
 
     best_label, best_confidence = ranked[0]
+    margin = best_confidence - ranked[1][1] if len(ranked) > 1 else 1.0
+    # A tiny lead across labels means the space can't separate this query
+    # (e.g. stale feature scales collapsing every embedding to ~0.97 cosine).
+    # Report ambiguity instead of a confident-looking number.
+    ambiguous = margin < 0.02
     matches = [{"label": lbl, "score": round(score, 4)} for lbl, score in ranked]
 
-    print(f"[identify] → '{best_label}'  confidence={best_confidence:.3f}")
+    print(f"[identify] → '{best_label}'  confidence={best_confidence:.3f}  margin={margin:.3f}"
+          + ("  AMBIGUOUS" if ambiguous else ""))
     for m in matches:
         print(f"           {m['label']:30s}  {m['score']:.4f}")
 
@@ -250,7 +257,9 @@ def identify(
         "label": best_label,
         "confidence": best_confidence,
         "matches": matches,
-        "low_confidence": best_confidence < confidence_threshold,
+        "margin": round(margin, 4),
+        "ambiguous": ambiguous,
+        "low_confidence": (best_confidence < confidence_threshold) or ambiguous,
     }
 
 
@@ -308,6 +317,13 @@ def seed_items(overwrite: bool = False):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Set up Atlas collections/vector index for arii/feels.")
+    parser.add_argument("--smoke", action="store_true",
+                        help="Also run a smoke teach() with a RANDOM vector + identify(). "
+                             "DO NOT use after real items are taught — it inserts a junk "
+                             "'water_half' row that will pollute $vectorSearch results.")
+    args = parser.parse_args()
+
     print("=== Atlas setup ===\n")
     print(f"Database: {DB_NAME}")
 
@@ -320,19 +336,20 @@ if __name__ == "__main__":
     print("\n--- Seeding item catalogue ---")
     seed_items()
 
-    print("\n--- Inserting a fake teach() run ---")
-    fake_vector = [0.1, 0.9, -0.3, 0.5, 0.2, -0.1, 0.4, 0.0, 0.3, 0.6]
-    teach(
-        label="water_half",
-        feature_vector=fake_vector,
-        motion_type="3in1_macro",
-        properties={"estimated_mass_g": 150, "fill_ratio": 0.5},
-        session="thu",
-    )
+    if args.smoke:
+        print("\n--- Inserting a fake teach() run (smoke test, random vector) ---")
+        fake_vector = [0.1, 0.9, -0.3, 0.5, 0.2, -0.1, 0.4, 0.0, 0.3, 0.6]
+        teach(
+            label="water_half",
+            feature_vector=fake_vector,
+            motion_type="3in1_macro",
+            properties={"estimated_mass_g": 150, "fill_ratio": 0.5},
+            session="thu",
+        )
 
-    print("\n--- Running identify() ---")
-    result = identify(fake_vector, top_k=5, session="thu")
-    print(f"\n  Prediction : {result['label']}")
-    print(f"  Confidence : {result['confidence']:.3f}")
-    print(f"  Low conf?  : {result['low_confidence']}")
-    print("\nDone.")
+        print("\n--- Running identify() ---")
+        result = identify(fake_vector, top_k=5, session="thu")
+        print(f"\n  Prediction : {result['label']}")
+        print(f"  Confidence : {result['confidence']:.3f}")
+        print(f"  Low conf?  : {result['low_confidence']}")
+        print("\nDone.")
