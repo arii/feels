@@ -100,7 +100,19 @@ def list_library():
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Batch-teach recording CSVs into Atlas.")
+    ap = argparse.ArgumentParser(
+        description="Batch-teach recording CSVs into Atlas.",
+        epilog="""examples:
+  python teach_csv.py recordings/ --require-swirl --dry-run   # preview
+  python teach_csv.py recordings/ --require-swirl --session fri
+  python teach_csv.py --list                                  # library contents
+  python teach_csv.py foo.csv --label water_075pct --force    # re-teach one file
+
+Label resolution: --label > object_label column > filename.
+Mystery/unlabeled and non-grasp CSVs are skipped; already-taught files are
+skipped unless --force. Needs MONGODB_URI in .env, and the Atlas IP
+allowlist must include this machine.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("paths", nargs="*", help="CSV files, globs, or dirs (default: recordings/)")
     ap.add_argument("--session", default="thu", help="session tag (default: thu)")
     ap.add_argument("--label", default=None, help="force one label for all files")

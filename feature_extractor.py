@@ -299,7 +299,17 @@ def _calibrate():
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Extract 10-D swirl features + normalized embedding.")
+    ap = argparse.ArgumentParser(
+        description="Extract 10-D swirl features + normalized embedding.",
+        epilog="""examples:
+  python feature_extractor.py recordings/foo.csv          # print z, e, diagnostics
+  python feature_extractor.py --calibrate --require-swirl  # recompute FEATURE_SCALES
+                                                           # from swirl recordings, then
+                                                           # paste the output into FEATURE_SCALES
+
+The 5-25 Hz rattle band is NOT observable at 4-5 Hz cloud sampling;
+diagnostics flags rattle_band_limited honestly.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("csv", nargs="?", help="Telemetry CSV from repeatable_grasp.py --record")
     ap.add_argument("--calibrate", action="store_true",
                     help="recompute FEATURE_SCALES from recordings/ and print them")
