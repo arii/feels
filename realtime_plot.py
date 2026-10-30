@@ -13,11 +13,15 @@ Optimizations:
 
 import asyncio
 import os
+import re
 import time
 import math
 import json
 import csv
+import glob
 import argparse
+import subprocess
+import sys
 from datetime import datetime
 from typing import Set, List, Optional, Dict, Any
 from dotenv import load_dotenv
@@ -25,6 +29,9 @@ from dotenv import load_dotenv
 from aiohttp import web
 from viam.robot.client import RobotClient
 from viam.components.arm import Arm
+
+import pandas as pd
+import feature_extractor
 
 load_dotenv()
 
@@ -34,6 +41,72 @@ VIAM_MACHINE_ADDRESS = os.getenv("VIAM_MACHINE_ADDRESS", "sfhack12-main.ty1cywh7
 GRAVITY = 9.80665
 RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recordings")
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+# ── pick-swirl-place cycle machinery ──────────────────────────────────────
+_cycle_lock = asyncio.Lock()
+_cycle_proc: Optional[subprocess.Popen] = None
+_cycle_status: str = "idle"   # idle | running | done | error | aborted
+
+# MOCK MODE: FEELS_MOCK=1 serves the 2-mode UI from recorded data instead of
+# the physical robot + Atlas. The mock predict runs the real feature
+# extractor on a recorded CSV and a local cosine k-NN over the reference
+# recordings (same math Atlas $vectorSearch would do). The UI shows a MOCK
+# badge whenever this is active — never demo it as live hardware.
+MOCK_MODE = os.getenv("FEELS_MOCK", "0") == "1"
+MOCK_DELAY_SEC = float(os.getenv("FEELS_MOCK_DELAY", "2.0"))
+
+
+def _atlas():
+    """Import atlas lazily so the dashboard boots without Mongo creds."""
+    import atlas as _a
+    if not os.getenv("MONGODB_URI"):
+        raise RuntimeError("MONGODB_URI not set — Atlas teach/identify unavailable")
+    return _a
+
+
+def _newest_recording(after_ts: float) -> Optional[str]:
+    cands = [p for p in glob.glob(os.path.join(RECORDINGS_DIR, "recording_*.csv"))
+             if os.path.getmtime(p) >= after_ts - 2]
+    return max(cands, key=os.path.getmtime) if cands else None
+
+
+def _sanitize_label(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_") or "item"
+
+
+async def _run_swirl_macro(object_label: str) -> str:
+    """Run one pick-up → swirl → place cycle via repeatable_grasp.py.
+
+    Returns the path of the freshly recorded CSV. Raises on failure/abort.
+    Only one cycle may run at a time (guarded by _cycle_lock by callers).
+    """
+    global _cycle_proc, _cycle_status
+    _cycle_status = "running"
+    cmd = [sys.executable, os.path.join(HERE, "repeatable_grasp.py"),
+           "--object", object_label, "--record", "--cycles", "1", "--swirl-smooth"]
+    started = time.time()
+    try:
+        _cycle_proc = subprocess.Popen(
+            cmd, cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        loop = asyncio.get_event_loop()
+        rc = await loop.run_in_executor(None, _cycle_proc.wait)
+        out = _cycle_proc.stdout.read() if _cycle_proc.stdout else ""
+        _cycle_proc = None
+        if rc != 0:
+            _cycle_status = "error"
+            raise RuntimeError(f"swirl macro exited rc={rc}\n{out[-2000:]}")
+        csv_path = _newest_recording(started)
+        if not csv_path:
+            _cycle_status = "error"
+            raise RuntimeError("macro finished but no new recording CSV appeared")
+        _cycle_status = "done"
+        return csv_path
+    except Exception:
+        _cycle_status = "error"
+        raise
+    finally:
+        _cycle_proc = None
 
 
 class RobotForceState:
@@ -411,24 +484,42 @@ HTML_PAGE = """<!DOCTYPE html>
   <header>
     <div>
       <h1>
-        xArm850 Real-Time Telemetry
+        PHYSICAL AI CUP INSPECTOR
         <span class="badge" id="status-badge">CONNECTING...</span>
-        <span class="badge-rec" id="rec-badge">REC</span>
+        <span class="badge" id="atlas-badge" style="background:#6e7681;">ATLAS: ...</span>
+        <span class="badge" id="mock-badge" style="background:#8957e5; display:none;">MOCK</span>
       </h1>
-      <p style="color: #8b949e; font-size: 0.8rem; margin-top: 2px;">10-Second High-Performance Rolling Window</p>
+      <p style="color: #8b949e; font-size: 0.8rem; margin-top: 2px;">Pick up &rarr; swirl &rarr; place &mdash; identify what's inside the lidded cup</p>
     </div>
     <div class="controls">
-      <input type="text" id="obj-label-input" placeholder="Object label (e.g. candy, water)" style="background: #21262d; border: 1px solid #30363d; color: #fff; padding: 7px 10px; border-radius: 6px; font-size: 0.85rem; width: 175px;" />
-      <button class="rec-start" id="rec-btn" onclick="toggleRecording()">● Record Session</button>
-      <button class="tare-btn" onclick="tare()">Tare (Zero)</button>
-      <button class="active-toggle" id="filter-btn" onclick="toggleFilter()">EMA Filter: ON</button>
-      <button id="mode-btn" onclick="toggleMode()">View: Delta (Δ Nm)</button>
+      <button class="rec-stop" id="abort-btn" onclick="abortCycle()" title="Stop the running macro">■ Stop</button>
     </div>
   </header>
 
-  <div class="download-banner" id="dl-banner">
-    <span id="dl-msg">Session recorded successfully.</span>
-    <button onclick="downloadCSV()" style="background: #238636; border-color: #3fb950;">⬇ Download CSV Dataset</button>
+  <div class="grid-kpi" style="grid-template-columns: 1fr 1fr;">
+    <div class="kpi-card">
+      <div class="kpi-label">Mode 1 &mdash; Identify mystery object</div>
+      <button class="tare-btn" id="predict-btn" onclick="runPredict()" style="font-size:1rem; padding:10px 20px; margin:8px 0;">RUN SWIRL MACRO &amp; PREDICT</button>
+      <div id="decision-card" style="display:none; margin-top:8px; border-top:1px solid var(--border); padding-top:8px;">
+        <div class="kpi-label">Predicted class</div>
+        <div class="kpi-val" id="pred-label" style="font-size:1.5rem;">—</div>
+        <div style="background:#21262d; border-radius:6px; height:14px; margin:6px 0; overflow:hidden;">
+          <div id="pred-conf-bar" style="height:100%; width:0%; background:#3fb950;"></div>
+        </div>
+        <div class="kpi-sub" id="pred-conf-text">confidence —</div>
+        <div class="kpi-label" style="margin-top:8px;">Nearest Atlas neighbors</div>
+        <div id="pred-neighbors" style="font-size:0.85rem; margin-top:4px;"></div>
+      </div>
+      <div class="kpi-sub" id="predict-status"></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Mode 2 &mdash; Teach new item (online dataset builder)</div>
+      <div style="display:flex; gap:8px; margin:8px 0;">
+        <input type="text" id="teach-label-input" placeholder="Item name, e.g. Loose Pens" style="flex:1; background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem;" />
+        <button class="rec-start" id="teach-btn" onclick="teachItem()" style="font-size:0.9rem; padding:10px 16px;">RUN SWIRL &amp; SAVE TO ATLAS</button>
+      </div>
+      <div class="kpi-sub" id="teach-status">Signature saved → vector indexed in MongoDB, instantly queryable.</div>
+    </div>
   </div>
 
   <div class="grid-kpi">
@@ -756,58 +847,95 @@ HTML_PAGE = """<!DOCTYPE html>
     }
 
     connectSSE();
+    pollStatus();
+    setInterval(pollStatus, 5000);
 
-    async function tare() {
-      await fetch('/tare', { method: 'POST' });
-    }
-
-    async function toggleRecording() {
-      const btn = document.getElementById('rec-btn');
-      const badge = document.getElementById('rec-badge');
-
-      if (!isRecording) {
-        const objInput = document.getElementById('obj-label-input').value.trim();
-        const url = '/record/start' + (objInput ? `?object=${encodeURIComponent(objInput)}` : '');
-        const res = await fetch(url, { method: 'POST' });
-        const data = await res.json();
-        isRecording = true;
-        btn.innerText = '■ Stop Recording';
-        btn.className = 'rec-stop';
-        badge.style.display = 'inline-block';
-        document.getElementById('dl-banner').style.display = 'none';
-      } else {
-        const res = await fetch('/record/stop', { method: 'POST' });
-        const data = await res.json();
-        isRecording = false;
-        btn.innerText = '● Record Session';
-        btn.className = 'rec-start';
-        badge.style.display = 'none';
-        if (data.file) {
-          lastRecordedFile = data.file;
-          document.getElementById('dl-msg').innerText = `Session saved: ${data.file} (${data.samples} samples)`;
-          document.getElementById('dl-banner').style.display = 'flex';
+    async function pollStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const s = await res.json();
+        const b = document.getElementById('atlas-badge');
+        b.innerText = s.atlas_configured ? 'ATLAS: SYNCED' : 'ATLAS: NO URI';
+        b.style.background = s.atlas_configured ? '#238636' : '#da3633';
+        document.getElementById('mock-badge').style.display = s.mock ? 'inline-block' : 'none';
+        const busy = s.cycle_busy;
+        for (const id of ['predict-btn', 'teach-btn']) {
+          const btn = document.getElementById(id);
+          if (btn) btn.disabled = busy;
         }
+        if (busy) {
+          document.getElementById('predict-status').innerText = 'Swirl macro running on the robot…';
+        }
+      } catch (e) { /* dashboard stays usable offline */ }
+    }
+
+    function setNeighbors(el, matches) {
+      el.innerHTML = matches.map((m, i) =>
+        `<div>${i + 1}. ${m.label} — ${(m.similarity * 100).toFixed(1)}% similarity</div>`
+      ).join('');
+    }
+
+    async function runPredict() {
+      const btn = document.getElementById('predict-btn');
+      const status = document.getElementById('predict-status');
+      btn.disabled = true;
+      document.getElementById('decision-card').style.display = 'none';
+      status.innerText = 'Running pick-up → swirl → place… (this takes ~1 min)';
+      try {
+        const res = await fetch('/api/cycle/predict', { method: 'POST' });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'prediction failed');
+        document.getElementById('decision-card').style.display = 'block';
+        document.getElementById('pred-label').innerText = data.prediction || 'unknown';
+        const pct = Math.round((data.confidence || 0) * 100);
+        document.getElementById('pred-conf-bar').style.width = pct + '%';
+        document.getElementById('pred-conf-bar').style.background = data.low_confidence ? '#d29922' : '#3fb950';
+        document.getElementById('pred-conf-text').innerText =
+          `confidence ${pct}%${data.low_confidence ? ' — LOW, consider teaching this item' : ''}`;
+        setNeighbors(document.getElementById('pred-neighbors'), data.matches || []);
+        const dq = data.diagnostics || {};
+        status.innerText = `Done — ${data.csv}` +
+          (data.mock ? '  (MOCK data, not live hardware)' : '') +
+          (dq.tare_flags && dq.tare_flags.length ? `  ⚠ tare flags: ${dq.tare_flags.join(',')}` : '');
+      } catch (e) {
+        status.innerText = 'Error: ' + e.message;
+      } finally {
+        btn.disabled = false;
       }
     }
 
-    function downloadCSV() {
-      if (lastRecordedFile) {
-        window.location.href = `/record/download?file=${encodeURIComponent(lastRecordedFile)}`;
+    async function teachItem() {
+      const input = document.getElementById('teach-label-input');
+      const btn = document.getElementById('teach-btn');
+      const status = document.getElementById('teach-status');
+      const name = input.value.trim();
+      if (!name) { status.innerText = 'Enter an item name first.'; return; }
+      btn.disabled = true;
+      status.innerText = `Teaching "${name}" — running swirl macro…`;
+      try {
+        const res = await fetch('/api/cycle/teach', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item_name: name }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'teach failed');
+        status.innerText = data.mock
+          ? `✓ (MOCK) "${data.label}" recorded — not saved to Atlas.`
+          : `✓ Signature saved! "${data.label}" indexed in MongoDB (sig ${String(data.sig_id).slice(-6)}).`;
+        input.value = '';
+      } catch (e) {
+        status.innerText = 'Error: ' + e.message;
+      } finally {
+        btn.disabled = false;
       }
     }
 
-    function toggleFilter() {
-      useFilter = !useFilter;
-      const btn = document.getElementById('filter-btn');
-      btn.innerText = useFilter ? 'EMA Filter: ON' : 'EMA Filter: RAW';
-      btn.className = useFilter ? 'active-toggle' : '';
-    }
-
-    function toggleMode() {
-      viewModeDelta = !viewModeDelta;
-      const btn = document.getElementById('mode-btn');
-      btn.innerText = viewModeDelta ? 'View: Delta (Δ Nm)' : 'View: Absolute (N·m)';
-      btn.className = viewModeDelta ? 'active-toggle' : '';
+    async function abortCycle() {
+      const res = await fetch('/api/cycle/abort', { method: 'POST' });
+      const data = await res.json();
+      document.getElementById('predict-status').innerText =
+        data.aborted ? 'Cycle aborted.' : 'No cycle running.';
     }
   </script>
 </body>
@@ -857,6 +985,131 @@ async def handle_record_download(request):
     return web.FileResponse(filepath, headers={"Content-Disposition": f'attachment; filename="{safe_name}"'})
 
 
+# ── 2-mode ML API ─────────────────────────────────────────────────────────
+async def _mock_predict():
+    """Mock Mode 1: real extractor + local cosine k-NN on recorded data."""
+    import numpy as np
+    import predict_mystery as pm
+    await asyncio.sleep(MOCK_DELAY_SEC)
+    recs = pm.load_real_recordings()
+    if not recs:
+        raise RuntimeError("mock mode: no recordings under recordings/")
+    mystery = [(n, df) for n, df in recs.items()
+               if str(df["object_label"].iloc[0]) in pm.KNOWN_LABEL_SKIP]
+    name, df = mystery[0] if mystery else sorted(recs.items())[-1]
+    ref, scaler = pm.build_reference(recs)
+    k = min(3, len(ref))
+    pred, conf, q, neigh, ndist = pm.predict(df, ref, scaler, k=k)
+    e_q = np.array(feature_extractor.extract_features(df)["e"])
+    matches = []
+    for (_, row) in neigh.iterrows():
+        e_r = np.array(feature_extractor.extract_features(recs[row["file"]])["e"])
+        sim = float(np.dot(e_q, e_r))  # both L2-normalized → cosine similarity
+        matches.append({"label": row["label"], "similarity": round(max(0.0, sim), 3)})
+    matches.sort(key=lambda m: m["similarity"], reverse=True)
+    return {
+        "ok": True, "mock": True,
+        "csv": os.path.basename(name),
+        "prediction": str(pred),
+        "confidence": float(round(float(conf), 3)),
+        "low_confidence": bool(float(conf) < 0.82),
+        "matches": matches,
+        "diagnostics": feature_extractor.extract_features(df)["diagnostics"],
+    }
+
+
+async def _mock_teach(label: str):
+    """Mock Mode 2: pretend to save a signature (nothing touches Atlas)."""
+    import uuid
+    await asyncio.sleep(MOCK_DELAY_SEC)
+    return {"ok": True, "mock": True, "label": label, "csv": None,
+            "sig_id": f"mock-{uuid.uuid4().hex[:8]}",
+            "note": "mock mode — not saved to Atlas"}
+
+
+async def handle_cycle_predict(request):
+    """Mode 1: run the swirl macro on a mystery cup → features → Atlas $vectorSearch."""
+    if _cycle_lock.locked():
+        return web.json_response({"ok": False, "error": "a cycle is already running"}, status=409)
+    async with _cycle_lock:
+        try:
+            if MOCK_MODE:
+                return web.json_response(await _mock_predict())
+            csv_path = await _run_swirl_macro("mystery")
+            feats = feature_extractor.extract_features(pd.read_csv(csv_path))
+            a = _atlas()
+            res = a.identify(feats["e"], top_k=3)
+            return web.json_response({
+                "ok": True,
+                "csv": os.path.basename(csv_path),
+                "prediction": res["label"],
+                "confidence": round(res["confidence"], 3),
+                "low_confidence": res["low_confidence"],
+                "matches": [{"label": m["label"], "similarity": round(m["score"], 3)}
+                            for m in res["matches"]],
+                "diagnostics": feats["diagnostics"],
+            })
+        except Exception as e:
+            return web.json_response({"ok": False, "error": str(e)[:500]}, status=500)
+
+
+async def handle_cycle_teach(request):
+    """Mode 2: run the swirl macro on a labeled item → save signature to Atlas."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    label = _sanitize_label(str(data.get("item_name", "")))
+    if not label or label == "item":
+        return web.json_response({"ok": False, "error": "provide item_name"}, status=400)
+    if _cycle_lock.locked():
+        return web.json_response({"ok": False, "error": "a cycle is already running"}, status=409)
+    async with _cycle_lock:
+        try:
+            if MOCK_MODE:
+                return web.json_response(await _mock_teach(label))
+            csv_path = await _run_swirl_macro(label)
+            feats = feature_extractor.extract_features(pd.read_csv(csv_path))
+            a = _atlas()
+            saved = a.teach(
+                label, feats["e"], motion_type="swirl_macro", session="thu",
+                properties={"tare_flags": feats["diagnostics"]["tare_flags"],
+                            "phase_source": feats["diagnostics"]["phase_source"],
+                            "csv": os.path.basename(csv_path)})
+            return web.json_response({
+                "ok": True, "label": label, "csv": os.path.basename(csv_path),
+                "sig_id": saved.get("sig_id"),
+                "diagnostics": feats["diagnostics"],
+            })
+        except Exception as e:
+            return web.json_response({"ok": False, "error": str(e)[:500]}, status=500)
+
+
+async def handle_cycle_abort(request):
+    """Stop the running macro subprocess (physical e-stop remains at the venue)."""
+    global _cycle_proc, _cycle_status
+    proc, _cycle_proc = _cycle_proc, None
+    if proc and proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        _cycle_status = "aborted"
+        return web.json_response({"ok": True, "aborted": True})
+    return web.json_response({"ok": True, "aborted": False, "note": "no cycle running"})
+
+
+async def handle_api_status(request):
+    return web.json_response({
+        "cycle": _cycle_status,
+        "cycle_busy": _cycle_lock.locked(),
+        "viam_address": VIAM_MACHINE_ADDRESS,
+        "atlas_configured": bool(os.getenv("MONGODB_URI")),
+        "mock": MOCK_MODE,
+    })
+
+
 async def handle_stream(request):
     response = web.StreamResponse(
         status=200,
@@ -893,6 +1146,10 @@ async def start_web_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_post("/record/start", handle_record_start)
     app.router.add_post("/record/stop", handle_record_stop)
     app.router.add_get("/record/download", handle_record_download)
+    app.router.add_post("/api/cycle/predict", handle_cycle_predict)
+    app.router.add_post("/api/cycle/teach", handle_cycle_teach)
+    app.router.add_post("/api/cycle/abort", handle_cycle_abort)
+    app.router.add_get("/api/status", handle_api_status)
 
     runner = web.AppRunner(app)
     await runner.setup()
