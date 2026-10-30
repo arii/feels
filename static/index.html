@@ -200,6 +200,7 @@
     .chip { background:#21152d; border:1px solid var(--border); color:#cbb8d9; border-radius:20px; padding:4px 12px; font-size:0.75rem; cursor:pointer; font-family:monospace; }
     .chip:hover { color:#fff6ee; border-color:var(--accent); box-shadow:0 0 8px rgba(255,117,24,0.35); }
     .chip-label { color:#8a74a0; font-size:0.72rem; align-self:center; }
+    .coarse-sel { background:#1a0f26; border:1px solid var(--border); color:#cbb8d9; border-radius:6px; padding:0 8px; font-size:0.8rem; font-family:monospace; cursor:pointer; }
     .feat-bar { background: var(--accent) !important; }
     .jleg { font-size:0.78rem; color:var(--jc); display:inline-flex; align-items:center; gap:5px; font-weight:600;
             border-left:3px solid var(--jc); padding-left:7px; }
@@ -259,6 +260,12 @@
       </div>
       <div id="teach-actions" style="display:none; gap:8px;">
         <input type="text" id="teach-file-label" placeholder="new class name" style="background:#1a0f26; border:1px solid var(--border); color:#fff; padding:10px; border-radius:8px; font-size:0.9rem;" />
+        <select id="teach-file-coarse" class="coarse-sel" title="Coarse class (solid/liquid/empty) stored with this item">
+          <option value="">auto</option>
+          <option value="solid">🍬 solid</option>
+          <option value="liquid">💧 liquid</option>
+          <option value="empty">👻 empty</option>
+        </select>
         <button class="tare-btn" id="teach-file-btn" onclick="teachFile()" style="padding:7px 14px;">✨ ADD TO ATLAS</button>
       </div>
     </div>
@@ -303,6 +310,12 @@
       <div style="flex:1.4; min-width:300px;">
         <div style="display:flex; gap:8px;">
           <input type="text" id="teach-label-input" placeholder="New item name" style="flex:1; background:#1a0f26; border:1px solid var(--border); color:#fff; padding:7px 10px; border-radius:6px; font-size:0.85rem;" />
+          <select id="teach-coarse" class="coarse-sel" title="Coarse class (solid/liquid/empty) stored with this item">
+            <option value="">auto</option>
+            <option value="solid">🍬 solid</option>
+            <option value="liquid">💧 liquid</option>
+            <option value="empty">👻 empty</option>
+          </select>
           <button class="rec-start" id="teach-btn" onclick="teachItem()" style="font-size:0.82rem; padding:7px 14px;">✨ SWIRL &amp; SAVE</button>
         </div>
         <div class="kpi-sub" id="teach-status" style="margin-top:5px;">Signature → vector indexed in MongoDB, instantly queryable.</div>
@@ -329,6 +342,12 @@
       <div class="kpi-label" style="margin-top:8px;">Wrong? Teach the correction</div>
       <div style="display:flex; gap:8px; margin:6px 0;">
         <input type="text" id="correct-label-input" placeholder="Actual item, e.g. water_025pct" style="flex:1; background:#21262d; border:1px solid var(--border); color:#fff; padding:10px; border-radius:6px; font-size:0.9rem;" />
+        <select id="correct-coarse" class="coarse-sel" title="Coarse class (solid/liquid/empty) stored with this correction">
+          <option value="">auto</option>
+          <option value="solid">🍬 solid</option>
+          <option value="liquid">💧 liquid</option>
+          <option value="empty">👻 empty</option>
+        </select>
         <button class="tare-btn" id="correct-btn" onclick="correctPrediction()">TEACH CORRECTION</button>
       </div>
       <div class="kpi-sub" id="correct-status"></div>
@@ -752,7 +771,17 @@
       document.getElementById('decision-card').style.display = 'block';
       // Material is the primary prediction; the fine-grained taught label is secondary.
       const mat = data.material || data.prediction || 'unknown';
-      document.getElementById('pred-material').innerText = mat;
+      const coarse = data.coarse || '';
+      const COARSE_EMOJI = { empty: '👻', solid: '🍬', liquid: '💧' };
+      document.getElementById('pred-material').innerText =
+        (coarse ? (COARSE_EMOJI[coarse] || '') + ' ' : '') + mat + (coarse ? '  ·  ' + coarse : '');
+      // Gate the correction UI to the predicted coarse class: a solid verdict
+      // suggests a solid example and pre-selects solid, never liquid options.
+      const COARSE_EG = { solid: 'solid_150g', liquid: 'water_025pct', empty: 'empty_cup' };
+      const correctInput = document.getElementById('correct-label-input');
+      if (correctInput && COARSE_EG[coarse]) correctInput.placeholder = 'Actual item, e.g. ' + COARSE_EG[coarse];
+      const correctSel = document.getElementById('correct-coarse');
+      if (correctSel) correctSel.value = coarse && COARSE_EG[coarse] ? coarse : '';
       const mpct = Math.round(((data.material_confidence ?? data.confidence) || 0) * 100);
       const mLow = data.material_low_confidence ?? data.low_confidence;
       document.getElementById('pred-conf-bar').style.width = mpct + '%';
@@ -848,7 +877,7 @@
         const res = await fetch('/api/cycle/teach', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ item_name: name }),
+          body: JSON.stringify({ item_name: name, coarse: document.getElementById('teach-coarse').value }),
         });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'teach failed');
@@ -877,7 +906,7 @@
         const res = await fetch('/api/cycle/correct', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ true_label: name }),
+          body: JSON.stringify({ true_label: name, coarse: document.getElementById('correct-coarse').value }),
         });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'correction failed');
@@ -982,11 +1011,12 @@
     async function teachFile() {
       const file = document.getElementById('rec-select').value;
       const label = document.getElementById('teach-file-label').value.trim();
+      const coarse = document.getElementById('teach-file-coarse').value;
       const st = document.getElementById('classify-status');
       if (!label) { st.innerText = 'enter a class name first'; return; }
       st.innerText = 'teaching "' + label + '" to Atlas…';
       try {
-        const d = await (await fetch('/api/teach_file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file, label }) })).json();
+        const d = await (await fetch('/api/teach_file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file, label, coarse }) })).json();
         st.innerText = d.ok ? ('✓ taught "' + d.label + '" → Atlas (sig ' + d.sig_id + '). Instantly queryable.') : ('error: ' + d.error);
         if (d.ok) loadClasses();
       } catch (e) { st.innerText = 'error: ' + e; }
