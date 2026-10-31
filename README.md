@@ -1,10 +1,18 @@
-# feels
+# Feels: Teaching a robot to feel
 
-A robot arm holding a sealed cup identifies the contents through touch. The arm swirls the cup; joint-torque dynamics map to a 10-D signature; MongoDB Atlas vector search retrieves the nearest taught example.
+Sree Dhyuti Nimmagadda, Ariel Anders
 
-Built in 2 days at the Viam + MongoDB Robot Hackathon (Oct 29–30, 2026) by Ariel Anders and Sree Dhyuti Nimmagadda.
+"Feels" is an online data collection and training platform designed to teach a robot how to classify the contents of a sealed cup based on physical interaction. The robot picks up a cup, moves it in a swirling motion, and predicts whether the contents are liquid, candy, or screws. The challenge is that our robot does not have a force-torque sensor; instead, we use the applied joint torques for prediction and leverage MongoDB Atlas Vector Search to support the online classification of both new and existing categories.
 
-## TL;DR
+## Who will use this
+
+Our product is designed for any company deploying robotic manipulation in unstructured or generalized environments, such as warehouses, households, and hospitals. Recent advances in computer vision have expanded robots' manipulation capabilities; however, they can still make mistakes in the absence of contextual information. To fix this, businesses often add more sensors—such as force-torque, weight, or X-ray sensors—even when this information could be accessed without the expense of additional hardware. Our product provides a cheaper, faster alternative that enables robots to cultivate tactile "common sense" using their existing hardware.
+
+## Tech stack
+
+Viam Python SDK, gRPC, WebRTC, aiohttp, streaming telemetry via Server-Sent Events (SSE), MongoDB Atlas Vector Search, Hugging Face, pytorch, and scipy.
+
+## Quickstart
 
 ```bash
 git clone https://github.com/arii/feels && cd feels
@@ -17,22 +25,19 @@ For the robot + Atlas, fill in `.env` (see Setup) and drop `FEELS_MOCK=1`.
 
 **Dataset:** 106 labeled swirl recordings on Hugging Face —
 [`dhyuti-n/feels-cup-dynamics`](https://huggingface.co/datasets/dhyuti-n/feels-cup-dynamics).
-Pull and teach in one step:
 
 ```bash
 pip install huggingface_hub
 python tools/pull_from_hf.py --teach
 ```
 
-**Docs:** [arii.github.io/feels](https://arii.github.io/feels) — problem, approach, prediction, API.
+**Docs:** [arii.github.io/feels](https://arii.github.io/feels)
 
 ## How it works
 
-1. **Swirl:** The arm picks up the lidded cup, swirls it in a horizontal circle, and places it back. The motion is fixed and deterministic.
-2. **Extract:** Joint torques during the swirl map to a 10-D physical signature (slosh variance, phase lag, rattle energy, etc.).
-3. **Retrieve:** Atlas `$vectorSearch` finds the nearest taught signature. Teaching is the training step — one swirl per example.
-
-Five classes: water, empty (gripper holding nothing), empty cup, screws, candy.
+1. **Swirl:** The robot picks up the cup, moves it in a swirling motion, and places it back.
+2. **Extract:** Applied joint torques during the swirl map to a physical signature.
+3. **Retrieve:** MongoDB Atlas Vector Search finds the nearest taught example, supporting online classification of both new and existing categories.
 
 ## Setup
 
@@ -42,53 +47,17 @@ source .venv/bin/activate      # every new shell
 ```
 
 `setup.sh` creates `.venv/`, installs `requirements.txt`, and copies
-`.env.example` to `.env`. Fill in `.env` for hardware + Atlas access:
-
-| Variable | Purpose |
-|---|---|
-| `MONGODB_URI` | Atlas connection string (IP allowlist must include your machine) |
-| `VIAM_API_KEY_ID` / `VIAM_API_KEY` | robot connection |
-
-## Run the dashboard
-
-```bash
-FEELS_MOCK=1 python realtime_plot.py --port 8080   # mock mode, no hardware
-python realtime_plot.py --port 8080                # live, needs .env + robot
-```
-
-## Teach (Mode 2)
-
-Pick a class from the dropdown, then **Run swirl & save to Atlas**. Each teach runs the fixed swirl macro and stores one 10-D signature. Teaching takes effect on the next prediction.
-
-## Predict (Mode 1)
-
-**Run swirl macro & predict** runs the macro on the mystery cup. The decision card shows the predicted class, nearest neighbors, the 10-D feature panel, and torque-residual "why" charts. No robot handy: switch to **Simulated replay** to stream a recording through the same pipeline.
-
-## Embeddings
-
-`FEELS_EMBEDDER` selects the embedding (default `hand`):
-
-| Value | Description |
-|---|---|
-| `hand` | 10-D hand-engineered physics features |
-| `pca` | 10-D PCA on raw torque trajectories (no new deps) |
-| `chronos` | 2304-D Chronos foundation model (`pip install torch chronos-forecasting`) |
-
-The Atlas library is embedder-specific. Switching embedders requires rebuilding:
-```bash
-FEELS_EMBEDDER=pca python teach_csv.py --force recordings/
-FEELS_EMBEDDER=pca python realtime_plot.py --port 8080
-```
+`.env.example` to `.env`. Fill in `.env` for hardware + Atlas access.
 
 ## Repo layout
 
 | Path | Contents |
 |---|---|
-| `atlas.py`, `feature_extractor.py`, `embedder.py` | Core: vector memory, 10-D features, embeddings |
-| `realtime_plot.py`, `repeatable_grasp.py` | Demo: dashboard + fixed swirl macro |
-| `tools/` | HF pull/push, library prune, 5-class teach |
+| `atlas.py`, `feature_extractor.py`, `embedder.py` | Core: vector memory, physics features, embeddings |
+| `realtime_plot.py`, `repeatable_grasp.py` | Demo: dashboard + swirl macro |
+| `tools/` | HF pull/push, library prune, teaching scripts |
 | `docs/` | Static site (GitHub Pages) |
-| `demo-src/` | Alternative approaches from the hackathon (Viam modules, classifier) |
+| `demo-src/` | Alternative approaches from the hackathon |
 
 ## License
 
