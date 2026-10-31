@@ -68,8 +68,8 @@ details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
   <p class="stageline"><span>○ lift</span> &nbsp;→&nbsp; <span>○ swirl</span> &nbsp;→&nbsp; <span>○ predict</span></p>
 
   <div id="vspaceWrap">
-    <h2>Signature space · live from Atlas</h2>
-    <p id="vspaceStatus"><strong>Status: Ready.</strong> Displaying baseline library of 110 taught signatures. Waiting for live telemetry…</p>
+    <h2>Signature space</h2>
+    <p id="vspaceStatus">110 taught signatures projected to 2-D via PCA, colored by material.</p>
     <div id="vspace"><svg xmlns="http://www.w3.org/2000/svg" width="780" height="400" viewBox="0 0 780 400" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
 <rect width="780" height="400" fill="#0d1117" rx="8"/>
 <rect x="20" y="20" width="520" height="350" rx="8" fill="#161b22" stroke="#2d333b"/>
@@ -200,15 +200,6 @@ details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
 <text x="580" y="150" font-size="11" fill="#8b949e">Empty ×17</text>
 </svg><div id="liveplot"></div></div>
   </div>
-
-  <p style="text-align:center;" id="dashgo"><a href="/" class="golink">Go to dashboard &rarr;</a></p>
-  <p style="text-align:center;color:#8b949e;font-size:0.9rem;display:none;" id="dashnote">The dashboard runs locally — <code>git clone https://github.com/arii/feels && cd feels && bash setup.sh && FEELS_MOCK=1 python realtime_plot.py --port 8080</code></p>
-  <script>
-    if (location.hostname.includes("github.io")) {
-      document.getElementById("dashgo").style.display = "none";
-      document.getElementById("dashnote").style.display = "block";
-    }
-  </script>
 
 </main>
 <script>
