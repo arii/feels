@@ -42,16 +42,9 @@ The motion primitive is a single deterministic sequence: Pick Up $\to$ Swirl $\t
   - Synchronized phase tagging: `INIT`, `APPROACH`, `REACH_GRASP`, `GRIPPER_CLOSE`, `LIFT_TO_TRAVEL`, `TRAVEL_STABLE_HOLD`, `SWIRL_EXCITATION`, `DESCEND_PLACE`, `GRIPPER_OPEN`, `RETURN_HOME`.
   - Automatic standardization and export to `recordings/recording_{timestamp}_{label}.csv`.
 
-### 3. Signal Processing & Feature Extraction Engine (`feature_extractor.py`)
-- Direct algorithmic transformation of the multi-phase rollout into a 10-dimensional physical feature vector $z$:
-  1. **Static Lift & Hold:** Net mass offset $\Delta \tau_{\text{gravity}} = \bar{\tau}_{3,\text{hold}} - \tau_{\text{tare}}$.
-  2. **Swirl Dynamic Variance:** Torque variance $\text{Var}(\tau_3)_{\text{swirl}}$ across orbital motion.
-  3. **FFT Peak Frequency & Power:** Dominant resonant frequencies $f_{\text{peak}}$, $P_{\text{peak}}$.
-  4. **High-Frequency Rattle Energy:** Integrated spectral power in the 5–25 Hz band ($E_{\text{rattle}}$) to flag candy and loose solids.
-  5. **Swirl Phase Lag ($\Delta \phi_{\text{lag}}$):** Cross-correlation phase shift between commanded orbit and measured torque response to detect fluid slosh/vortex vs. rigid mass.
-  6. **Centripetal / Tangential Coupling:** Ratio of lateral to longitudinal torque reactions.
-  7. **Gripper Compliance ($\Delta g_{\text{grip}}$):** Jaw stroke change during motion.
-- **Normalized Metric Embedding:** $e = z / \|z\|_2 \in \mathbb{S}^9$ (unit-norm cosine vector).
+### 3. Signal Processing & Feature Extraction (`feature_extractor.py`)
+
+The multi-phase rollout becomes a 10-dimensional physical feature vector $z$, normalized to the unit embedding $e = z / \|z\|_2 \in \mathbb{S}^9$ for cosine retrieval. `05-ml-pipeline.md` defines the features and the embedding.
 
 ### 4. Database & Vector Memory (MongoDB Atlas)
 - **`signatures` Collection:** Stores document embeddings with vector search index `cup_dynamics_index` (numDimensions: 10, similarity: cosine).

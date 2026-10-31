@@ -88,7 +88,7 @@ Telemetry Rollout D
 
 ### Phase 1: Static Hold (Gravitational Mass Proxy)
 - Measures steady-state load torque difference on Joint 3:
-  $$\Delta \tau_{\text{gravity}} = \bar{\tau}_{3,\text{hold}} - \tau_{\text{tare}}$$
+  $$\Delta \tau_{\text{gravity}} = \bar{\tau}_{3,\text{hold}} - \tau_{\text{baseline}}$$
 - Directly estimates net payload mass:
   $$\hat{m} = \frac{|\Delta \tau_{\text{gravity}}|}{g \cdot L_3}$$
 
