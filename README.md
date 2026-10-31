@@ -2,11 +2,11 @@
 
 Sree Dhyuti Nimmagadda, Ariel Anders
 
-"Feels" is an online data collection and training platform designed to teach a robot how to classify the contents of a sealed cup based on physical interaction. The robot picks up a cup, moves it in a swirling motion, and predicts whether the contents are liquid, candy, or screws. The challenge is that our robot does not have a force-torque sensor; instead, we use the applied joint torques for prediction and leverage MongoDB Atlas Vector Search to support the online classification of both new and existing categories.
+"Feels" is an online data collection and training platform designed to teach a robot how to classify the contents of a sealed cup based on physical interaction. The robot picks up a cup, moves it in a swirling motion, and predicts whether the contents are liquid, candy, or screws. The robot carries no force-torque sensor. The system predicts from applied joint torques and classifies new and existing categories online with MongoDB Atlas Vector Search.
 
 ## Who will use this
 
-Our product is designed for any company deploying robotic manipulation in unstructured or generalized environments, such as warehouses, households, and hospitals. Recent advances in computer vision have expanded robots' manipulation capabilities; however, they can still make mistakes in the absence of contextual information. To fix this, businesses often add more sensors—such as force-torque, weight, or X-ray sensors—even when this information could be accessed without the expense of additional hardware. Our product provides a cheaper, faster alternative that enables robots to cultivate tactile "common sense" using their existing hardware.
+The product targets any company deploying robotic manipulation in unstructured environments: warehouses, households, hospitals. Recent advances in computer vision have expanded robots' manipulation capabilities; however, they can still make mistakes in the absence of contextual information. Businesses often add more sensors — force-torque, weight, X-ray — though the same information comes from existing hardware at no added cost. The product costs less and runs faster than added-sensor setups, giving robots tactile 'common sense' on existing hardware.
 
 ## Tech stack
 

@@ -39,10 +39,10 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
 </nav>
 <main>
   <h1>How the System Predicts</h1>
-  <p>The direction is less hand-coding: the system is moving from hand-engineered
+  <p>The system is moving from hand-engineered
   features toward learned embeddings. The 10-D hand features below are the current
-  live path; the unsupervised alternatives were baked off against them and are
-  documented here with their measured numbers.</p>
+  live path; a bake-off compared the unsupervised alternatives against them, and this
+  page documents each with measured numbers.</p>
 
   <p>The extractor reads the joint-torque time series and computes the 10-D signature
   described in <a href="approach.html" style="color:#58a6ff;">Approach</a> &mdash; ten physical
@@ -55,7 +55,7 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   it. The offline evaluation used an 84/21 train/test split of the
   recordings.</p>
 
-  <h2>Three Ways to Decide</h2>
+  <h2>Two Ways to Decide</h2>
   <p><strong>Vector search over hand features.</strong> The query embedding
   goes to Atlas <code>$vectorSearch</code>, which returns the nearest taught
   signatures by cosine similarity. This path powers the vector-space plot and
@@ -259,18 +259,17 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
 <text x="580" y="150" font-size="11" fill="#8b949e">Empty ×17</text>
 </svg><div id="liveplot"><figcaption><strong>2-D PCA of 113 recorded embeddings</strong> (<code>e</code>-vectors),
     computed with the exact <code>_vspace_2d</code> routine the dashboard's vector-space
-    card uses: center, SVD, coordinates <code>U[:, :2] · S[:2]</code>. Points are colored
-    by label with per-label counts; labels come from
+    card uses: center, SVD, coordinates <code>U[:, :2] · S[:2]</code>. Color encodes the label, with per-label counts in the legend; labels come from
     <code>recordings/split_manifest.csv</code> (falling back to the CSV's
-    <code>object_label</code>). One file failed feature extraction and was skipped.
+    <code>object_label</code>). Feature extraction failed on one file; the pipeline skipped it.
     This is the space <code>$vectorSearch</code> ranks in.</figcaption></figure></div>
 
 <h2>Learned Embeddings</h2>
-  <p> Two unsupervised
-  alternatives were baked off against the hand features: PCA-10 on raw
+  <p> A bake-off compared
+  two unsupervised alternatives against the hand features: PCA-10 on raw
   torque-delta trajectories (43% material, matching hand features) and
   Chronos foundation-model embeddings (56% on swirl-only data, the best
-  measured). Neither runs live — Chronos needs its own 2304-D index and
+  measured). Both stay in evaluation — Chronos needs its own 2304-D index and
   torch on the venue machine.</p>
 
 
@@ -299,7 +298,7 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
 
   <h2>What a Prediction Looks Like</h2>
   <p>A fresh recording comes off the swirl macro. The extractor computes the
-  10-D signature. <code>predict_lda</code> decides. The decision card shows
+  10-D signature and <code>predict_lda</code> decides. The decision card shows
   the predicted category, the material, and the closest taught item — with
   the measured accuracy (52% category) rather than a per-prediction score,
   since the LDA probabilities are uncalibrated.</p>

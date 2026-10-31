@@ -131,11 +131,10 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
     <text x="520" y="114" font-size="11" fill="#6e7681" text-anchor="middle">swirl_speed</text>
     <text x="520" y="132" font-size="10" fill="#6e7681" text-anchor="middle">(zero-weighted)</text>
   </svg>
-  <figcaption style="text-align:center; color:#8b949e; font-size:0.9rem; margin-top:8px;">The 10-D signature. Five swirl-dynamics features carry the signal; three are zero-weighted in the matcher.</figcaption>
+  <figcaption style="text-align:center; color:#8b949e; font-size:0.9rem; margin-top:8px;">Five swirl-dynamics features carry the signal; three are zero-weighted in the matcher.</figcaption>
   </div>
 
   <h2>Direct Torque-to-Category Mapping</h2>
-  <p>The architecture maps raw joint torques directly to material categories.</p>
   <div class="figwrap" style="margin:1.2em 0;"><figure>
     <div class="figwrap"><svg xmlns="http://www.w3.org/2000/svg" width="780" height="560" viewBox="0 0 780 560" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
 <rect width="780" height="560" fill="#0d1117" rx="8"/>
@@ -213,12 +212,10 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   <h2>Scaled Vector Retrieval</h2>
   <p>The system scales and L2-normalizes these features before executing a
   vector search. By zero-weighting static offsets, the matcher evaluates
-  active dynamics across 7 highly informative dimensions.</p>
+  active dynamics across the 7 active dimensions.</p>
   
   <h2>Instantaneous Teaching</h2>
-  <p>The system learns new items immediately by storing a single embedding in
-  the library. The next query searches the updated vector space
-  immediately.</p>
+  <p>The system learns new items immediately: one stored embedding updates the library, and the next query searches it.</p>
   <p>Teach the items the demo needs via the dashboard's Mode 2 class dropdown.
   Record 2&ndash;3 repetitions per item;
   repeats let the matcher average out run-to-run noise. Acceptance: the

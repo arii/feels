@@ -15,7 +15,7 @@
 
 ## Motion Controllers & Arm Support in Viam
 
-Arms are abstracted via the **Arm Component API** and orchestrated via the **Motion Service**.
+Viam abstracts arms through the **Arm Component API** and orchestrates them through the **Motion Service**.
 
 ### Built-in & Registry Driver Modules
 
@@ -37,7 +37,7 @@ Arms are abstracted via the **Arm Component API** and orchestrated via the **Mot
 
 ## Collectable Sensor Data
 
-Sensor streams can be polled or streamed using Viam's **Arm API**, standard **Sensor API** (`GetReadings()`), or the **Data Management Service**.
+Poll or stream sensor data through Viam's **Arm API**, the standard **Sensor API** (`GetReadings()`), or the **Data Management Service**.
 
 ### Joint Positions & Kinematics
 - Joint angles (degrees or radians) across all arm DOF via `GetJointPositions()`

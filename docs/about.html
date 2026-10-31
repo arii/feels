@@ -35,7 +35,7 @@ a { color:var(--accent); }
 <main>
   <h1>About</h1>
 
-  <p>"Feels" is an online data collection and training platform designed to teach a robot how to classify the contents of a sealed cup based on physical interaction. The robot picks up a cup, moves it in a swirling motion, and predicts whether the contents are liquid, candy, or screws. The challenge is that our robot does not have a force-torque sensor; instead, we use the applied joint torques for prediction and leverage MongoDB Atlas Vector Search to support the online classification of both new and existing categories.</p>
+  <p>"Feels" is an online data collection and training platform designed to teach a robot how to classify the contents of a sealed cup based on physical interaction. The robot picks up a cup, moves it in a swirling motion, and predicts whether the contents are liquid, candy, or screws. The challenge: classify cup contents from applied joint torques alone. The system predicts from joint-torque dynamics and uses MongoDB Atlas Vector Search for online classification of new and existing categories.</p>
 
   <h2>The team</h2>
   <p><strong>Ari</strong> (Ariel Anders) — roboticist, MIT PhD in robust manipulation.
@@ -57,14 +57,14 @@ a { color:var(--accent); }
     <img src="images/robot-cup.jpg" alt="xArm x850 holding the lidded coffee cup" style="width:100%; max-width:640px; display:block; margin:0 auto; border-radius:8px;">
   </div>
 
-  <h2>What we measured</h2>
-  <p>In two days we collected 106 labeled swirl recordings and trained classifiers on held-out data. Empty-vs-nonempty detection reached 86–89% accuracy — the robot reliably knows when the cup is empty. Three-way classification (liquid / solid / empty) reached ~52%, roughly double the pure vector-retrieval baseline. These are small-data results, not production numbers.</p>
+  <h2>Measured Results</h2>
+  <p>106 labeled swirl recordings, collected in two days; classifiers trained on held-out data. Empty-vs-nonempty detection reached 86–89% accuracy — the robot reliably knows when the cup is empty. Three-way classification (liquid / solid / empty) reached ~52%, roughly double the pure vector-retrieval baseline. These are small-data results, not production numbers.</p>
 
   <h2>Where this goes</h2>
-  <p>This is a proof of concept, not a warehouse-ready product. But the approach generalizes: any robot arm with joint-torque sensing can build tactile intuition about the objects it handles, without additional hardware. With larger datasets, longer training, and task-specific motions, the same pipeline — physical interaction, feature extraction, vector search — could support picking in warehouses, assistive robots in homes and hospitals, and any setting where vision alone isn't enough. The expensive part isn't the sensor; it's the data. We started collecting it.</p>
+  <p>This is a proof of concept. But the approach generalizes: any robot arm with joint-torque sensing can build tactile intuition about the objects it handles, without additional hardware. With larger datasets, longer training, and task-specific motions, the same pipeline — physical interaction, feature extraction, vector search — could support picking in warehouses, assistive robots in homes and hospitals, anywhere a robot needs touch as well as vision. The expensive part is the data. Collection has started.</p>
 
   <h2>Who uses this</h2>
-  <p>Our product is designed for any company deploying robotic manipulation in unstructured or generalized environments, such as warehouses, households, and hospitals. Recent advances in computer vision have expanded robots' manipulation capabilities; however, they can still make mistakes in the absence of contextual information. To fix this, businesses often add more sensors — such as force-torque, weight, or X-ray sensors — even when this information could be accessed without the expense of additional hardware. Our product provides a cheaper, faster alternative that enables robots to cultivate tactile "common sense" using their existing hardware.</p>
+  <p>The system suits companies deploying robotic manipulation in unstructured environments — warehouses, households, hospitals. Recent advances in computer vision have expanded robots' manipulation capabilities; however, they can still make mistakes in the absence of contextual information. To fix this, businesses often add more sensors — force-torque, weight, or X-ray — though the same information is available from existing hardware. It gives robots tactile classification from the hardware they already carry.</p>
 
 
   <div class="figwrap" style="margin:1.5em 0;">
@@ -85,19 +85,17 @@ a { color:var(--accent); }
     <text x="480" y="142" font-size="11" fill="#8b949e" text-anchor="middle">Simulate backup mode</text>
     <text x="480" y="159" font-size="11" fill="#8b949e" text-anchor="middle">Demo at 3:30 PM</text>
   </svg>
-  <figcaption style="text-align:center; color:#8b949e; font-size:0.9rem; margin-top:8px;">Two days. Day one built the pipeline; day two built the demo.</figcaption>
   </div>
 
-  <h2>Built in under two days</h2>
-  <p>Day one: the team pivoted to the lidded-cup idea, wrote the deterministic
+  <p>Day one: the team chose the lidded-cup idea, wrote the deterministic
   swirl macro, and recorded the first experiment matrix — pick, swirl, place,
   repeated across water, weights, screws, and empty cups. The
   pipeline ran end to end: torque telemetry → 10-D signature → Atlas vector
   search → prediction.</p>
   <p>Day two: the dashboard, the docs site, the simulated-replay backup mode,
   and the evaluation bake-offs (hand features vs PCA vs Chronos, kNN vs LDA).
-  The feature extractor, the vector memory, and the docs site were written,
-  tested, and demoed inside 48 hours.</p>
+  The team wrote, tested, and demoed the feature extractor, the vector memory,
+  and the docs site inside 48 hours.</p>
   <p>Repository: <a href="https://github.com/arii/feels">github.com/arii/feels</a></p>
 </main>
 <script>if(location.hostname.includes("github.io")){document.querySelectorAll(".dashlink").forEach(e=>e.style.display="none")}</script>

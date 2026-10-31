@@ -1,8 +1,8 @@
 # ML Pipeline — Feature Extraction, Embeddings & Atlas Vector Search
 
-> [!IMPORTANT]
-> **On-Site Deep Learning Training Archived:**
-> We do NOT train CNNs, Transformers, or PyTorch neural networks on-site. Training deep networks under limited time and sample constraints risks severe overfitting and instability. Instead, we compute deterministic, hand-crafted physical features from the pick-up, swirl, and hold telemetry and map them to a normalized unit embedding $e \in \mathbb{S}^9$ for non-parametric MongoDB Atlas Vector Search (`$vectorSearch`).
+On-site deep learning training is archived.
+
+Instead, the pipeline computes deterministic, hand-crafted physical features from the pick-up, swirl, and hold telemetry and maps them to a normalized unit embedding $e \in \mathbb{S}^9$ for non-parametric MongoDB Atlas Vector Search (`$vectorSearch`).
 
 ---
 
@@ -10,8 +10,7 @@
 
 A single swirl recording feeds **two independent heads**. The cascade answers the
 *closed-set* question (empty / solid / liquid) from 30 protocol-robust features;
-Atlas answers the *open-set* question (which exact cup is this, and is it something
-I've never felt before) from the 10-D unit embedding. They share no parameters —
+Atlas answers the *open-set* question (which exact cup is this, and whether it matches a taught item) from the 10-D unit embedding. They share no parameters —
 the cascade is the cross-check, Atlas is the memory.
 
 *Slide export: [PNG](img/model-architecture.png).*
@@ -60,8 +59,7 @@ flowchart LR
   class REC thing;
 ```
 
-> **Training is leak-free by construction.** Recordings were collected in
-> time-blocks per class, so a label-stratified split leaks the label through
+> **Training is leak-free by construction.** Each class was recorded in its own time block, so a label-stratified split leaks the label through
 > recording time. Both stages are evaluated on a *within-class time split*
 > (earliest 70 % train / latest 30 % test). Test folds are small — treat the
 > numbers in `train_classifier.py` as approximate.
@@ -104,7 +102,7 @@ During the smooth horizontal swirl orbit:
   $$E_{\text{rattle}} = \sum_{1.5\,\text{Hz} \le f \le f_s/2} |Y(f)|^2.$$
   At 4–5 Hz cloud sampling the 5–25 Hz rattle band is **not** observable
   (Nyquist ~2 Hz); the extractor flags `rattle_band_limited`. The true band
-  needs the 100 Hz on-robot module (`control_service.py`, not yet deployed).
+  needs the 100 Hz on-robot module (`control_service.py`); deployment is pending.
 - **Swirl Phase Lag ($\phi_{\text{lag}}$):** lag of max |cross-correlation|
   between TCP speed and the J3 torque residual, within ±2 s:
   $$\phi_{\text{lag}} = \arg\max_{|\delta| \le 2} |R_{v, r_3}(\delta)|.$$
@@ -131,19 +129,17 @@ As implemented in `feature_extractor.py` (`FEATURE_NAMES`):
 
 ## 2. Normalized Metric Embedding ($e \in \mathbb{S}^9$)
 
-Rather than relying on learned neural network parameters, the vector is
-per-feature scaled (90th-percentile scales in `FEATURE_SCALES`, calibrated on
-real recordings and frozen) and normalized to the unit hypersphere:
+Per-feature scaling (90th-percentile scales in `FEATURE_SCALES`, calibrated on real recordings and frozen) plus L2 normalization maps the vector to the unit hypersphere:
 
 $$e = \frac{Wz}{\|Wz\|_2}$$
 
-This ensures that MongoDB Atlas Vector Search computes exact cosine similarity without needing neural network training or backpropagation.
+MongoDB Atlas Vector Search then computes exact cosine similarity.
 
 ---
 
 ## 3. MongoDB Atlas Vector Search Pipeline
 
-Atlas operates as our metric retrieval engine. Queries are executed using the native `$vectorSearch` aggregation stage against the `cup_dynamics_index`:
+Atlas operates as the metric retrieval engine. Queries use the native `$vectorSearch` aggregation stage against the `cup_dynamics_index`:
 
 ```javascript
 [
@@ -168,7 +164,7 @@ Atlas operates as our metric retrieval engine. Queries are executed using the na
 ```
 
 ### Classification Verdict
-The nearest neighbors are grouped by label, and the prediction is determined by:
+The nearest neighbors are grouped by label, and the verdict follows:
 1. **Predicted Label:** Class with the highest mean cosine similarity score among the top-k matches.
 2. **Confidence Percentage:** Mean similarity score $\times 100\%$.
 3. **Low-Confidence Flag:** Triggered if top confidence is below $0.80$, alerting the operator to check cup placement.
@@ -182,4 +178,4 @@ When registering a new or updated item:
 2. Robot executes the single pick-up, swirl, and place routine.
 3. `feature_extractor.py` computes $e$.
 4. A single call to `atlas.teach(label, e, raw_samples)` inserts the new signature into the `signatures` collection.
-5. The item is **immediately indexable and queryable** by subsequent runs without retraining or downtime.
+5. Subsequent runs index and query the item immediately.

@@ -1,13 +1,6 @@
 # System Architecture
 
-> [!IMPORTANT]
-> **Key Architectural Scoping Decisions:**
-> - **Motion Primitive:** Single deterministic sequence: **Pick Up $\to$ Swirl $\to$ Place**.
-> - **No Pushing or Impedance Modes:** Table pushing and cup sliding are eliminated to avoid non-holonomic slippage and tipping.
-> - **No Shake or Tilt:** Replaced with smooth horizontal orbital swirling to safely excite fluid and solid dynamic signatures.
-> - **No Vision-Based Grasping:** Replaced by deterministic taped-square arm waypoints for 100% repeatable physical trials.
-> - **No Deep Learning Training:** Replaced by hand-crafted 10D physical features mapped to a normalized unit embedding.
-> - **Core Focus:** High-precision feature extraction + rich operator UX for detection reporting, live telemetry, and online recording.
+The motion primitive is a single deterministic sequence: Pick Up $\to$ Swirl $\to$ Place.
 
 ---
 
@@ -29,7 +22,8 @@
 ## System Architecture Components
 
 ### 1. Hardware & Motion Execution (Fixed Pick $\to$ Swirl $\to$ Place)
-- **Taped Square Workspace:** Cup is placed on a designated taped target, guaranteeing fixed Cartesian coordinates.
+- **Taped Square Workspace:** The operator places the cup on a designated taped target, fixing Cartesian coordinates.
+- **Table contact:** none. The cup stays in the gripper for the whole trajectory, so the signal carries gripper-held dynamics only.
 - **Arm-Position-Saver Waypoints:** Standardized positions (`home-pose`, `approach`, `grasp`, `travel`, `place`).
 - **Fixed Trajectory Pipeline:**
   1. `APPROACH` $\to$ Align gripper above cup.
@@ -71,7 +65,7 @@
 - **Vector space card:** 2-D PCA of the Atlas signature library with hover tooltips, per-label counts, and gold/silver/bronze rings on the top-3 neighbor labels after a prediction.
 - **Online Recording & Teaching (Mode 2):**
   - One-click "RUN SWIRL MACRO & PREDICT" / "RUN SWIRL & SAVE TO ATLAS" with elapsed-second tickers; "■ Stop" for the macro subprocess.
-  - Preset label chips (confound set + basics); `teach_csv.py` batch-teaches labeled CSVs without the robot.
+  - Preset label chips (demo classes + basics); `teach_csv.py` batch-teaches labeled CSVs without the robot.
   - Manual start/stop recording with CSV download.
 
 ---
@@ -80,7 +74,7 @@
 
 | Step | User Action | Robot Action | UI Screen State | Backend / Atlas State |
 |------|-------------|--------------|-----------------|----------------------|
-| 1. Standby & Tare | Places cup on taped square | Holds home pose | **Status**: live torque sparklines | Telemetry streaming at 4–5 Hz |
+| 1. Standby & Baseline | Places cup on taped square | Holds home pose | **Status**: live torque sparklines | Telemetry streaming at 4–5 Hz |
 | 2. Run Routine | Clicks "RUN SWIRL MACRO & PREDICT" | Executes pick up → swirl → place | **Status**: elapsed-second ticker | Buffers telemetry with phase tags |
 | 3. Swirl Excitation | Observes smooth circular swirl | Sweeps circular orbit in horizontal plane | Live joint-torque sparklines react | Buffers telemetry with phase tags |
 | 4. Placement & Settle | Robot places cup on square | Descends, opens gripper, retracts to home | Macro completes | Finalizes CSV dataset in `recordings/` |

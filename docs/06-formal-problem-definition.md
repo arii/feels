@@ -6,13 +6,13 @@
 
 ## 1. Problem Statement
 
-The goal is to determine the latent physical and categorical identity θ* ∈ Θ of an unobservable payload enclosed inside a sealed, rigid or semi-rigid container (a covered coffee cup). Because direct visual line-of-sight to the interior is occluded, the manipulator interacts physically with the container by executing a deterministic dynamic trajectory a ∈ A. The system logs multi-modal time-series telemetry D — chiefly high-frequency proprioception (joint kinematics, drive currents, torques, and wrist wrench) alongside grasp telemetry and visual stability constraints — and maps D to an embedding space Z ⊂ R^d to perform non-parametric nearest-neighbor classification and open-set incremental registration using a dynamic vector memory.
+The goal is to determine the latent physical and categorical identity θ* ∈ Θ of an unobservable payload enclosed inside a sealed, rigid or semi-rigid container (a covered coffee cup). Because the sealed cup blocks the camera's view of the interior, the manipulator interacts physically with the container by executing a deterministic dynamic trajectory a ∈ A. The system logs multi-modal time-series telemetry D: high-frequency proprioception (joint kinematics, drive currents, torques, wrist wrench), grasp telemetry, and visual stability constraints. It maps D to an embedding space Z ⊂ R^d for non-parametric nearest-neighbor classification and open-set incremental registration in a dynamic vector memory.
 
 ---
 
 ## 2. Latent Parameter Space (Θ)
 
-Each enclosed payload is parameterized by: θ = (y, φ) ∈ Θ
+Each enclosed payload carries parameters θ = (y, φ) ∈ Θ.
 
 ### Categorical Taxonomy (y ∈ Y)
 - Empty container
@@ -70,7 +70,7 @@ Bounded angular tilt θ_pitch(t) ∈ [−θ_max, +θ_max] about the end-effector
 
 ## 5. Dynamic Interaction Model
 
-The manipulator-container-payload dynamic equations are governed by:
+The manipulator-container-payload dynamics follow:
 
 ```
 M(q)q̈ + C(q,q̇)q̇ + G(q) + J^T(q) · w_ext(t; θ) = τ(t)
@@ -89,7 +89,7 @@ The unmodeled external wrench w_ext(t; θ) transmits the signature of the hidden
 
 ### Deterministic Feature Map (ψ: D → R^d)
 
-The continuous rollout D is transformed into an explicit feature descriptor z:
+The pipeline transforms the continuous rollout D into an explicit feature descriptor z:
 
 ```
 z = [
@@ -134,4 +134,4 @@ If an operator submits an unobserved item label y_new during runtime:
 M ← M ∪ {(e_new, y_new, φ_estimated)}
 ```
 
-The item becomes instantaneously retrievable in subsequent identification cycles without retraining weights.
+The item becomes instantaneously retrievable in subsequent identification cycles.
