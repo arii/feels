@@ -16,9 +16,8 @@ main { max-width:900px; margin:0 auto; padding:48px 24px 80px; text-align:center
 .hook { font-size:3rem; font-weight:800; margin:0.2em 0 0.1em; letter-spacing:-0.02em; }
 .subtitle { font-size:1.1rem; color:#8b949e; margin:0 0 0.6em; }
 .authors { font-size:0.95rem; color:#6e7681; margin:0 0 1.6em; }
-.abstract, .results, .future, .business { max-width:42em; margin:0 0 1.8em; }
-.abstract p, .results p, .future p, .business p { line-height:1.65; color:#c9d1d9; }
-.results h2, .future h2, .business h2 { font-size:1.15rem; margin:0 0 0.5em; color:#f0f6fc; }
+.abstract { max-width:42em; margin:0 0 1.8em; }
+.abstract p { line-height:1.65; color:#c9d1d9; }
 .modes { margin-top:14px; display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
 .mode { background:transparent; color:var(--muted); border:none; padding:8px 20px; font-size:0.9rem; font-weight:600; cursor:pointer; }
 .mode.active { background:var(--panel); color:var(--text); }
@@ -70,21 +69,6 @@ details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
 
   <section class="abstract">
     <p>"Feels" is an online data collection and training platform designed to teach a robot how to classify the contents of a sealed cup based on physical interaction. The robot picks up a cup, moves it in a swirling motion, and predicts whether the contents are liquid, candy, or screws. The challenge is that our robot does not have a force-torque sensor; instead, we use the applied joint torques for prediction and leverage MongoDB Atlas Vector Search to support the online classification of both new and existing categories.</p>
-  </section>
-
-  <section class="results">
-    <h2>What we measured</h2>
-    <p>In two days we collected 106 labeled swirl recordings and trained classifiers on held-out data. Empty-vs-nonempty detection reached 86–89% accuracy — the robot reliably knows when the cup is empty. Three-way classification (liquid / solid / empty) reached ~52%, roughly double the pure vector-retrieval baseline. These are small-data results, not production numbers.</p>
-  </section>
-
-  <section class="future">
-    <h2>Where this goes</h2>
-    <p>This is a proof of concept, not a warehouse-ready product. But the approach generalizes: any robot arm with joint-torque sensing can build tactile intuition about the objects it handles, without additional hardware. With larger datasets, longer training, and task-specific motions, the same pipeline — physical interaction, feature extraction, vector search — could support picking in warehouses, assistive robots in homes and hospitals, and any setting where vision alone isn't enough. The expensive part isn't the sensor; it's the data. We started collecting it.</p>
-  </section>
-
-  <section class="business">
-    <h2>Who uses this</h2>
-    <p>Our product is designed for any company deploying robotic manipulation in unstructured or generalized environments, such as warehouses, households, and hospitals. Recent advances in computer vision have expanded robots' manipulation capabilities; however, they can still make mistakes in the absence of contextual information. To fix this, businesses often add more sensors — such as force-torque, weight, or X-ray sensors — even when this information could be accessed without the expense of additional hardware. Our product provides a cheaper, faster alternative that enables robots to cultivate tactile "common sense" using their existing hardware.</p>
   </section>
 
   <div id="vspaceWrap">

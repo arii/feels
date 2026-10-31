@@ -49,6 +49,15 @@ a { color:var(--accent); }
   (unit <span class="muted">sfhack12</span>), judging on functionality, ambition,
   creativity, modularity — and 5% Halloween.</p>
 
+  <h2>What we measured</h2>
+  <p>In two days we collected 106 labeled swirl recordings and trained classifiers on held-out data. Empty-vs-nonempty detection reached 86–89% accuracy — the robot reliably knows when the cup is empty. Three-way classification (liquid / solid / empty) reached ~52%, roughly double the pure vector-retrieval baseline. These are small-data results, not production numbers.</p>
+
+  <h2>Where this goes</h2>
+  <p>This is a proof of concept, not a warehouse-ready product. But the approach generalizes: any robot arm with joint-torque sensing can build tactile intuition about the objects it handles, without additional hardware. With larger datasets, longer training, and task-specific motions, the same pipeline — physical interaction, feature extraction, vector search — could support picking in warehouses, assistive robots in homes and hospitals, and any setting where vision alone isn't enough. The expensive part isn't the sensor; it's the data. We started collecting it.</p>
+
+  <h2>Who uses this</h2>
+  <p>Our product is designed for any company deploying robotic manipulation in unstructured or generalized environments, such as warehouses, households, and hospitals. Recent advances in computer vision have expanded robots' manipulation capabilities; however, they can still make mistakes in the absence of contextual information. To fix this, businesses often add more sensors — such as force-torque, weight, or X-ray sensors — even when this information could be accessed without the expense of additional hardware. Our product provides a cheaper, faster alternative that enables robots to cultivate tactile "common sense" using their existing hardware.</p>
+
 
   <div class="figwrap" style="margin:1.5em 0;">
   <svg viewBox="0 0 640 180" style="width:100%; max-width:640px; display:block; margin:0 auto;" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
