@@ -731,9 +731,9 @@ async def _simulate_run(csv_path: str, speed: float = 1.0):
             res = a.identify(q, top_k=7)
             if embedder.EMBEDDER == "hand":
                 try:
-                    res = a.predict_lda(feats["z"])
+                    res = a.predict_supervised(feats["z"])
                 except Exception as e:
-                    print(f"[simulate] LDA unavailable ({e}); using vector search")
+                    print(f"[simulate] supervised head unavailable ({e}); using vector search")
         except Exception as e:
             print(f"[simulate] Atlas unreachable ({type(e).__name__}); local k-NN fallback")
             import predict_mystery as pm
@@ -858,13 +858,14 @@ async def handle_cycle_predict(request):
                 res = a.identify(q, top_k=7)
                 # Supervised head decides (measured ~2x the retrieval accuracy
                 # on the same features); vector search stays as the fallback
-                # and still powers the vector-space plot. LDA trains on the
-                # 10-D hand features, so it only applies when EMBEDDER=hand.
+                # and still powers the vector-space plot. The heads train on
+                # the 10-D hand features, so they only apply when EMBEDDER=hand.
+                # FEELS_CLASSIFIER selects lda (default) / svm / rf.
                 if embedder.EMBEDDER == "hand":
                     try:
-                        res = a.predict_lda(feats["z"])
+                        res = a.predict_supervised(feats["z"])
                     except Exception as e:
-                        print(f"[predict] LDA unavailable ({e}); using vector search")
+                        print(f"[predict] supervised head unavailable ({e}); using vector search")
                 result = {
                     "ok": True,
                     "mode": mode,

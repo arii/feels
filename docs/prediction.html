@@ -66,6 +66,15 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   immediately. This is the live decider. On the held-out set: 52% category,
   43% material. The binary empty/nonempty number (86%) is a majority-class
   artifact — the classifier predicts nonempty for everything.</p>
+  <p><strong>Straw-man backup: SVM / random forest on four labels.</strong>
+  <code>atlas.predict_sklearn</code> trains on just four demo labels — solid,
+  empty, candy, water — instead of the fine taught labels, so there is less
+  to confuse. On the held-out set the RBF-SVM reaches 48% on those four, the
+  random forest 38%. It ships behind <code>FEELS_CLASSIFIER=svm|rf</code>
+  (default <code>lda</code>) as insurance: if the live decider misbehaves at
+  the venue, one environment variable switches the decider with no rebuild.
+  Candy has a single taught recording, so it is memorized, not learned —
+  teach two more candy cups at the venue before trusting that answer.</p>
   
 
 

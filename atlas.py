@@ -285,6 +285,41 @@ def category_of(label: str) -> str:
     return CATEGORY_OF_MATERIAL.get(mat, mat)
 
 
+# Straw-man backup: the demo only needs four answers — solid, empty, candy,
+# water. Coarser than material, so the supervised heads trained on these
+# labels have less to confuse. candy has a single taught recording (n=1), so
+# it is memorized, not learned, until the venue teaches more.
+BACKUP_OF_MATERIAL = {
+    "water": "water",
+    "soap": "water",   # no soap at the venue; if taught, it sloshes like water
+    "solid": "solid",
+    "screws": "solid",
+    "candy": "candy",
+    "empty": "empty",
+}
+
+BACKUP_CATEGORY = {
+    "water": "liquid",
+    "solid": "solid",
+    "candy": "solid",
+    "empty": "empty",
+}
+
+
+def backup_label(label: str) -> str:
+    """Demo-level label for a taught label: solid / empty / candy / water.
+
+    Unknown materials map to themselves (their own backup class).
+
+    Args:
+        label: taught signature label, e.g. "screws_100g".
+    Returns:
+        "solid", "empty", "candy", "water", or the material itself when unknown.
+    """
+    mat = material_of(label)
+    return BACKUP_OF_MATERIAL.get(mat, mat)
+
+
 def identify(
     feature_vector: list[float],
     top_k: int = 5,
@@ -446,6 +481,14 @@ EMPIRICAL_ACCURACY = {
     "material": 0.43,
     "category": 0.52,
     "binary": 0.86,
+    # Straw-man backup heads, 4-way (solid/empty/candy/water), measured on the
+    # same 84/21 held-out split through the shipped code path (proba argmax).
+    # svm 10/21 = 0.48, rf 8/21 = 0.38, lda 9/21 = 0.43 for reference. candy
+    # contributes n=1 (train only) — memorized, not learned. Swirl-only
+    # training (the venue rebuild regime) is unmeasured here; the split is
+    # too small to score (9 test).
+    "backup_4way_svm": 0.48,
+    "backup_4way_rf": 0.38,
 }
 
 
@@ -550,6 +593,139 @@ def predict_lda(query_z, confidence_threshold=0.82):
         "category_low_confidence": cat_close,
         "n_signatures": len(Z),
     }
+
+
+def _backup_library(db):
+    """Fetch (backup_label, z) for every signature with a stored raw vector."""
+    labels, Z = _lda_library(db)
+    return [backup_label(l) for l in labels], Z
+
+
+def predict_sklearn(query_z, kind="svm"):
+    """Straw-man supervised backup: SVM or RandomForest on the 10-D z.
+
+    Trains on the 4-way demo labels (solid / empty / candy / water) instead of
+    the fine taught labels — less to confuse. Refits on every call like
+    predict_lda (milliseconds), so a teach takes effect immediately. Returns
+    the same dict shape as identify()/predict_lda() so the dashboard works
+    unchanged; "label" is the 4-way prediction, "category" maps it back to
+    liquid / solid / empty (water->liquid, candy->solid).
+
+    Measured 4-way accuracy on the 84/21 held-out split: svm 0.48, rf 0.38
+    (lda 0.43 for reference). candy is a single taught recording — the model
+    memorizes it; teach 2+ more candy examples at the venue for it to mean
+    anything. Raises ValueError when the library can't support it; callers
+    fall back to the next decider.
+
+    Args:
+        query_z: 10-D raw feature vector of the query run.
+        kind: "svm" (RBF, C=1, class-balanced) or "rf" (300 trees).
+    Returns:
+        Dict with label, category, matches, margins, and decider=kind — the
+        same shape as identify().
+    """
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.svm import SVC
+
+    if kind not in ("svm", "rf"):
+        raise ValueError(f"unknown sklearn head {kind!r} (want 'svm' or 'rf')")
+    db = get_db()
+    labels, Z = _backup_library(db)
+    n_classes = len(set(labels))
+    if len(Z) < 10 or n_classes < 2:
+        raise ValueError(
+            f"{kind} needs >=10 signatures across >=2 classes, have {len(Z)}/{n_classes}")
+    qz = np.asarray(query_z, dtype=float).reshape(1, -1)
+    if qz.shape[1] != Z.shape[1]:
+        raise ValueError(f"query z dim {qz.shape[1]} != library {Z.shape[1]}")
+
+    if kind == "svm":
+        clf = make_pipeline(
+            StandardScaler(),
+            SVC(kernel="rbf", C=1.0, class_weight="balanced",
+                probability=True, random_state=7))
+    else:
+        clf = make_pipeline(
+            StandardScaler(),
+            RandomForestClassifier(n_estimators=300,
+                                   class_weight="balanced_subsample",
+                                   random_state=7, n_jobs=-1))
+    clf.fit(Z, labels)
+    proba = clf.predict_proba(qz)[0]
+    classes = [str(c) for c in clf.classes_]
+    order = np.argsort(proba)[::-1]
+
+    matches = [{"label": classes[i], "score": round(float(proba[i]), 4)}
+               for i in order[:5]]
+    best = classes[order[0]]
+    # category view: aggregate 4-way probas into liquid / solid / empty
+    cat_agg = {}
+    for i in order:
+        g = BACKUP_CATEGORY.get(classes[i], classes[i])
+        cat_agg[g] = cat_agg.get(g, 0.0) + float(proba[i])
+    cat_ranked = sorted(cat_agg.items(), key=lambda kv: kv[1], reverse=True)
+    best_cat, best_cat_p = cat_ranked[0]
+    close = (float(proba[order[0]]) - float(proba[order[1]])) < 0.15 if len(order) > 1 else False
+    cat_close = (cat_ranked[0][1] - cat_ranked[1][1]) < 0.15 if len(cat_ranked) > 1 else False
+    acc = EMPIRICAL_ACCURACY[f"backup_4way_{kind}"]
+
+    print(f"[predict_sklearn:{kind}] → '{best}'  category '{best_cat}'"
+          + ("  CLOSE-CALL" if close else ""))
+
+    return {
+        "decider": kind,
+        "label": best,
+        "confidence": acc,
+        "matches": matches,
+        "margin": round(float(proba[order[0]] - proba[order[1]]) if len(order) > 1 else 1.0, 4),
+        "ambiguous": close,
+        "low_confidence": close,
+        "material": best,
+        "material_confidence": acc,
+        "material_matches": [{"material": classes[i], "score": round(float(proba[i]), 4)}
+                             for i in order],
+        "material_margin": round(float(proba[order[0]] - proba[order[1]]) if len(order) > 1 else 1.0, 4),
+        "material_ambiguous": close,
+        "material_low_confidence": close,
+        "category": best_cat,
+        "category_confidence": acc,
+        "category_matches": [{"category": c, "score": round(float(p), 4)} for c, p in cat_ranked],
+        "category_margin": round(float(cat_ranked[0][1] - cat_ranked[1][1]) if len(cat_ranked) > 1 else 1.0, 4),
+        "category_ambiguous": cat_close,
+        "category_low_confidence": cat_close,
+        "n_signatures": len(Z),
+    }
+
+
+def predict_supervised(query_z, kind=None):
+    """Dispatch to the configured supervised decider, with fallbacks.
+
+    kind (or FEELS_CLASSIFIER env): "lda" (default, the verified live decider),
+    "svm", or "rf". If the chosen head fails, tries LDA, then raises so the
+    caller falls back to vector search. Same dict shape as identify().
+
+    Args:
+        query_z: 10-D raw feature vector of the query run.
+        kind: decider name, or None to read FEELS_CLASSIFIER (default "lda").
+    Returns:
+        The chosen head's prediction dict.
+    Raises:
+        ValueError: when no supervised head can run.
+    """
+    chosen = (kind or os.environ.get("FEELS_CLASSIFIER", "lda")).strip().lower()
+    order = [chosen] + (["lda"] if chosen != "lda" else [])
+    last = None
+    for k in order:
+        try:
+            if k == "lda":
+                return predict_lda(query_z)
+            return predict_sklearn(query_z, kind=k)
+        except Exception as e:  # noqa: BLE001 — fallback chain is the point
+            print(f"[predict_supervised] head '{k}' failed ({e}); trying next")
+            last = e
+    raise ValueError(f"no supervised head available (last error: {last})")
 
 
 # ---------------------------------------------------------------------------

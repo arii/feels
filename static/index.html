@@ -732,9 +732,10 @@ function toggleJoints() {
       const cLow = data.category_low_confidence ?? data.material_low_confidence ?? data.low_confidence;
       document.getElementById('pred-conf-bar').style.width = cpct + '%';
       document.getElementById('pred-conf-bar').style.background = cLow ? '#d29922' : '#3fb950';
-      // LDA's own probabilities are uncalibrated, so when it decides we show
-      // the measured held-out accuracy instead of a per-prediction score.
-      const measured = data.decider === 'lda';
+      // The supervised heads' own probabilities are uncalibrated, so when one
+      // decides we show the measured held-out accuracy instead of a
+      // per-prediction score.
+      const measured = ['lda', 'svm', 'rf'].includes(data.decider);
       let ctxt = measured
         ? `typical accuracy ${cpct}% (measured on held-out cups)`
         : `category confidence ${cpct}%`;
