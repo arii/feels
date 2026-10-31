@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>feels docs — approach</title>
+<title>Approach — Feels: Teaching a robot to feel</title>
 <style>
 :root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
 body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
@@ -30,6 +30,7 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   <span>
     <a href="problem.html">Problem</a>
     <a class="active" href="approach.html">Approach</a>
+    <a href="prediction.html">Prediction</a>
     <a href="force.html">Extracting Force</a>
     <a href="api.html">API</a>
     <a href="about.html">About</a>
@@ -85,7 +86,7 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
 <text x="28" y="410" font-size="10" fill="#8b949e">mm</text>
 <text x="730" y="512" font-size="10" fill="#8b949e">s</text>
 </svg></div>
-    <figcaption><strong>One real run, three stages.</strong>
+    <figcaption><strong>Three stages from one recording:</strong>
     <code>recording_20261029_190400_water_075pct.csv</code> (35.3 s).
     Top: TCP path per stage (faint = full path, blue = stage). Bottom: TCP
     height with stages shaded. Boundaries from the CSV <code>phase</code> column.</figcaption>
@@ -198,7 +199,7 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
 <text x="607.5" y="405.0" text-anchor="middle" font-size="10" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">queries</text>
 <text x="20" y="552" font-size="10" fill="#8b949e">Mode 1 runs the top loop · Mode 2 / teach_csv.py feed the bottom lane · one swirl macro</text>
 </svg></div>
-    <figcaption><strong>What actually runs.</strong> Top loop (Mode 1): the dashboard
+    <figcaption><strong>System data flow:</strong> Top loop (Mode 1): the dashboard
     runs the swirl macro, extracts the 10-D signature from the fresh recording, and
     <code>atlas.predict_lda</code> decides &mdash; Atlas <code>$vectorSearch</code> supplies
     the neighbors and the plot. Bottom lane: Mode 2 and <code>teach_csv.py</code> write
@@ -218,8 +219,8 @@ th { background:#161b22; color:var(--muted); font-weight:600; }
   <p>The system learns new items immediately by storing a single embedding in
   the library. The next query searches the updated vector space
   immediately.</p>
-  <p>Teach the items the demo needs via the dashboard's Mode 2 dropdowns
-  (Name + Amount &rarr; composed label). Record 2&ndash;3 repetitions per item;
+  <p>Teach the items the demo needs via the dashboard's Mode 2 class dropdown.
+  Record 2&ndash;3 repetitions per item;
   repeats let the matcher average out run-to-run noise. Acceptance: the
   <code>SWIRL</code> phase is present and the baseline flags are clean &mdash;
   the tool refuses the rest.</p>
