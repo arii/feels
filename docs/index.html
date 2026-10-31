@@ -205,7 +205,14 @@ details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
 </svg><div id="liveplot"></div></div>
   </div>
 
-  <p style="text-align:center;"><a href="/" class="golink">Go to dashboard &rarr;</a></p>
+  <p style="text-align:center;" id="dashgo"><a href="/" class="golink">Go to dashboard &rarr;</a></p>
+  <p style="text-align:center;color:#8b949e;font-size:0.9rem;display:none;" id="dashnote">The dashboard runs locally — <code>git clone https://github.com/arii/feels && cd feels && bash setup.sh && FEELS_MOCK=1 python realtime_plot.py --port 8080</code></p>
+  <script>
+    if (location.hostname.includes("github.io")) {
+      document.getElementById("dashgo").style.display = "none";
+      document.getElementById("dashnote").style.display = "block";
+    }
+  </script>
 
 </main>
 <script>
