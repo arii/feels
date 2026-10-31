@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About — feels</title>
+<style>
+:root { --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --border:#2d333b; --accent:#58a6ff; }
+body { background:var(--bg); color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
+.docnav { display:flex; justify-content:space-between; align-items:center; padding:14px 28px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:10; }
+.docnav .brand { color:var(--fg); text-decoration:none; font-weight:700; }
+.docnav span a { color:var(--muted); text-decoration:none; margin-left:18px; font-size:0.92rem; }
+.docnav span a:hover, .docnav span a.active { color:var(--accent); }
+main { max-width:720px; margin:0 auto; padding:48px 28px 80px; }
+h1 { font-size:2rem; margin-bottom:0.4em; }
+h2 { font-size:1.25rem; margin-top:2.2em; }
+p { color:var(--fg); }
+.muted { color:var(--muted); }
+a { color:var(--accent); }
+</style>
+</head>
+<body>
+<nav class="docnav">
+  <a class="brand" href="index.html">feels · docs</a>
+  <span>
+    <a href="problem.html">Problem</a>
+    <a href="approach.html">Approach</a>
+    <a href="prediction.html">Prediction</a>
+    <a href="force.html">Extracting Force</a>
+    <a href="api.html">API</a>
+    <a class="active" href="about.html">About</a>
+    <a href="/" class="dashlink">← Dashboard</a>
+  </span>
+</nav>
+<main>
+  <h1>About</h1>
+
+  <h2>The team</h2>
+  <p><strong>Ari</strong> (Ariel Anders) — roboticist, MIT PhD in robust manipulation.
+  Previously onboard planning at Waymo and first roboticist at Robust.AI.
+  Currently launching an independent robotics consulting practice.</p>
+  <p><strong>Sree Dhyuti Nimmagadda</strong> — Ari's teammate for the hackathon
+  (<a href="https://github.com/dhyutin">dhyutin</a> on GitHub). The two built
+  feels together, side by side at the venue.</p>
+
+  <h2>The hackathon</h2>
+  <p>Viam + MongoDB "Physical AI" robot hackathon, October 29–30 2026, at the
+  Robotics Center of Silicon Valley in San Francisco. Two days, one xArm x850
+  (unit <span class="muted">sfhack12</span>), judging on functionality, ambition,
+  creativity, modularity — and 5% Halloween.</p>
+
+  <h2>What we measured</h2>
+  <p>In two days we collected 106 labeled swirl recordings and trained classifiers on held-out data. Empty-vs-nonempty detection reached 86–89% accuracy — the robot reliably knows when the cup is empty. Three-way classification (liquid / solid / empty) reached ~52%, roughly double the pure vector-retrieval baseline. These are small-data results, not production numbers.</p>
+
+  <h2>Where this goes</h2>
+  <p>This is a proof of concept, not a warehouse-ready product. But the approach generalizes: any robot arm with joint-torque sensing can build tactile intuition about the objects it handles, without additional hardware. With larger datasets, longer training, and task-specific motions, the same pipeline — physical interaction, feature extraction, vector search — could support picking in warehouses, assistive robots in homes and hospitals, and any setting where vision alone isn't enough. The expensive part isn't the sensor; it's the data. We started collecting it.</p>
+
+  <h2>Who uses this</h2>
+  <p>Our product is designed for any company deploying robotic manipulation in unstructured or generalized environments, such as warehouses, households, and hospitals. Recent advances in computer vision have expanded robots' manipulation capabilities; however, they can still make mistakes in the absence of contextual information. To fix this, businesses often add more sensors — such as force-torque, weight, or X-ray sensors — even when this information could be accessed without the expense of additional hardware. Our product provides a cheaper, faster alternative that enables robots to cultivate tactile "common sense" using their existing hardware.</p>
+
+
+  <div class="figwrap" style="margin:1.5em 0;">
+  <svg viewBox="0 0 640 180" style="width:100%; max-width:640px; display:block; margin:0 auto;" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <rect width="640" height="180" fill="#0d1117" rx="8"/>
+    <!-- timeline line -->
+    <line x1="60" y1="90" x2="580" y2="90" stroke="#2d333b" stroke-width="3"/>
+    <!-- day 1 -->
+    <circle cx="160" cy="90" r="10" fill="#58a6ff"/>
+    <text x="160" y="60" font-size="13" fill="#e6edf3" text-anchor="middle" font-weight="bold">Day 1</text>
+    <text x="160" y="125" font-size="11" fill="#8b949e" text-anchor="middle">Pivot to cup idea</text>
+    <text x="160" y="142" font-size="11" fill="#8b949e" text-anchor="middle">Swirl macro + recordings</text>
+    <text x="160" y="159" font-size="11" fill="#8b949e" text-anchor="middle">Pipeline end-to-end</text>
+    <!-- day 2 -->
+    <circle cx="480" cy="90" r="10" fill="#3fb950"/>
+    <text x="480" y="60" font-size="13" fill="#e6edf3" text-anchor="middle" font-weight="bold">Day 2</text>
+    <text x="480" y="125" font-size="11" fill="#8b949e" text-anchor="middle">Dashboard + docs</text>
+    <text x="480" y="142" font-size="11" fill="#8b949e" text-anchor="middle">Simulate backup mode</text>
+    <text x="480" y="159" font-size="11" fill="#8b949e" text-anchor="middle">Demo at 3:30 PM</text>
+  </svg>
+  <figcaption style="text-align:center; color:#8b949e; font-size:0.9rem; margin-top:8px;">Two days. Day one built the pipeline; day two built the demo.</figcaption>
+  </div>
+
+  <h2>Built in under two days</h2>
+  <p>Day one: the team pivoted to the lidded-cup idea, wrote the deterministic
+  swirl macro, and recorded the first experiment matrix — pick, swirl, place,
+  repeated across water, weights, screws, and empty cups. By evening the
+  pipeline ran end to end: torque telemetry → 10-D signature → Atlas vector
+  search → prediction.</p>
+  <p>Day two: the dashboard, the docs site, the simulated-replay backup mode,
+  and the evaluation bake-offs (hand features vs PCA vs Chronos, kNN vs LDA).
+  Everything here — the feature extractor, the vector memory, the docs you are
+  reading — was written, tested, and demoed inside 48 hours.</p>
+  <p>Repository: <a href="https://github.com/arii/feels">github.com/arii/feels</a></p>
+</main>
+<script>if(location.hostname.includes("github.io")){document.querySelectorAll(".dashlink").forEach(e=>e.style.display="none")}</script>
+</body>
+</html>
