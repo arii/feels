@@ -24,9 +24,9 @@ a { color:var(--accent); }
   <a class="brand" href="index.html">feels · docs</a>
   <span>
     <a href="problem.html">Problem</a>
-    <a href="approach.html">Approach</a>
-    <a href="prediction.html">Prediction</a>
-    <a href="force.html">Extracting Force</a>
+    <a href="how-it-works.html">How it works</a>
+    <a href="api.html">API</a>
+    <a class="active" href="about.html">About</a>
     <a href="api.html">API</a>
     <a class="active" href="about.html">About</a>
     <a href="/" class="dashlink">← Dashboard</a>
@@ -35,7 +35,7 @@ a { color:var(--accent); }
 <main>
   <h1>About</h1>
 
-  <p>Feels teaches a robot to identify sealed-cup contents by feel. The challenge: classify cup contents from applied joint torques alone. The system predicts from joint-torque dynamics and uses MongoDB Atlas Vector Search for online classification of new and existing categories.</p>
+  <p>"Feels" is an online data collection and training platform designed to teach a robot how to classify the contents of a sealed cup based on physical interaction. The robot picks up a cup, moves it in a swirling motion, and predicts whether the contents are liquid, candy, or screws. The challenge: classify cup contents from applied joint torques alone. The system predicts from joint-torque dynamics and uses MongoDB Atlas Vector Search for online classification of new and existing categories.</p>
 
   <h2>The team</h2>
   <p><strong>Ari</strong> (Ariel Anders) — roboticist, MIT PhD in robust manipulation.
@@ -50,18 +50,22 @@ a { color:var(--accent); }
 
   <h2>The hackathon</h2>
   <p>Viam + MongoDB "Physical AI" robot hackathon, October 29–30 2026, at the
-  Robotics Center of Silicon Valley in San Francisco. One xArm x850,
+  Robotics Center of Silicon Valley in San Francisco. Two days, one xArm x850,
   judging on functionality, ambition, creativity, modularity — and 5% Halloween.</p>
 
   <div class="figwrap" style="margin:1.5em 0;">
     <img src="images/robot-cup.jpg" alt="xArm x850 holding the lidded coffee cup" style="width:100%; max-width:640px; display:block; margin:0 auto; border-radius:8px;">
   </div>
 
-  <h2>What the numbers show</h2>
-  <p>The system reliably detects empty vs nonempty cups on held-out recordings. Full results are on the <a href="prediction.html">Prediction</a> page.</p>
+  <h2>Measured Results</h2>
+  <p>106 labeled swirl recordings, collected in two days; classifiers trained on held-out data. Empty-vs-nonempty detection reached 86–89% accuracy — the robot reliably knows when the cup is empty. Three-way classification (liquid / solid / empty) reached ~52%, roughly double the pure vector-retrieval baseline. These are small-data results, not production numbers.</p>
 
   <h2>Where this goes</h2>
-  <p>This is a proof of concept. But the approach generalizes: any robot arm with joint-torque sensing can build tactile intuition about the objects it handles, without additional hardware. With larger datasets, longer training, and task-specific motions, the same pipeline — physical interaction, feature extraction, vector search — could support picking in warehouses, assistive robots in homes and hospitals, anywhere a robot needs touch as well as vision. The expensive part is the data. Collection has started.</p>
+  <p>This is a proof of concept. The approach generalizes: any robot arm with joint-torque sensing can build tactile intuition about the objects it handles, using the hardware it already has. With larger datasets, longer training, and task-specific motions, the same pipeline — physical interaction, feature extraction, vector search — could support picking in warehouses, assistive robots in homes and hospitals -- anywhere a robot needs touch as well as vision. The expensive part is the data. Collection has started.</p>
+
+  <h2>Who uses this</h2>
+  <p>The system suits companies deploying robotic manipulation in unstructured environments -- warehouses, households, hospitals. Recent advances in computer vision have expanded robots' manipulation capabilities; however, they can still make mistakes in the absence of contextual information. To fix this, businesses often add more sensors -- force-torque, weight, or X-ray -- though the same information is available from existing hardware. It gives robots tactile classification from the hardware they already carry.</p>
+
 
   <div class="figwrap" style="margin:1.5em 0;">
   <svg viewBox="0 0 640 180" style="width:100%; max-width:640px; display:block; margin:0 auto;" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
@@ -91,7 +95,7 @@ a { color:var(--accent); }
   <p>Day two: the dashboard, the docs site, the simulated-replay backup mode,
   and the evaluation bake-offs (hand features vs PCA vs Chronos, kNN vs LDA).
   The team wrote, tested, and demoed the feature extractor, the vector memory,
-  and the docs site over the two days.</p>
+  and the docs site inside 48 hours.</p>
   <p>Repository: <a href="https://github.com/arii/feels">github.com/arii/feels</a></p>
 </main>
 <script>if(location.hostname.includes("github.io")){document.querySelectorAll(".dashlink").forEach(e=>e.style.display="none")}</script>
