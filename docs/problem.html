@@ -37,14 +37,15 @@ pre { background:#161b22; border:1px solid var(--border); border-radius:8px; pad
 <main>
   <h1>The Problem</h1>
 
-  <p>A robot arm holding a sealed cup classifies the contents through physical
-  interaction. Because the lid blocks vision, the system relies entirely on
-  active movement — pick up, swirl, place — to identify what is inside.</p>
+  <p>The robot classifies what is inside a sealed cup entirely by touch.
+  Because the lid blocks vision, the arm picks up the cup, swirls it, and
+  identifies the contents by measuring the resulting joint-torque dynamics.</p>
 
   <h2>Mapping Swirl Dynamics to a 10-D Signature</h2>
-  <p>The system measures dynamics — how contents move when swirled — to identify
-  them. The robot executes a fixed motion (pick up → swirl → place) and
-  maps this directly to a prediction:</p>
+  <p>Static holds tell us nothing about the contents; the payload signal only
+  appears during motion. To capture it, the robot runs a fixed motion
+  primitive — <strong>pick up → swirl → place</strong> — and extracts a
+  10-dimensional feature signature from the torque response.</p>
 
 
   <div class="figwrap" style="margin:1.5em 0;">
@@ -84,16 +85,16 @@ pre { background:#161b22; border:1px solid var(--border); border-radius:8px; pad
 
   <h2>What Makes Classification Hard</h2>
   <ul>
-    <li><strong>Coarse sensing:</strong> the arm reports torque telemetry at 4–5 Hz.
-    The 5–25 Hz rattle band sits above Nyquist, so the system uses what the
-    channel carries.</li>
-    <li><strong>Baseline drift:</strong> joint-torque baselines wander with pose and
-    temperature. Static offsets are unreliable, so the signal comes from motion.</li>
-    <li><strong>Hidden by design:</strong> the contents stay sealed. The only
-    supervision is the label the operator teaches.</li>
-    <li><strong>Static hold torques</strong> carry no payload signal at this pose
-    (verified identical across contents). Everything discriminative comes from
-    the swirl dynamics.</li>
+    <li><strong>Low sampling rate:</strong> The arm reports torque telemetry at just
+    4–5 Hz. High-frequency signals like rattling (5–25 Hz) sit well above the
+    Nyquist limit, forcing the model to rely solely on low-frequency momentum
+    and drag.</li>
+    <li><strong>Baseline drift:</strong> Temperature changes and subtle pose shifts
+    cause baseline torques to wander over time. Because static offsets are noisy
+    and unreliable, only dynamic motion yields a clean differential signal.</li>
+    <li><strong>No static payload signal:</strong> At this pose, resting hold torques
+    are identical across all contents. Every discriminative cue comes from how
+    the mass shifts during the swirl.</li>
   </ul>
 </main>
 <script>if(location.hostname.includes("github.io")){document.querySelectorAll(".dashlink").forEach(e=>e.style.display="none")}</script>
