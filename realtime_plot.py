@@ -799,7 +799,6 @@ async def handle_cycle_predict(request):
     global _last_prediction
     if _cycle_lock.locked():
         return web.json_response({"ok": False, "error": "a cycle is already running"}, status=409)
-    global _cycle_status
     # Demo mode: "live" runs the robot; "simulate" replays a recorded
     # swirl through the SSE stream AND the real extract → Atlas pipeline
     # (the no-robot fallback). Chosen per-request so the presenter can
