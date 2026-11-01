@@ -52,8 +52,6 @@ svg { max-width: 100%; height: auto; }
 <main>
   <h1>About</h1>
 
-  <p>"Feels" is an online data collection and training platform designed to teach a robot how to classify the contents of a sealed cup based on physical interaction. The robot picks up a cup, moves it in a swirling motion, and predicts whether the contents are liquid, candy, or screws. The challenge: classify cup contents from applied joint torques alone. The system predicts from joint-torque dynamics and uses MongoDB Atlas Vector Search for online classification of new and existing categories.</p>
-
   <h2>The team</h2>
   <p><strong>Ari</strong> (Ariel Anders) — roboticist, MIT PhD in robust manipulation.
   Previously onboard planning at Waymo and first roboticist at Robust.AI.
@@ -108,9 +106,7 @@ svg { max-width: 100%; height: auto; }
   pipeline ran end to end: torque telemetry → 10-D signature → Atlas vector
   search → prediction.</p>
   <p>Day two: the dashboard, the docs site, the simulated-replay backup mode,
-  and the evaluation bake-offs (hand features vs PCA vs Chronos, kNN vs LDA).
-  The team wrote, tested, and demoed the feature extractor, the vector memory,
-  and the docs site inside 48 hours.</p>
+  and the evaluation bake-offs (hand features vs PCA vs Chronos, kNN vs LDA).</p>
   <p>Repository: <a href="https://github.com/arii/feels">github.com/arii/feels</a></p>
 </main>
 <script>if(location.hostname.includes("github.io")){document.querySelectorAll(".dashlink").forEach(e=>e.style.display="none")}</script>

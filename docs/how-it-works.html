@@ -57,7 +57,7 @@ svg { max-width: 100%; height: auto; }
 <main>  <h1>How it works</h1>
 
   <h2>Core Intuition</h2>
-  <p>Intuitively, mapping direct force and torque measurements to an object class (liquid, solid, empty) is straightforward. In the absence of an external force-torque sensor, however, we can exploit a latent signal: variations in the payload held by the end-effector induce measurable differences in joint torques throughout a trajectory.</p>
+  <p>Intuitively, mapping direct force and torque measurements to an object class (liquid, solid, empty) is straightforward. In the absence of an external force-torque sensor, however, the system exploits a latent signal: variations in the payload held by the end-effector induce measurable differences in joint torques throughout a trajectory.</p>
   <p>Consider an arm moving in a single dimension: increasing the payload's weight directly increases the torque required to execute that motion. <strong>Feels</strong> expands on this principle — classifying the hidden contents of a sealed cup strictly through joint-torque dynamics during a fixed motion primitive.</p>
 
   <h2>Sensing With Built-in Hardware</h2>
@@ -245,7 +245,7 @@ svg { max-width: 100%; height: auto; }
   label, material, category, and session tag, stored in MongoDB Atlas.
   Teaching writes a signature; the next prediction searches it.</p>
 
-  <h2 id="results">Two Ways to Decide</h2>
+  <h2>Two Ways to Decide</h2>
   <p><strong>Vector search over hand features.</strong> The query embedding
   goes to Atlas <code>$vectorSearch</code>, which returns the nearest taught
   signatures by cosine similarity. This path powers the vector-space plot and

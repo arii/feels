@@ -59,19 +59,10 @@ svg { max-width: 100%; height: auto; }
   identifies the contents by measuring the resulting joint-torque dynamics.</p>
 
   <h2>Classifying Without a Force-Torque Sensor</h2>
-  <p>Intuitively, mapping direct force and torque measurements to an object class
-  (liquid, solid, empty) is straightforward. In the absence of an external
-  force-torque sensor, however, we can exploit a latent signal: variations in
-  the payload held by the end-effector induce measurable differences in joint
-  torques throughout a trajectory.</p>
-  <p>Consider an arm moving in a single dimension: increasing the payload's weight
-  directly increases the torque required to execute that motion.
-  <strong>Feels</strong> expands on this principle — classifying the hidden
-  contents of a sealed cup strictly through joint-torque dynamics during a fixed
-  motion primitive.</p>
+  <p>See <a href="how-it-works.html" style="color:#58a6ff;">How it works</a> for the core intuition: latent joint-torque signals replace dedicated force-torque hardware.</p>
 
   <h2>Mapping Swirl Dynamics to a 10-D Signature</h2>
-  <p>Static holds tell us nothing about the contents; the payload signal only
+  <p>Static holds reveal nothing about the contents; the payload signal only
   appears during motion. To capture it, the robot runs a fixed motion
   primitive — <strong>pick up → swirl → place</strong> — and extracts a
   10-dimensional feature signature from the torque response.</p>
