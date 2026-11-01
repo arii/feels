@@ -75,13 +75,11 @@ svg { max-width: 100%; height: auto; }
   </div>
 
   <h2>Measured Results</h2>
-  <p>106 labeled swirl recordings, collected in two days and published as a <a href="https://huggingface.co/datasets/dhyuti-n/feels-cup-dynamics">dataset on Hugging Face</a>; classifiers trained on held-out data. Empty-vs-nonempty detection reached 86–89% accuracy — the robot reliably knows when the cup is empty. Three-way classification (liquid / solid / empty) reached ~52%, roughly double the pure vector-retrieval baseline. These are small-data results, not production numbers.</p>
+  <p>106 labeled swirl recordings, collected in two days; classifiers trained on held-out data. Empty-vs-nonempty detection reached 86–89% accuracy — the robot reliably knows when the cup is empty. Three-way classification (liquid / solid / empty) reached ~52%, roughly double the pure vector-retrieval baseline. These are small-data results, not production numbers.</p>
 
-  <h2>Where this goes</h2>
-  <p>This is a proof of concept. The approach generalizes: any robot arm with joint-torque sensing can build tactile intuition about the objects it handles, using the hardware it already has. With larger datasets, longer training, and task-specific motions, the same pipeline — physical interaction, feature extraction, vector search — could support picking in warehouses, assistive robots in homes and hospitals -- anywhere a robot needs touch as well as vision. The expensive part is the data. Collection has started.</p>
-
-  <h2>Who uses this</h2>
-  <p>The system suits companies deploying robotic manipulation in unstructured environments -- warehouses, households, hospitals. Recent advances in computer vision have expanded robots' manipulation capabilities; however, they can still make mistakes in the absence of contextual information. To fix this, businesses often add more sensors -- force-torque, weight, or X-ray -- though the same information is available from existing hardware. It gives robots tactile classification from the hardware they already carry.</p>
+  <h2>Build On It</h2>
+  <p>This was a fun project tackling an important problem: giving robots a sense of touch from the hardware they already carry. The code is MIT licensed open source. Take it, extend it, and teach your robot how to feel.</p>
+  <p>Repository: <a href="https://github.com/arii/feels" style="color:#58a6ff;">github.com/arii/feels</a> · Dataset: <a href="https://huggingface.co/datasets/dhyuti-n/feels-cup-dynamics" style="color:#58a6ff;">dhyuti-n/feels-cup-dynamics</a></p>
 
 
   <div class="figwrap" style="margin:1.5em 0;">
