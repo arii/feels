@@ -245,7 +245,7 @@ svg { max-width: 100%; height: auto; }
   label, material, category, and session tag, stored in MongoDB Atlas.
   Teaching writes a signature; the next prediction searches it.</p>
 
-  <h2>Two Ways to Decide</h2>
+  <h2 id="results">Two Ways to Decide</h2>
   <p><strong>Vector search over hand features.</strong> The query embedding
   goes to Atlas <code>$vectorSearch</code>, which returns the nearest taught
   signatures by cosine similarity. This path powers the vector-space plot and
