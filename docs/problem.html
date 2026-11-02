@@ -3,75 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="0; url=how-it-works.html">
 <title>Problem — Feels: Teaching a robot to feel</title>
-<style>
-:root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
-body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
-.docnav { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); position:sticky; top:0; flex-wrap:wrap; gap:8px; }
-.docnav a { color:var(--muted); text-decoration:none; margin-left:18px; font-size:0.9rem; }
-.docnav a:hover, .docnav a.active { color:var(--text); }
-.docnav a.brand { margin-left:0; color:var(--text); font-weight:700; }
-main { max-width:780px; margin:0 auto; padding:36px 24px 80px; }
-h1 { font-size:2rem; margin-bottom:0.3em; }
-h2 { font-size:1.3rem; margin-top:2em; border-bottom:1px solid var(--border); padding-bottom:0.3em; }
-p, li { color:#c9d1d9; }
-code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em; }
-pre { background:#161b22; border:1px solid var(--border); border-radius:8px; padding:16px; overflow-x:auto; }
-.honest { background:rgba(210,153,34,0.08); border:1px solid #9e6a03; border-radius:8px; padding:12px 16px; margin:1.5em 0; }
-.honest strong { color:#d29922; }
-
-/* --- Mobile responsiveness --- */
-html, body { overflow-x: hidden; width: 100%; }
-main { width: 100%; max-width: 768px; margin: 0 auto; padding: 1.5rem 1rem; box-sizing: border-box; }
-.docnav { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-.docnav .brand { flex-basis: 100%; margin-bottom: 0.25rem; }
-.docnav span { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-.docnav a { padding: 0.5rem 0.75rem; min-height: 44px; display: inline-flex; align-items: center; }
-h1 { font-size: clamp(1.75rem, 5vw, 2.5rem); line-height: 1.2; }
-h2 { font-size: clamp(1.25rem, 4vw, 1.75rem); line-height: 1.3; }
-p, li { font-size: 1rem; line-height: 1.6; }
-ul, ol { padding-left: 1.25rem; }
-li { margin-bottom: 0.75rem; }
-table { display: block; overflow-x: auto; white-space: nowrap; }
-pre { overflow-x: auto; max-width: 100%; }
-svg { max-width: 100%; height: auto; }
-.figwrap { overflow-x: auto; }
-@media (max-width: 640px) {
-  .stageline { font-size: 0.9rem; }
-}
-</style>
 </head>
 <body>
-<nav class="docnav">
-  <a class="brand" href="index.html">feels · docs</a>
-  <span>
-    <a class="active" href="problem.html">Problem</a>
-    <a href="how-it-works.html">How it works</a>
-    <a href="api.html">API</a>
-    <a href="about.html">About</a>
-    <a href="/" class="dashlink">← Dashboard</a>
-  </span>
-</nav>
-<main>
-  <h1>The Problem</h1>
-
-  <p>The robot classifies what is inside a sealed cup entirely by touch.
-  Because the lid blocks vision, the arm picks up the cup, swirls it, and
-  identifies the contents by measuring the resulting joint-torque dynamics.</p>
-
-  <h2>Classifying Without a Force-Torque Sensor</h2>
-  <p>External force-torque sensors add cost and complexity. The system classifies contents from the arm's built-in joint-torque telemetry alone.</p>
-
-  <h2>What Makes Classification Hard</h2>
-  <ul>
-    <li><strong>Baseline drift:</strong> Temperature changes and subtle pose shifts
-    cause baseline torques to wander over time. Because static offsets are noisy
-    and unreliable, only dynamic motion yields a clean differential signal.</li>
-    <li><strong>No static payload signal:</strong> At this pose, resting hold torques
-    are identical across all contents. Every discriminative cue comes from how
-    the mass shifts during the swirl.</li>
-  </ul>
-</main>
-<script>if(location.hostname.includes("github.io")){document.querySelectorAll(".dashlink").forEach(e=>e.style.display="none")}</script>
+<p>This page has moved to <a href="how-it-works.html">How it works</a>.</p>
 </body>
 </html>

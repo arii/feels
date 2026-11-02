@@ -4,56 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>API — Feels: Teaching a robot to feel</title>
-<style>
-:root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; }
-body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
-.docnav { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); position:sticky; top:0; flex-wrap:wrap; gap:8px; }
-.docnav a { color:var(--muted); text-decoration:none; margin-left:18px; font-size:0.9rem; }
-.docnav a:hover, .docnav a.active { color:var(--text); }
-.docnav a.brand { margin-left:0; color:var(--text); font-weight:700; }
-main { max-width:780px; margin:0 auto; padding:36px 24px 80px; }
-h1 { font-size:2rem; margin-bottom:0.3em; }
-h2 { font-size:1.3rem; margin-top:2.2em; border-bottom:1px solid var(--border); padding-bottom:0.3em; }
-h3 { font-size:1.05rem; margin:1.4em 0 0.4em; }
-p, li, td { color:#c9d1d9; font-size:0.92rem; }
-code { background:#21262d; padding:2px 6px; border-radius:4px; font-size:0.88em; }
-pre { background:#161b22; border:1px solid var(--border); border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:0.85rem; }
-pre.doc { color:var(--muted); }
-.fn { margin-bottom:1.2em; }
-table { border-collapse:collapse; width:100%; margin:1em 0; font-size:0.9rem; }
-th, td { border:1px solid var(--border); padding:8px 12px; text-align:left; vertical-align:top; }
-th { background:#161b22; color:var(--muted); font-weight:600; }
-
-/* --- Mobile responsiveness --- */
-html, body { overflow-x: hidden; width: 100%; }
-main { width: 100%; max-width: 768px; margin: 0 auto; padding: 1.5rem 1rem; box-sizing: border-box; }
-.docnav { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-.docnav .brand { flex-basis: 100%; margin-bottom: 0.25rem; }
-.docnav span { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-.docnav a { padding: 0.5rem 0.75rem; min-height: 44px; display: inline-flex; align-items: center; }
-h1 { font-size: clamp(1.75rem, 5vw, 2.5rem); line-height: 1.2; }
-h2 { font-size: clamp(1.25rem, 4vw, 1.75rem); line-height: 1.3; }
-p, li { font-size: 1rem; line-height: 1.6; }
-ul, ol { padding-left: 1.25rem; }
-li { margin-bottom: 0.75rem; }
-table { display: block; overflow-x: auto; white-space: nowrap; }
-pre { overflow-x: auto; max-width: 100%; }
-svg { max-width: 100%; height: auto; }
-.figwrap { overflow-x: auto; }
-@media (max-width: 640px) {
-  .stageline { font-size: 0.9rem; }
-}
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="page-api">
 <nav class="docnav">
-  <a class="brand" href="index.html">feels · docs</a>
+  <a class="brand" href="index.html">Feels</a>
   <span>
-    <a href="problem.html">Problem</a>
     <a href="how-it-works.html">How it works</a>
     <a class="active" href="api.html">API</a>
     <a href="about.html">About</a>
-    <a href="/" class="dashlink">← Dashboard</a>
   </span>
 </nav>
 <main>
@@ -180,6 +139,6 @@ svg { max-width: 100%; height: auto; }
 <tr><td><code>--list</code></td><td>show signature counts per label&quot;</td></tr>
 </table>
 </main>
-<script>if(location.hostname.includes("github.io")){document.querySelectorAll(".dashlink").forEach(e=>e.style.display="none")}</script>
+<footer class="site-footer">Site designed by <a href="https://boomtick.blog/services">Ariel Anders</a></footer>
 </body>
 </html>

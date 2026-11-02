@@ -4,77 +4,51 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Feels: Teaching a robot to feel</title>
-<style>
-:root { --bg:#0d1117; --panel:#161b22; --border:#2d333b; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#3fb950; --amber:#d29922; }
-body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; line-height:1.65; }
-.docnav { display:flex; justify-content:space-between; align-items:center; padding:14px 24px; border-bottom:1px solid var(--border); background:var(--panel); position:sticky; top:0; flex-wrap:wrap; gap:8px; }
-.docnav a { color:var(--muted); text-decoration:none; margin-left:18px; font-size:0.9rem; }
-.docnav a:hover, .docnav a.active { color:var(--text); }
-.docnav a.brand { margin-left:0; color:var(--text); font-weight:700; }
-main { max-width:780px; margin:0 auto; padding:48px 24px 80px; text-align:center; }
-.kicker { color:var(--muted); margin:0; font-size:0.9rem; }
-.hook { font-size:3rem; font-weight:800; margin:0.2em 0 0.1em; letter-spacing:-0.02em; }
-.subtitle { font-size:1.1rem; color:#8b949e; margin:0 0 0.6em; }
-.authors { font-size:0.95rem; color:#6e7681; margin:0 0 1.6em; }
-.abstract { max-width:42em; margin:0 0 1.8em; }
-.abstract p { line-height:1.65; color:#c9d1d9; }
-.modes { margin-top:14px; display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-.mode { background:transparent; color:var(--muted); border:none; padding:8px 20px; font-size:0.9rem; font-weight:600; cursor:pointer; }
-.mode.active { background:var(--panel); color:var(--text); }
-.stageline { color:var(--muted); margin:1.6em 0 0.4em; font-size:1rem; letter-spacing:0.02em; }
-.stageline .on { color:var(--accent); font-weight:700; }
-.stageline .done { color:var(--green); }
-#vspaceWrap { margin:1.6em auto 0; max-width:700px; }
-#vspaceWrap h2 { font-size:1rem; color:var(--muted); font-weight:600; border:none; margin:0 0 0.4em; padding:0; }
-#vspaceStatus { color:var(--muted); font-size:0.92rem; margin:0 0 0.8em; }
-#vspaceStatus strong { color:var(--text); }
-#vspace { background:var(--panel); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
-#vspace svg { display:block; width:100%; height:auto; }
-#liveplot { display:none; }
-details.docs { margin-top:3em; text-align:left; }
-details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
-.cards { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:1.2em; }
-.card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:16px; text-decoration:none; display:block; }
-.card:hover { border-color:var(--accent); }
-.card h3 { margin:0 0 0.3em; color:var(--text); font-size:1rem; }
-.card p { margin:0; font-size:0.85rem; color:var(--muted); }
-@media (max-width:600px) { .cards { grid-template-columns:1fr; } .hook { font-size:2.2rem; } }
-.golink { display:inline-block; margin:1.5em 0; padding:12px 28px; background:#1f6feb; color:#fff !important;
-  border-radius:8px; text-decoration:none; font-weight:600; font-size:1rem; }
-.golink:hover { background:#388bfd; }
-.macroanim { margin:1.2em auto 0; max-width:340px; }
-.macroanim svg { display:block; width:100%; height:auto; }
-
-/* --- Mobile responsiveness --- */
-html, body { overflow-x: hidden; width: 100%; }
-main { width: 100%; max-width: 768px; margin: 0 auto; padding: 1.5rem 1rem; box-sizing: border-box; }
-.docnav { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-.docnav .brand { flex-basis: 100%; margin-bottom: 0.25rem; }
-.docnav span { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-.docnav a { padding: 0.5rem 0.75rem; min-height: 44px; display: inline-flex; align-items: center; }
-h1 { font-size: clamp(1.75rem, 5vw, 2.5rem); line-height: 1.2; }
-h2 { font-size: clamp(1.25rem, 4vw, 1.75rem); line-height: 1.3; }
-p, li { font-size: 1rem; line-height: 1.6; }
-ul, ol { padding-left: 1.25rem; }
-li { margin-bottom: 0.75rem; }
-table { display: block; overflow-x: auto; white-space: nowrap; }
-pre { overflow-x: auto; max-width: 100%; }
-svg { max-width: 100%; height: auto; }
-.figwrap { overflow-x: auto; }
-@media (max-width: 640px) {
-  .stageline { font-size: 0.9rem; }
+<link rel="stylesheet" href="style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Feels: Teaching a robot to feel",
+  "description": "Online data collection and training platform for robot object classification through physical interaction.",
+  "url": "https://arii.github.io/feels/",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Ariel Anders",
+      "url": "https://github.com/arii"
+    },
+    {
+      "@type": "Person",
+      "name": "Sree Dhyuti Nimmagadda",
+      "url": "https://github.com/dhyutin"
+    }
+  ],
+  "datePublished": "2026-10-30",
+  "dateModified": "2026-11-02",
+  "image": {
+    "@type": "ImageObject",
+    "url": "https://arii.github.io/feels/images/robot-cup.jpg",
+    "caption": "xArm x850 holding the lidded coffee cup",
+    "description": "An xArm x850 robotic arm holding a sealed cup during a swirl motion."
+  },
+  "video": {
+    "@type": "VideoObject",
+    "name": "Feels Live Dashboard Demonstration",
+    "description": "Live dashboard: swirl, predict, and teach new categories in real time.",
+    "contentUrl": "https://arii.github.io/feels/images/feels_screen_view.mp4",
+    "uploadDate": "2026-10-30"
+  }
 }
-</style>
+</script>
 </head>
-<body>
+<body class="page-index">
 <nav class="docnav">
-  <a class="brand" href="index.html">feels · docs</a>
+  <a class="brand" href="index.html">Feels</a>
   <span>
-    <a href="problem.html">Problem</a>
     <a href="how-it-works.html">How it works</a>
     <a href="api.html">API</a>
     <a href="about.html">About</a>
-    <a href="/" class="dashlink">← Dashboard</a>
   </span>
 </nav>
 <main>
@@ -83,25 +57,44 @@ svg { max-width: 100%; height: auto; }
   <p class="subtitle">Online data collection and training platform for robot object classification through physical interaction.</p>
   <p class="authors">Sree Dhyuti Nimmagadda, Ariel Anders</p>
 
-  <p class="stageline"><span>○ lift</span> &nbsp;→&nbsp; <span>○ swirl</span> &nbsp;→&nbsp; <span>○ predict</span></p>
-  <p style="text-align:center;margin:0 0 1.5em;"><a href="about.html#measured-results" style="color:#58a6ff;font-size:0.9rem;">Measured results: 86–89% empty detection →</a> &nbsp;·&nbsp; <a href="https://huggingface.co/datasets/dhyuti-n/feels-cup-dynamics" style="color:#58a6ff;font-size:0.9rem;">Dataset on Hugging Face →</a></p>
+  <div class="workflow-steps">
+    <span class="step">lift</span>
+    <svg class="step-arrow" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    <span class="step">swirl</span>
+    <svg class="step-arrow" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    <span class="step">predict</span>
+  </div>
+  <p style="text-align:center;margin:0 0 1.5em;"><a href="how-it-works.html#measured-results" style="font-size:0.9rem;">Measured results: 86–89% empty detection</a></p>
+
+  <div class="resource-links">
+    <a href="https://github.com/arii/feels" target="_blank" rel="noopener noreferrer" class="resource-btn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+      </svg>
+      Code
+    </a>
+    <a href="https://huggingface.co/datasets/dhyuti-n/feels-cup-dynamics" target="_blank" rel="noopener noreferrer" class="resource-btn">
+      <img src="https://huggingface.co/front/assets/huggingface_logo-noborder.svg" width="18" height="18" alt="Hugging Face">
+      Dataset
+    </a>
+  </div>
 
   <div style="text-align:center;margin:0 0 2em;">
-    <video autoplay muted loop playsinline preload="metadata" disablepictureinpicture style="width:100%;max-width:640px;border-radius:8px;" poster="">
+    <video class="demo-video" autoplay muted loop playsinline preload="metadata" disablepictureinpicture aria-hidden="true" style="width:100%;max-width:640px;border-radius:8px;" poster="">
       <source src="images/feels_swirl.mp4" type="video/mp4">
       Your browser does not support the video tag.
     </video>
-    <p style="color:#8b949e;font-size:0.85rem;margin:0.5em 0 0;">The xArm swirls a sealed cup — joint torques reveal the contents.</p>
+    <p class="muted" style="font-size:0.85rem;margin:0.5em 0 0;">The xArm swirls a sealed cup — joint torques reveal the contents.</p>
   </div>
 
   <div id="vspaceWrap">
     <h2>Signature space</h2>
     <p id="vspaceStatus">110 taught signatures projected to 2-D via PCA, colored by material.</p>
     <div id="vspace"><svg xmlns="http://www.w3.org/2000/svg" width="780" height="400" viewBox="0 0 780 400" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
-<rect width="780" height="400" fill="#0d1117" rx="8"/>
-<rect x="20" y="20" width="520" height="350" rx="8" fill="#161b22" stroke="#2d333b"/>
-<line x1="264.8" y1="20" x2="264.8" y2="370" stroke="#2d333b"/>
-<line x1="20" y1="208.1" x2="540" y2="208.1" stroke="#2d333b"/>
+<rect class="plot-bg" width="780" height="400"/>
+<rect class="plot-area" x="20" y="20" width="520" height="350" rx="8"/>
+<line class="grid" x1="264.8" y1="20" x2="264.8" y2="370"/>
+<line class="grid" x1="20" y1="208.1" x2="540" y2="208.1"/>
 <circle cx="181.5" cy="238.3" r="4.5" fill="#8b949e" opacity="0.9"><title>Empty</title></circle>
 <circle cx="364.9" cy="242.6" r="4.5" fill="#8b949e" opacity="0.9"><title>Empty</title></circle>
 <circle cx="292.3" cy="271.4" r="4.5" fill="#8b949e" opacity="0.9"><title>Empty</title></circle>
@@ -212,23 +205,24 @@ svg { max-width: 100%; height: auto; }
 <circle cx="456.4" cy="90.6" r="4.5" fill="#58a6ff" opacity="0.9"><title>Water</title></circle>
 <circle cx="279.5" cy="177.6" r="4.5" fill="#3fb950" opacity="0.9"><title>Candy</title></circle>
 <circle cx="307.0" cy="145.3" r="4.5" fill="#58a6ff" opacity="0.9"><title>Water</title></circle>
-<text x="530" y="360" text-anchor="end" font-size="10" fill="#8b949e">PC1 →</text>
-<text x="30" y="38" font-size="10" fill="#8b949e">↑ PC2</text>
-<text x="560" y="30" font-size="12" font-weight="bold" fill="#e6edf3">materials (n=110)</text>
+<text class="plot-label" x="530" y="360" text-anchor="end" font-size="10">PC1 →</text>
+<text class="plot-label" x="30" y="38" font-size="10">↑ PC2</text>
+<text class="plot-title" x="560" y="30" font-size="12" font-weight="bold">materials (n=110)</text>
 <circle cx="566" cy="50" r="5" fill="#58a6ff"/>
-<text x="580" y="54" font-size="11" fill="#8b949e">Water ×46</text>
+<text class="plot-label" x="580" y="54" font-size="11">Water ×46</text>
 <circle cx="566" cy="74" r="5" fill="#f0883e"/>
-<text x="580" y="78" font-size="11" fill="#8b949e">Solid Weight ×39</text>
+<text class="plot-label" x="580" y="78" font-size="11">Solid Weight ×39</text>
 <circle cx="566" cy="98" r="5" fill="#a371f7"/>
-<text x="580" y="102" font-size="11" fill="#8b949e">Screws ×7</text>
+<text class="plot-label" x="580" y="102" font-size="11">Screws ×7</text>
 <circle cx="566" cy="122" r="5" fill="#3fb950"/>
-<text x="580" y="126" font-size="11" fill="#8b949e">Candy ×1</text>
+<text class="plot-label" x="580" y="126" font-size="11">Candy ×1</text>
 <circle cx="566" cy="146" r="5" fill="#8b949e"/>
-<text x="580" y="150" font-size="11" fill="#8b949e">Empty ×17</text>
+<text class="plot-label" x="580" y="150" font-size="11">Empty ×17</text>
 </svg><div id="liveplot"></div></div>
   </div>
 
 </main>
+<footer class="site-footer">Site designed by <a href="https://boomtick.blog/services">Ariel Anders</a></footer>
 <script>
 async function loadLivePlot(query) {
   try {
@@ -260,7 +254,15 @@ async function loadLivePlot(query) {
     setStatus("<strong>Status: Live.</strong> " + d.n + " taught signatures · white dot = this cup.");
   } catch (e) { /* keep baseline */ }
 }
+
+(function () {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll('video[autoplay]').forEach(function (v) {
+      v.removeAttribute('autoplay');
+      v.pause();
+    });
+  }
+})();
 </script>
-<script>if(location.hostname.includes("github.io")){document.querySelectorAll(".dashlink").forEach(e=>e.style.display="none")}</script>
 </body>
 </html>
