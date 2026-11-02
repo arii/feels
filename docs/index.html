@@ -48,9 +48,10 @@ details.docs summary { cursor:pointer; color:var(--muted); font-weight:600; }
 /* --- Mobile responsiveness --- */
 html, body { overflow-x: hidden; width: 100%; }
 main { width: 100%; max-width: 768px; margin: 0 auto; padding: 1.5rem 1rem; box-sizing: border-box; }
-.docnav { display: flex; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; gap: 0.25rem; }
-.docnav::-webkit-scrollbar { display: none; }
-.docnav a { padding: 0.5rem 0.75rem; min-height: 44px; display: inline-flex; align-items: center; flex-shrink: 0; }
+.docnav { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.docnav .brand { flex-basis: 100%; margin-bottom: 0.25rem; }
+.docnav span { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.docnav a { padding: 0.5rem 0.75rem; min-height: 44px; display: inline-flex; align-items: center; }
 h1 { font-size: clamp(1.75rem, 5vw, 2.5rem); line-height: 1.2; }
 h2 { font-size: clamp(1.25rem, 4vw, 1.75rem); line-height: 1.3; }
 p, li { font-size: 1rem; line-height: 1.6; }
@@ -86,7 +87,7 @@ svg { max-width: 100%; height: auto; }
   <p style="text-align:center;margin:0 0 1.5em;"><a href="about.html#measured-results" style="color:#58a6ff;font-size:0.9rem;">Measured results: 86–89% empty detection →</a> &nbsp;·&nbsp; <a href="https://huggingface.co/datasets/dhyuti-n/feels-cup-dynamics" style="color:#58a6ff;font-size:0.9rem;">Dataset on Hugging Face →</a></p>
 
   <div style="text-align:center;margin:0 0 2em;">
-    <video controls muted loop playsinline preload="metadata" style="width:100%;max-width:640px;border-radius:8px;" poster="">
+    <video autoplay muted loop playsinline preload="metadata" disablepictureinpicture style="width:100%;max-width:640px;border-radius:8px;" poster="">
       <source src="images/feels_swirl.mp4" type="video/mp4">
       Your browser does not support the video tag.
     </video>
