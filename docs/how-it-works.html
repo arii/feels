@@ -69,7 +69,10 @@ svg { max-width: 100%; height: auto; }
 
   <h2>The Excitation Primitive</h2>
   <p>The robot executes a single, repeatable sequence (pick up → swirl → place)
-  to ensure every dynamic recording is strictly comparable.</p>
+  to ensure every dynamic recording is strictly comparable. Torque telemetry
+  arrives at 4–5 Hz via cloud polling — roughly 10 samples per swirl — so the
+  motion is designed to produce strong low-frequency momentum and drag signals
+  that survive the sparse sampling.</p>
   <div class="figwrap" style="margin:1.2em 0;"><figure>
     <div class="figwrap"><svg xmlns="http://www.w3.org/2000/svg" width="780" height="560" viewBox="0 0 780 560" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
 <rect width="780" height="560" fill="#0d1117" rx="8"/>
