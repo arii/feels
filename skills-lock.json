@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "video-understand": {
+      "source": "jitenkr2030/AutoReel-AI",
+      "sourceType": "github",
+      "skillPath": "skills/video-understand/SKILL.md",
+      "computedHash": "3dd856ef306eb26d51756b7425a4538132f01d76fd607e0a62834229679946a8"
+    }
+  }
+}
