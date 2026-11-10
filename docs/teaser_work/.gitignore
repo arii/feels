@@ -1,0 +1,18 @@
+# Remotion build outputs and dependencies (large, regenerable)
+feels-video/out/
+feels-video/node_modules/
+
+# Iteration renders at folder root (superseded by feels-video;
+# published copies live in docs/images)
+/*.mp4
+
+# Local review contact sheets (regenerable via look.py)
+/*_sheet.png
+
+# Derived edit mezzanines — regenerate via feels-video/SETUP_ASSETS.md
+# (sources are the tracked files in docs/images)
+feels-video/public/*.mp4
+feels-video/public/*.webp
+
+# Generated VO master (raw drops in public/audio/ ARE tracked)
+feels-video/public/audio/master_audio.mp3
