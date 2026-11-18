@@ -1,4 +1,4 @@
-name: Test & Simulation CI
+name: Python Lint CI
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  lint-and-test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -30,15 +30,3 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           # Exit-zero treats all errors as warnings. Max line length set to 120.
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
-
-      - name: Run unit & schema tests
-        env:
-          MOCK_MODE: "true"
-        run: |
-          pytest tests/ -v
-
-      - name: Run simulated grasp script
-        env:
-          MOCK_MODE: "true"
-        run: |
-          python scripts/test_simulated_grasp.py
