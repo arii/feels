@@ -1,0 +1,4 @@
+0:00-0:04 This robot feels what's inside a sealed cup.
+0:04-0:12 The robot lifts, swirls, and predicts.
+0:12-0:17 Joint torques reveal the contents.
+0:17-0:22 86–89% empty detection*
