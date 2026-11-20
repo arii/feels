@@ -40,9 +40,11 @@ load_dotenv()
 VIAM_API_KEY = os.getenv("VIAM_API_KEY")
 VIAM_API_KEY_ID = os.getenv("VIAM_API_KEY_ID")
 VIAM_MACHINE_ADDRESS = os.getenv("VIAM_MACHINE_ADDRESS", "sfhack12-main.ty1cywh7tq.viam.cloud")
-RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "recordings")
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(_HERE) if os.path.basename(_HERE) == "src" else _HERE
+RECORDINGS_DIR = os.path.join(_REPO_ROOT, "recordings")
 os.makedirs(RECORDINGS_DIR, exist_ok=True)
-SWIRL_CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "swirl_joints.json")
+SWIRL_CACHE = os.path.join(_REPO_ROOT, "swirl_joints.json")
 GRAVITY = 9.80665
 
 # Switch components corresponding to arm-position-saver waypoints
@@ -640,14 +642,8 @@ async def run_grasp_cycle(
     if not await move_to_waypoint(machine, arm, "travel"):
         return False
 
-    # 5b. Fixed Stop at Travel Pose (Stability Gated)
-    await wait_for_stability_in_travel(
-        arm=arm,
-        recorder=recorder,
-        stable_duration=stable_hold,
-        variance_threshold=settle_threshold
-    )
-
+    # 5b. Continuous flow: no settle/dwell between travel and swirl.
+    # (Stability-gated baseline moved to post-hoc QC; see predict_mystery.py --qc.)
     # 5d. Optional SWIRL agitation at travel (circle, fixed Z + orientation)
     if use_swirl:
         if swirl_smooth_mode:
@@ -854,6 +850,11 @@ async def main():
         action="store_true",
         help="Inspect resources and planned trajectory without triggering motions",
     )
+    parser.add_argument(
+        "--no-inspect",
+        action="store_true",
+        help="Skip the Viam resource/waypoint inspection (saves ~10-30s of API calls)",
+    )
 
     args = parser.parse_args()
     if args.swirl_smooth:
@@ -878,7 +879,8 @@ async def main():
         arm = Arm.from_robot(machine, "arm")
         gripper = Gripper.from_robot(machine, "gripper")
 
-        await inspect_resources(machine)
+        if not args.no_inspect:
+            await inspect_resources(machine)
 
         if args.dry_run:
             print("[DRY RUN] Motion execution skipped.")
